@@ -1,0 +1,12 @@
+branch_protection:
+  policies:
+    ## Защита основной ветки main:
+    ## - нельзя напрямую пушить, только через Pull Request
+    ## - нельзя переписывать историю (force push)
+    ## - нельзя удалять ветку
+    - target: default_branch
+      message: "Direct push into main is forbidden, create a pull request first"
+      rules:
+        - prevent_force_push
+        - prevent_non_pr_changes
+        - prevent_deletion

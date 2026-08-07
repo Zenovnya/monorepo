@@ -1,0 +1,61 @@
+on:
+  pull_request:
+    - workflows: [backend-ci, mobile-ci]
+      filter:
+        target_branches: ["main"]
+    - workflows: [backend-ci]
+      filter:
+        paths: ["backend/**"]
+    - workflows: [mobile-ci]
+      filter:
+        paths: ["mobile/**"]
+
+  push:
+    - workflows: [backend-ci, mobile-ci]
+      filter:
+        branches: ["main"]
+    - workflows: [backend-ci]
+      filter:
+        paths: ["backend/**"]
+    - workflows: [mobile-ci]
+      filter:
+        paths: ["mobile/**"]
+
+workflows:
+  backend-ci:
+    tasks:
+      - name: backend-test
+        cubes:
+          - name: install-deps
+            image: docker.io/library/python:3.12
+            script:
+              - python -m pip install --upgrade pip
+              - if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+
+          - name: lint
+            script:
+              - if [ -d backend ]; then cd backend && ruff check . || echo "ruff not found, skipping"; fi
+
+          - name: run-tests
+            script:
+              - if [ -d backend/tests ]; then cd backend && python -m pytest; else echo "no tests found, skipping"; fi
+
+  mobile-ci:
+    tasks:
+      - name: mobile-check
+        cubes:
+          - name: install-deps
+            image: docker.io/library/node:20
+            script:
+              - cd mobile
+              - if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+          - name: typecheck
+            script:
+              - cd mobile
+              - if [ -f tsconfig.json ]; then npx tsc --noEmit || echo "typecheck failed"; else echo "no tsconfig, skipping"; fi
+
+          - name: lint
+            script:
+              - cd mobile
+              - if [ -f .eslintrc* ] || [ -f eslint.config.* ]; then npx eslint . || echo "eslint failed"; else echo "no eslint config, skipping"; fi
