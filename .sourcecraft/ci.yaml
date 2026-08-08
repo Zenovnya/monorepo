@@ -1,25 +1,23 @@
 on:
   pull_request:
-    - workflows: [backend-ci, mobile-ci]
+    - workflows: [backend-ci]
       filter:
         target_branches: ["main"]
-    - workflows: [backend-ci]
-      filter:
-        paths: ["backend/**"]
+        paths: ["backend/**", ".sourcecraft/ci.yaml"]
     - workflows: [mobile-ci]
       filter:
-        paths: ["mobile/**"]
+        target_branches: ["main"]
+        paths: ["mobile/**", ".sourcecraft/ci.yaml"]
 
   push:
-    - workflows: [backend-ci, mobile-ci]
-      filter:
-        branches: ["main"]
     - workflows: [backend-ci]
       filter:
-        paths: ["backend/**"]
+        branches: ["main"]
+        paths: ["backend/**", ".sourcecraft/ci.yaml"]
     - workflows: [mobile-ci]
       filter:
-        paths: ["mobile/**"]
+        branches: ["main"]
+        paths: ["mobile/**", ".sourcecraft/ci.yaml"]
 
 workflows:
   backend-ci:
@@ -48,7 +46,7 @@ workflows:
             image: docker.io/library/node:20
             script:
               - cd mobile
-              - if [ -f package-lock.json ]; then npm ci; else npm install; fi
+              - if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
           - name: typecheck
             script:
