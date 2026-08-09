@@ -1,14 +1,14 @@
 """Бизнес-логика модуля аутентификации.
 
-Хеширование паролей (passlib/bcrypt) и генерация JWT-токенов (python-jose).
+Хеширование паролей (bcrypt) и генерация JWT-токенов (python-jose).
 """
 
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from fastapi import Header, HTTPException, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,6 @@ from app.modules.auth.models import RefreshToken, User
 from app.modules.auth.schemas import UserRegister
 
 settings = get_settings()
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class AuthError(Exception):
@@ -43,12 +41,17 @@ class UserNotFoundError(AuthError):
 
 def hash_password(password: str) -> str:
     """Хеширует пароль с помощью bcrypt."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверяет пароль против хеша."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
+    except ValueError:
+        return False
 
 
 def _create_access_token(user_id: uuid.UUID) -> str:

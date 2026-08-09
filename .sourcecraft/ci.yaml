@@ -24,36 +24,26 @@ workflows:
     tasks:
       - name: backend-test
         cubes:
-          - name: install-deps
+          # Все шаги выполняются в одном контейнере, чтобы установленные
+          # зависимости были доступны и lint, и pytest.
+          - name: backend-check
             image: docker.io/library/python:3.12
             script:
-              - python -m pip install --upgrade pip
-              - if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
-
-          - name: lint
-            script:
-              - if [ -d backend ]; then cd backend && ruff check . || echo "ruff not found, skipping"; fi
-
-          - name: run-tests
-            script:
-              - if [ -d backend/tests ]; then cd backend && python -m pytest; else echo "no tests found, skipping"; fi
+              - pip install --upgrade pip
+              - pip install -r backend/requirements.txt
+              - cd backend
+              - ruff check .
+              - python -m pytest
 
   mobile-ci:
     tasks:
       - name: mobile-check
         cubes:
-          - name: install-deps
+          # Установка зависимостей и lint выполняются в одном контейнере,
+          # чтобы npm-пакеты были доступны ESLint.
+          - name: mobile-lint
             image: docker.io/library/node:20
             script:
               - cd mobile
               - if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
-
-          - name: typecheck
-            script:
-              - cd mobile
-              - if [ -f tsconfig.json ]; then npx tsc --noEmit || echo "typecheck failed"; else echo "no tsconfig, skipping"; fi
-
-          - name: lint
-            script:
-              - cd mobile
-              - if [ -f .eslintrc* ] || [ -f eslint.config.* ]; then npx eslint . || echo "eslint failed"; else echo "no eslint config, skipping"; fi
+              - npx eslint .
