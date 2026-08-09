@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.modules.auth.routes import router as auth_router
+from app.modules.auth.router import router as auth_router
 from app.modules.content.routes import router as content_router
 from app.modules.notifications.routes import router as notifications_router
 from app.modules.payments.routes import router as payments_router
