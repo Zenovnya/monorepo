@@ -4,6 +4,13 @@
 поэтому тесты не требуют внешних сервисов.
 """
 
+import os
+
+# Задаём безопасный тестовый секрет до импорта приложения, чтобы
+# валидация конфигурации (запрет небезопасного секрета) прошла корректно.
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci")
+os.environ.setdefault("DEBUG", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 
