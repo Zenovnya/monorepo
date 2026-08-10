@@ -31,19 +31,19 @@ def _matches(obj: Any, criteria: list) -> bool:
         if not isinstance(crit, BinaryExpression):
             continue
         left: ColumnElement = crit.left
-        right = crit.right
         if not hasattr(left, "key"):
             continue
         attr = getattr(obj, left.key, None)
-        # Обрабатываем is_ (True/False/None) и равенство.
-        if crit.operator.__name__ == "is_":
-            expected = right.value if hasattr(right, "value") else right
-            if attr is not expected:
-                return False
+        right = crit.right
+        # Извлекаем ожидаемое значение из правой части.
+        if isinstance(right, bool):
+            expected = right
+        elif hasattr(right, "value"):
+            expected = right.value
         else:
-            expected = right.value if hasattr(right, "value") else right
-            if attr != expected:
-                return False
+            expected = right
+        if attr != expected:
+            return False
     return True
 
 
