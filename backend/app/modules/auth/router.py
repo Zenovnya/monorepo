@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.modules.auth import service
+from app.modules.auth.rate_limit import (
+    auth_login_rate_limit,
+    auth_register_rate_limit,
+)
 from app.modules.auth.schemas import (
     LogoutRequest,
     RefreshRequest,
@@ -47,6 +51,7 @@ def _to_http_error(exc: service.AuthError) -> HTTPException:
     "/register",
     response_model=TokenPair,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[auth_register_rate_limit],
 )
 async def register(
     data: UserRegister,
@@ -60,7 +65,11 @@ async def register(
     return await service.issue_tokens(session, user)
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    dependencies=[auth_login_rate_limit],
+)
 async def login(
     data: UserLogin,
     session: AsyncSession = Depends(get_session),
