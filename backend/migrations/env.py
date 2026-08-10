@@ -16,6 +16,7 @@ from app.database import Base
 
 # Импортируем модели, чтобы они попали в метаданные Base.
 from app.modules.auth import models  # noqa: F401
+from app.modules.content import models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
