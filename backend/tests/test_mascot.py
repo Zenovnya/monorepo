@@ -125,9 +125,9 @@ async def test_list_active_phrases_excludes_inactive(
 async def test_phrase_choice_respects_weight(
     session: FakeSession,
 ) -> None:
-    """Выбор фразы учитывает weight: тяжёлая фраза выбирается чаще."""
+    """Выбор фразы учитывает weight: фраза с большим весом выбирается чаще."""
     heavy = _make_phrase(
-        trigger="greeting", phrase="Тяжёлая", weight=1000
+        trigger="greeting", phrase="Тяжёлая", weight=10
     )
     light = _make_phrase(
         trigger="greeting", phrase="Лёгкая", weight=1
@@ -135,16 +135,21 @@ async def test_phrase_choice_respects_weight(
     session.add_model(heavy)
     session.add_model(light)
 
-    chosen_ids = set()
+    heavy_count = 0
+    light_count = 0
     for _ in range(200):
         chosen = await service.get_phrase_for_trigger(
             session, "greeting", uuid.uuid4()
         )
-        chosen_ids.add(chosen.id)
+        if chosen.id == heavy.id:
+            heavy_count += 1
+        elif chosen.id == light.id:
+            light_count += 1
 
-    # Обе фразы доступны, но тяжёлая должна встречаться.
-    assert heavy.id in chosen_ids
-    assert light.id in chosen_ids
+    # Обе фразы доступны, но тяжёлая выбирается чаще.
+    assert heavy_count > 0
+    assert light_count > 0
+    assert heavy_count > light_count
 
 
 async def test_show_once_phrase_not_repeated_for_same_user(
