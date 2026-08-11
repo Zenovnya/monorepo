@@ -24,7 +24,7 @@ export const AnimatedMascot = ({ celebrate, error }) => {
       -1,
       true
     );
-  }, []);
+  }, [translateY]);
 
   useEffect(() => {
     if (celebrate) {
@@ -38,7 +38,7 @@ export const AnimatedMascot = ({ celebrate, error }) => {
         withTiming(0, { duration: 100 })
       );
     }
-  }, [celebrate]);
+  }, [celebrate, scale, rotate]);
 
   useEffect(() => {
     if (error) {
@@ -49,7 +49,7 @@ export const AnimatedMascot = ({ celebrate, error }) => {
         withTiming(0, { duration: 80 })
       );
     }
-  }, [error]);
+  }, [error, rotate]);
 
   const style = useAnimatedStyle(() => ({
     transform: [

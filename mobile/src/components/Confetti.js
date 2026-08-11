@@ -43,7 +43,7 @@ const ConfettiPiece = ({ color, startX, delay, active, isCircle }) => {
       rotate.value = 0;
       opacity.value = 0;
     }
-  }, [active]);
+  }, [active, delay, translateY, translateX, rotate, opacity]);
 
   const style = useAnimatedStyle(() => ({
     transform: [

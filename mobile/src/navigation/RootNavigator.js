@@ -26,7 +26,7 @@ export default function RootNavigator() {
 
   useEffect(() => {
     hydrate();
-  }, []);
+  }, [hydrate]);
 
   // Пока сессия не восстановлена из SecureStore — ничего не рендерим
   if (!isHydrated) {
