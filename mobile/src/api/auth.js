@@ -15,4 +15,10 @@ export const authApi = {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((r) => r.data),
+
+  // Обновляет пару токенов по refresh-токену.
+  refresh: (refreshToken) =>
+    apiClient
+      .post('/auth/refresh', { refresh_token: refreshToken })
+      .then((r) => r.data),
 };
