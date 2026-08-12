@@ -1,16 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import useAppStore from '../store';
+import { useAuthStore } from '../store';
 
 export default function HomeScreen() {
-  const user = useAppStore((state) => state.user);
+  const user = useAuthStore((state) => state.user);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SourceCraft</Text>
       <Text style={styles.subtitle}>
-        {user ? `Привет, ${user.name ?? user.email ?? 'пользователь'}!` : 'Добро пожаловать!'}
+        {user ? `Привет, ${user.username ?? user.email ?? 'пользователь'}!` : 'Добро пожаловать!'}
       </Text>
     </View>
   );

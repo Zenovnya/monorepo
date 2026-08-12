@@ -1,10 +1,10 @@
 import React from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 
-import useAppStore from '../store';
+import { useAuthStore } from '../store';
 
 export default function SettingsScreen() {
-  const { isAuthenticated, setUser, logout } = useAppStore();
+  const { isAuthenticated, logout } = useAuthStore();
 
   return (
     <View style={styles.container}>
@@ -17,7 +17,7 @@ export default function SettingsScreen() {
       ) : (
         <Button
           title="Войти (демо)"
-          onPress={() => setUser({ name: 'Константин' })}
+          onPress={() => console.warn('Демо-вход убран: используйте экран авторизации')}
         />
       )}
     </View>
