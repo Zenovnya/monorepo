@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.models import User
 from app.modules.mascot.models import MascotPhrase, UserMascotState, UserShownPhrase
 
 # Известные триггеры, для которых можно запрашивать фразы.
@@ -20,6 +21,10 @@ VALID_TRIGGERS = {
     "case_wrong",
     "app_first_open",
 }
+
+# Порог поглаживаний для достижения «Друг Lex».
+PET_ACHIEVEMENT_THRESHOLD = 10
+PET_ACHIEVEMENT_CODE = "friend_lex"
 
 
 class MascotError(Exception):
@@ -49,12 +54,7 @@ async def get_phrase_for_trigger(
     trigger: str,
     user_id: uuid.UUID,
 ) -> MascotPhrase:
-    """Возвращает случайную фразу по триггеру с учётом веса и show_once.
-
-    Фразы с ``show_once=True``, уже показанные этому пользователю
-    (запись в ``UserShownPhrase``), исключаются из выборки. Показ выбранной
-    фразы фиксируется в истории и обновляет ``last_phrase_id``.
-    """
+    """Возвращает случайную фразу по триггеру с учётом веса и show_once."""
     if trigger not in VALID_TRIGGERS:
         raise UnknownTriggerError(f"Неизвестный триггер: {trigger}")
 
@@ -103,9 +103,31 @@ async def get_phrase_for_trigger(
 async def increment_pet_count(
     session: AsyncSession, user_id: uuid.UUID
 ) -> int:
-    """Увеличивает счётчик поглаживаний на 1 и возвращает новое значение."""
+    """Увеличивает счётчик поглаживаний на 1 и возвращает новое значение.
+
+    При достижении порога в 10 поглаживаний выдаёт достижение «Друг Lex».
+    """
     state = await _get_or_create_state(session, user_id)
     state.pet_count += 1
+
+    # Достижение «Друг Lex» при 10 поглаживаниях.
+    if state.pet_count == PET_ACHIEVEMENT_THRESHOLD:
+        user = await session.get(User, user_id)
+        if user is not None:
+            from app.modules.gamification import service as gamification_service
+
+            try:
+                await gamification_service.award_achievement(
+                    session,
+                    user,
+                    code=PET_ACHIEVEMENT_CODE,
+                    title="Друг Lex",
+                    description="Погладь Lex 10 раз — теперь вы настоящие друзья!",
+                )
+            except Exception:
+                # Если достижение уже выдано — игнорируем дубликат.
+                pass
+
     return state.pet_count
 
 

@@ -6,3 +6,4 @@ export { authApi } from './auth';
 export { contentApi } from './content';
 export { progressApi } from './progress';
 export { mascotApi } from './mascot';
+export { gamificationApi } from './gamification';

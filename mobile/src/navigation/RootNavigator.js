@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import BranchScreen from '../screens/BranchScreen';
 import LessonScreen from '../screens/LessonScreen';
 import CaseScreen from '../screens/CaseScreen';
@@ -18,6 +19,7 @@ function MainTabs() {
   return (
     <Tab.Navigator>
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Главная' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Настройки' }} />
     </Tab.Navigator>
   );
