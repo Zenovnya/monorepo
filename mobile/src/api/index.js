@@ -3,3 +3,6 @@
  */
 export { default as apiClient } from './client';
 export { authApi } from './auth';
+export { contentApi } from './content';
+export { progressApi } from './progress';
+export { mascotApi } from './mascot';
