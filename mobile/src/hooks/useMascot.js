@@ -59,11 +59,22 @@ export function useMascot() {
     return { count: data.pet_count, phrase };
   };
 
+  // Получение реакции маскота по триггеру (case_correct / case_wrong и т.д.)
+  const react = async (trigger) => {
+    try {
+      const phrase = await getPhrase(trigger);
+      return phrase;
+    } catch {
+      return null;
+    }
+  };
+
   return {
     pet,
     petCount,
     isLoadingPet: petMutation.isPending,
     getPhrase,
+    react,
     phrase: phraseQuery.data,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -9,7 +9,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { AnimatedMascot } from './AnimatedMascot';
+import { MascotSprite } from './MascotSprite';
 import { colors } from '../theme/colors';
 
 /**
@@ -19,17 +19,22 @@ import { colors } from '../theme/colors';
 export const LexEntrance = ({ hint, onDone }) => {
   const translateX = useSharedValue(-300);
   const opacity = useSharedValue(0);
+  const [emotion, setEmotion] = useState('happy');
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackStyle.Medium);
+    // Crossfade эмоций: сначала happy, затем think (въезжает и задумывается).
+    setEmotion('cheer');
     translateX.value = withSequence(
       withTiming(0, {
         duration: 700,
         easing: Easing.out(Easing.back(1.5)),
       }),
-      withDelay(400, withTiming(0, { duration: 100 }))
+      withDelay(300, withTiming(0, { duration: 100 }))
     );
+    const t = setTimeout(() => setEmotion('think'), 800);
     opacity.value = withDelay(900, withTiming(1, { duration: 400 }));
+    return () => clearTimeout(t);
   }, [translateX, opacity]);
 
   const mascotStyle = useAnimatedStyle(() => ({
@@ -42,7 +47,7 @@ export const LexEntrance = ({ hint, onDone }) => {
   return (
     <View style={styles.container}>
       <Animated.View style={mascotStyle}>
-        <AnimatedMascot />
+        <MascotSprite emotion={emotion} size={180} />
       </Animated.View>
       {hint ? (
         <Animated.View style={[styles.hint, hintStyle]}>

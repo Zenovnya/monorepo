@@ -11,6 +11,7 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { paymentsApi } from '../api/payments';
+import { analyticsApi } from '../api/analytics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { colors } from '../theme/colors';
@@ -36,8 +37,11 @@ export default function PaywallScreen({ navigation }) {
     mutationFn: (p) => paymentsApi.createPayment(p),
     onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Для MVP открываем confirmation_url во внешнем браузере.
+      // Аналитика: событие покупки подписки (fire-and-forget).
+      analyticsApi.track('subscription_purchased', { plan }).catch(() => {});
       if (data.confirmation_url) {
+        // Для MVP открываем confirmation_url во внешнем браузере.
+        // Встроенный WebView можно включить после установки react-native-webview.
         Linking.openURL(data.confirmation_url).catch(() => {});
       }
       setPaymentUrl(data.confirmation_url);

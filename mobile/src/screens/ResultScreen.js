@@ -28,6 +28,8 @@ export default function ResultScreen({ route, navigation }) {
   }, []);
 
   const crowns = completed?.crowns ?? 0;
+  // Эмоция маскота зависит от результата (crossfade).
+  const emotion = score >= 60 ? 'cheer' : 'sad';
 
   return (
     <View style={styles.container}>
@@ -37,7 +39,7 @@ export default function ResultScreen({ route, navigation }) {
       <Text style={styles.subtitle}>Ты становишься сильнее ⚖️</Text>
 
       <View style={styles.mascot}>
-        <AnimatedMascot />
+        <AnimatedMascot emotion={emotion} />
       </View>
 
       <View style={styles.stats}>

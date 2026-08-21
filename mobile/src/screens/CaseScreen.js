@@ -5,11 +5,11 @@ import {
   View,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { progressApi } from '../api/progress';
+import { useMascot } from '../hooks/useMascot';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LexEntrance } from '../components/LexEntrance';
 import { SpeechBubble } from '../components/SpeechBubble';
@@ -25,6 +25,8 @@ export default function CaseScreen({ route, navigation }) {
   const [entranceDone, setEntranceDone] = useState(
     caseItem.case_type !== 'lex_entrance'
   );
+  const [mascotPhrase, setMascotPhrase] = useState(null);
+  const mascot = useMascot();
 
   const answerMutation = useMutation({
     mutationFn: (payload) => progressApi.answer(payload),
@@ -33,23 +35,26 @@ export default function CaseScreen({ route, navigation }) {
   const handleCheck = async () => {
     if (selected === null || checked) return;
     const selectedOption = caseItem.options[selected];
+    let isRight = false;
     try {
       const data = await answerMutation.mutateAsync({
         case_id: caseItem.id,
         option_id: selectedOption.id,
       });
-      const isRight = data.is_correct;
-      setChecked(isRight ? 'right' : 'wrong');
-      Haptics.notificationAsync(
-        isRight
-          ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Error
-      );
+      isRight = data.is_correct;
     } catch {
-      // локальная проверка при ошибке сети
-      const isRight = selectedOption?.is_correct ?? false;
-      setChecked(isRight ? 'right' : 'wrong');
+      isRight = selectedOption?.is_correct ?? false;
     }
+    setChecked(isRight ? 'right' : 'wrong');
+    Haptics.notificationAsync(
+      isRight
+        ? Haptics.NotificationFeedbackType.Success
+        : Haptics.NotificationFeedbackType.Error
+    );
+
+    // Триггер маскота по результату ответа.
+    const phrase = await mascot.react(isRight ? 'case_correct' : 'case_wrong');
+    setMascotPhrase(phrase);
   };
 
   const handleNext = () => {
@@ -60,7 +65,6 @@ export default function CaseScreen({ route, navigation }) {
         index: index + 1,
       });
     } else {
-      // Урок пройден
       navigation.replace('Result', { lesson, score: 100 });
     }
   };
@@ -136,6 +140,11 @@ export default function CaseScreen({ route, navigation }) {
               <Text style={styles.feedbackTitle}>
                 {checked === 'right' ? 'Верно!' : 'Не то'}
               </Text>
+              {mascotPhrase?.phrase ? (
+                <Text style={styles.feedbackMascot}>
+                  🐻 {mascotPhrase.phrase}
+                </Text>
+              ) : null}
               {caseItem.options[selected]?.explanation ? (
                 <Text style={styles.feedbackText}>
                   {caseItem.options[selected].explanation}
@@ -240,6 +249,7 @@ const styles = StyleSheet.create({
   feedbackRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   feedbackBody: { flex: 1 },
   feedbackTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  feedbackMascot: { fontSize: 14, color: colors.text, fontWeight: '600', marginTop: 6, fontStyle: 'italic' },
   feedbackText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
   footer: { paddingHorizontal: 20, marginTop: 24 },
 });

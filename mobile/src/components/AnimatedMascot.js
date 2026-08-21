@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,12 +9,24 @@ import Animated, {
   withSpring,
   Easing,
 } from 'react-native-reanimated';
+import { MascotSprite } from './MascotSprite';
 
-export const AnimatedMascot = ({ celebrate, error }) => {
+/**
+ * AnimatedMascot — анимированный маскот Lex.
+ *
+ * Поддерживает:
+ * - режимы celebrate (празднование) и error (ошибка) для форм;
+ * - пропс emotion для crossfade эмоций (idle/happy/sad/cheer/think).
+ */
+export const AnimatedMascot = ({ celebrate, error, emotion, size = 220 }) => {
   const translateY = useSharedValue(0);
   const rotate = useSharedValue(0);
   const scale = useSharedValue(1);
+  const [effectiveEmotion, setEffectiveEmotion] = useState(
+    emotion || (celebrate ? 'cheer' : 'idle')
+  );
 
+  // Постоянное «дыхание» маскота.
   useEffect(() => {
     translateY.value = withRepeat(
       withSequence(
@@ -26,8 +38,10 @@ export const AnimatedMascot = ({ celebrate, error }) => {
     );
   }, [translateY]);
 
+  // Режим празднования.
   useEffect(() => {
     if (celebrate) {
+      setEffectiveEmotion('cheer');
       scale.value = withSequence(
         withSpring(1.15, { damping: 4, stiffness: 200 }),
         withSpring(1, { damping: 5, stiffness: 200 })
@@ -40,8 +54,10 @@ export const AnimatedMascot = ({ celebrate, error }) => {
     }
   }, [celebrate, scale, rotate]);
 
+  // Режим ошибки.
   useEffect(() => {
     if (error) {
+      setEffectiveEmotion('sad');
       rotate.value = withSequence(
         withTiming(-4, { duration: 80 }),
         withTiming(4, { duration: 80 }),
@@ -50,6 +66,13 @@ export const AnimatedMascot = ({ celebrate, error }) => {
       );
     }
   }, [error, rotate]);
+
+  // Внешняя эмоция (если передана) — синхронизируем.
+  useEffect(() => {
+    if (emotion && !celebrate && !error) {
+      setEffectiveEmotion(emotion);
+    }
+  }, [emotion, celebrate, error]);
 
   const style = useAnimatedStyle(() => ({
     transform: [
@@ -60,12 +83,12 @@ export const AnimatedMascot = ({ celebrate, error }) => {
   }));
 
   return (
-    <Animated.View style={style}>
-      <Image source={require('../../assets/bear.png')} style={styles.bear} resizeMode="contain" />
+    <Animated.View style={[style, { width: size, height: size }]}>
+      <MascotSprite emotion={effectiveEmotion} size={size} />
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  bear: { width: 220, height: 220 },
+  bear: { width: '100%', height: '100%' },
 });
