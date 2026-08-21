@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { contentApi } from '../api/content';
+import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { colors } from '../theme/colors';
 
@@ -23,25 +24,49 @@ export default function BranchScreen({ route, navigation }) {
     queryFn: () => contentApi.listLessons(branch.id),
   });
 
-  const renderLesson = ({ item }) => (
-    <Pressable
-      onPress={() => navigation.navigate('Lesson', { lesson: item, branch })}
-      style={({ pressed }) => [
-        styles.lessonCard,
-        { borderColor: colors.border },
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.node}>
-        <Text style={styles.nodeIcon}>▶</Text>
-      </View>
-      <View style={styles.lessonBody}>
-        <Text style={styles.lessonTitle}>{item.title}</Text>
-        <Text style={styles.lessonStatus}>Не пройден</Text>
-      </View>
-      <Text style={styles.arrow}>→</Text>
-    </Pressable>
-  );
+  const {
+    data: progress,
+    isLoading: progressLoading,
+  } = useQuery({
+    queryKey: ['progress-overview'],
+    queryFn: () => progressApi.overview(),
+  });
+
+  // Карта прогресса по идентификатору урока: lesson_id -> { completed, best_score }.
+  const progressMap = React.useMemo(() => {
+    const map = {};
+    (progress?.items ?? []).forEach((item) => {
+      map[item.lesson_id] = item;
+    });
+    return map;
+  }, [progress]);
+
+  const renderLesson = ({ item }) => {
+    const p = progressMap[item.id];
+    const completed = !!p?.completed;
+    const score = p?.best_score ?? null;
+    return (
+      <Pressable
+        onPress={() => navigation.navigate('Lesson', { lesson: item, branch })}
+        style={({ pressed }) => [
+          styles.lessonCard,
+          completed && styles.lessonCardDone,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View style={[styles.node, completed && styles.nodeDone]}>
+          <Text style={styles.nodeIcon}>{completed ? '✓' : '▶'}</Text>
+        </View>
+        <View style={styles.lessonBody}>
+          <Text style={styles.lessonTitle}>{item.title}</Text>
+          <Text style={styles.lessonStatus}>
+            {completed ? `Пройден · ${score}%` : 'Не пройден'}
+          </Text>
+        </View>
+        <Text style={styles.arrow}>→</Text>
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -57,7 +82,7 @@ export default function BranchScreen({ route, navigation }) {
         </View>
       </View>
 
-      {isLoading ? (
+      {isLoading || progressLoading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
@@ -116,11 +141,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 20,
     borderWidth: 2,
+    borderColor: colors.border,
     padding: 14,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
   },
+  lessonCardDone: { borderColor: '#43A35D' },
   pressed: { opacity: 0.85, transform: [{ translateY: 2 }] },
   node: {
     width: 52,
@@ -133,6 +160,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  nodeDone: { backgroundColor: '#2E7D46' },
   nodeIcon: { fontSize: 18, color: '#fff', fontWeight: '800' },
   lessonBody: { flex: 1 },
   lessonTitle: { fontSize: 16, fontWeight: '700', color: colors.text },

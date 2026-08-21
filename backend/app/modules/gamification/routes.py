@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.modules.auth import service as auth_service
+from app.modules.auth.models import User
 from app.modules.gamification import service
 from app.modules.gamification.schemas import (
     GamificationRead,
@@ -54,7 +55,7 @@ async def gamification_add_xp(
 ) -> dict:
     """Начисляет XP пользователю (обновляет уровень и стрик)."""
     user_id = _get_current_user_id(authorization)
-    user = await session.get(auth_service.User, user_id)
+    user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
