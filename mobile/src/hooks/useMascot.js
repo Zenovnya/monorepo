@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mascotApi } from '../api/mascot';
+import { analyticsApi } from '../api/analytics';
 
 /**
  * MascotEngine — хук управления маскотом Lex.
@@ -31,6 +32,8 @@ export function useMascot() {
     mutationFn: mascotApi.pet,
     onSuccess: (data) => {
       queryClient.setQueryData(['mascot', 'pet-count'], data);
+      // Аналитика: событие поглаживания (fire-and-forget).
+      analyticsApi.track('mascot_petted', { source: 'home_companion' }).catch(() => {});
       // Возвращаем фразу на триггер pet.
       return getPhrase('pet').catch(() => null);
     },

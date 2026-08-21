@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.modules.analytics.routes import router as analytics_router
 from app.modules.auth.router import router as auth_router
 from app.modules.content.routes import router as content_router
 from app.modules.gamification.routes import router as gamification_router
@@ -20,3 +21,4 @@ api_router.include_router(srs_router)
 api_router.include_router(gamification_router)
 api_router.include_router(payments_router)
 api_router.include_router(notifications_router)
+api_router.include_router(analytics_router)

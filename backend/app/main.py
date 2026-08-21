@@ -23,6 +23,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Интеграция Sentry (мониторинг ошибок) — включается при наличии DSN.
+if settings.sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+
+        sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)
+        app.add_middleware(SentryAsgiMiddleware)
+    except ImportError:
+        # sentry-sdk не установлен — мониторинг выключен.
+        pass
+
 app.include_router(api_router)
 
 
