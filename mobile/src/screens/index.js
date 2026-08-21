@@ -10,3 +10,4 @@ export { default as BranchScreen } from './BranchScreen';
 export { default as LessonScreen } from './LessonScreen';
 export { default as CaseScreen } from './CaseScreen';
 export { default as ResultScreen } from './ResultScreen';
+export { default as PaywallScreen } from './PaywallScreen';

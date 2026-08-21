@@ -9,3 +9,4 @@ export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';
 export { SpeechBubble } from './SpeechBubble';
 export { LexEntrance } from './LexEntrance';
+export { LockPremium } from './LockPremium';

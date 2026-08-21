@@ -7,3 +7,4 @@ export { contentApi } from './content';
 export { progressApi } from './progress';
 export { mascotApi } from './mascot';
 export { gamificationApi } from './gamification';
+export { paymentsApi } from './payments';
