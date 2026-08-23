@@ -15,4 +15,3 @@ export { default as LeagueScreen } from './LeagueScreen';
 export { default as ArticlesScreen } from './ArticlesScreen';
 export { default as ShopScreen } from './ShopScreen';
 export { default as PremiumScreen } from './PremiumScreen';
-export { default as PaywallScreen } from './PaywallScreen';

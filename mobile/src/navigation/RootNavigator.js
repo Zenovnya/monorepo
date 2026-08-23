@@ -20,7 +20,6 @@ import ArticlesScreen from '../screens/ArticlesScreen';
 import ShopScreen from '../screens/ShopScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
-import ResultScreen from '../screens/ResultScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -82,7 +81,6 @@ function MainStack() {
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Lesson" component={LessonScreen} />
       <Stack.Screen name="CaseDetail" component={CaseDetailScreen} />
-      <Stack.Screen name="Result" component={ResultScreen} />
       <Stack.Screen name="League" component={LeagueScreen} />
       <Stack.Screen name="Articles" component={ArticlesScreen} />
       <Stack.Screen name="Shop" component={ShopScreen} />
