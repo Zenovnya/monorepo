@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import get_settings
-from app.database import dispose_engine
+from app.database import dispose_engine, engine
+from app.middleware import GlobalRateLimitMiddleware
 from app.modules import api_router
 
 settings = get_settings()
@@ -39,6 +41,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Глобальный rate limiter: защита от спама и перерасхода бесплатных лимитов.
+# По умолчанию 300 запросов/мин с одного IP. Можно настроить через переменные
+# окружения RATE_LIMIT_MAX / RATE_LIMIT_WINDOW.
+import os
+
+app.add_middleware(
+    GlobalRateLimitMiddleware,
+    max_requests=int(os.getenv("RATE_LIMIT_MAX", "300")),
+    window_seconds=int(os.getenv("RATE_LIMIT_WINDOW", "60")),
+)
+
 # Интеграция Sentry (мониторинг ошибок) — включается при наличии DSN.
 if settings.sentry_dsn:
     try:
@@ -56,5 +69,20 @@ app.include_router(api_router)
 
 @app.get("/health", tags=["health"])
 async def health_check() -> dict:
-    """Health-check эндпоинт для проверки доступности сервиса."""
-    return {"status": "ok", "app": settings.app_name}
+    """Health-check эндпоинт.
+
+    Проверяет доступность БД (важно для «пробуждения» спящего Supabase
+    на бесплатном тарифе) и возвращает статус приложения.
+    """
+    db_ok = True
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        db_ok = False
+
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "app": settings.app_name,
+        "database": "ok" if db_ok else "unavailable",
+    }

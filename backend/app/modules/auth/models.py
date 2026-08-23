@@ -41,6 +41,7 @@ class User(Base):
     last_active_day: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+        index=True,
     )
     gems: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

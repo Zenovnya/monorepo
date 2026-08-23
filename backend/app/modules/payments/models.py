@@ -30,7 +30,7 @@ class Subscription(Base):
         nullable=False,
         index=True,
     )
-    status: Mapped[str] = mapped_column(String(32), default="trial", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="trial", nullable=False, index=True)
     plan: Mapped[str] = mapped_column(String(32), default="monthly", nullable=False)
     # Внешний идентификатор платежа в ЮKassa.
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -42,6 +42,7 @@ class Subscription(Base):
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -75,6 +76,7 @@ class PaymentHistory(Base):
     yookassa_payment_id: Mapped[str] = mapped_column(
         String(255),
         unique=True,
+        index=True,
         nullable=False,
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)  # в копейках
@@ -89,4 +91,5 @@ class PaymentHistory(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+        index=True,
     )
