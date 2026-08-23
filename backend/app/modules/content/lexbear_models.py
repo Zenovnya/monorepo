@@ -1,4 +1,4 @@
-"""ORM-модели контента LexBear (юниты, теория, вопросы, статьи)."""
+"""ORM-модели контента LexBear (юниты, уроки, теория, вопросы, статьи)."""
 
 import uuid
 from datetime import datetime
@@ -15,18 +15,22 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
 class Unit(Base):
-    """Юнит (остров) обучения LexBear."""
+    """Остров/юнит обучения LexBear."""
 
     __tablename__ = "units"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+    )
     codex: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     subtitle: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -37,16 +41,15 @@ class Unit(Base):
         nullable=False,
     )
     locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    why_practical: Mapped[str] = mapped_column(Text, default="", nullable=False)
-
-    lessons: Mapped[list["LexBearLesson"]] = relationship(
-        back_populates="unit",
-        cascade="all, delete-orphan",
+    why_practical: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
     )
 
 
 class LexBearLesson(Base):
-    """Урок внутри юнита LexBear."""
+    """Урок в составе юнита LexBear."""
 
     __tablename__ = "lexbear_lessons"
 
@@ -61,19 +64,9 @@ class LexBearLesson(Base):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     xp_reward: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 
-    unit: Mapped["Unit"] = relationship(back_populates="lessons")
-    cards: Mapped[list["TheoryCard"]] = relationship(
-        back_populates="lesson",
-        cascade="all, delete-orphan",
-    )
-    questions: Mapped[list["Question"]] = relationship(
-        back_populates="lesson",
-        cascade="all, delete-orphan",
-    )
-
 
 class TheoryCard(Base):
-    """Карточка теории урока LexBear."""
+    """Карточка теории в рамках урока LexBear."""
 
     __tablename__ = "theory_cards"
 
@@ -88,14 +81,26 @@ class TheoryCard(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     definition: Mapped[str] = mapped_column(Text, nullable=False)
     practical: Mapped[str] = mapped_column(Text, nullable=False)
-    chips: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
-    bear_line: Mapped[str] = mapped_column(Text, default="", nullable=False)
-
-    lesson: Mapped["LexBearLesson"] = relationship(back_populates="cards")
+    chips: Mapped[list] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+    bear_line: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
+    )
 
 
 class Question(Base):
-    """Вопрос/задание урока LexBear."""
+    """Вопрос/задание урока LexBear.
+
+    Поле ``correct`` хранит ответ(ы) в виде JSON:
+    - для одиночного выбора — целое число (индекс правильного варианта);
+    - для множественного выбора — список индексов;
+    - для true/false — булево значение.
+    """
 
     __tablename__ = "questions"
 
@@ -110,21 +115,30 @@ class Question(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     case_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    options: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
-    # correct хранит индекс ответа / boolean / пары (JSON).
+    options: Mapped[list] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
     correct: Mapped[object] = mapped_column(JSON, nullable=False)
-    explanation: Mapped[str] = mapped_column(Text, default="", nullable=False)
-
-    lesson: Mapped["LexBearLesson"] = relationship(back_populates="questions")
+    explanation: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
+    )
 
 
 class Article(Base):
-    """Справочная статья (открывается по мере прохождения уроков)."""
+    """Справочная статья (кодекс) LexBear."""
 
     __tablename__ = "articles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+    )
     codex: Mapped[str] = mapped_column(String(32), nullable=False)
     number: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -133,11 +147,15 @@ class Article(Base):
 
 
 class LearnedArticle(Base):
-    """Разблокированная пользователем статья."""
+    """Связь «пользователь выучил статью»."""
 
     __tablename__ = "learned_articles"
     __table_args__ = (
-        UniqueConstraint("user_id", "article_id", name="learned_user_article_uq"),
+        UniqueConstraint(
+            "user_id",
+            "article_id",
+            name="learned_user_article_uq",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
