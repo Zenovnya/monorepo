@@ -1,17 +1,33 @@
 """Точка входа FastAPI-приложения."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.database import dispose_engine
 from app.modules import api_router
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Жизненный цикл приложения: корректное завершение пулов соединений."""
+    yield
+    # Graceful shutdown: закрываем пул БД и соединение Redis.
+    from app.cache import close_redis
+
+    await dispose_engine()
+    await close_redis()
+
 
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 # Настраиваем CORS только для явно разрешённых источников.
