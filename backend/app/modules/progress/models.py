@@ -70,6 +70,50 @@ class Progress(Base):
     )
 
 
+class LexBearProgress(Base):
+    """Прогресс пользователя по урокам LexBear (int id уроков)."""
+
+    __tablename__ = "lexbear_progress"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "lesson_id", name="uq_lexbear_progress_user_lesson"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lesson_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lexbear_lessons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    completed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+    best_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    crowns: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class ReviewLog(Base):
     """Запись о повторении карточки (SRS).
 

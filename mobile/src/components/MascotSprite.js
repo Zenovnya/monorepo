@@ -4,7 +4,7 @@ import { Animated, Easing, Image, StyleSheet } from 'react-native';
 /**
  * MascotSprite — рендер маскота Lex с crossfade между эмоциями.
  *
- * Поддерживает эмоции: idle | happy | sad | cheer | think.
+ * Поддерживает эмоции: idle | happy | sad | cheer | think | wave.
  * При смене emotion плавно скрывает текущую картинку и показывает новую
  * (crossfade). Для MVP использует один ассет bear.png, меняя только
  * масштаб/прозрачность для передачи настроения. При наличии отдельных
@@ -16,6 +16,7 @@ const EMOTION_STYLE = {
   cheer: { scale: 1.15, rotate: '-6deg' },
   sad: { scale: 0.92, rotate: '0deg' },
   think: { scale: 1, rotate: '4deg' },
+  wave: { scale: 1.05, rotate: '-3deg' },
 };
 
 export const MascotSprite = ({ emotion = 'idle', size = 120 }) => {

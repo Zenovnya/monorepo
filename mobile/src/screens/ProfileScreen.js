@@ -1,189 +1,169 @@
 import React from 'react';
 import {
-  StyleSheet,
-  Text,
   View,
+  Text,
+  StyleSheet,
   ScrollView,
-  ActivityIndicator,
   Pressable,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { gamificationApi } from '../api/gamification';
-import { progressApi } from '../api/progress';
-import { useMascot } from '../hooks/useMascot';
+import { lexbearApi } from '../api/lexbear';
 import { colors } from '../theme/colors';
 
+/**
+ * Экран профиля LexBear.
+ */
 export default function ProfileScreen({ navigation }) {
-  const user = useAuthStore((state) => state.user);
-  const mascot = useMascot();
+  const user = useAuthStore((s) => s.user);
 
-  const { data: gamification, isLoading } = useQuery({
-    queryKey: ['gamification'],
-    queryFn: gamificationApi.me,
+  const { data: articles } = useQuery({
+    queryKey: ['lexbear-articles'],
+    queryFn: lexbearApi.articles,
   });
 
-  const { data: progress } = useQuery({
-    queryKey: ['progress-me'],
-    queryFn: progressApi.me,
-  });
+  const learnedCount = (articles ?? []).filter((a) => a.learned).length;
+  const totalCrowns = 0; // упрощённо; берётся из прогресса позже
 
-  const achievements = gamification?.achievements ?? [];
+  const metrics = [
+    { icon: '🔥', value: user?.streak ?? 0, label: 'Стрик' },
+    { icon: '⭐', value: user?.xp ?? 0, label: 'XP' },
+    { icon: '👑', value: totalCrowns, label: 'Короны' },
+    { icon: '📖', value: learnedCount, label: 'Статьи' },
+  ];
 
-  if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+  const rows = [
+    { key: 'bear', icon: '🐻', title: 'Оформление мишки', hint: 'Костюмы, галстуки, комнаты' },
+    { key: 'league', icon: '🏆', title: 'Лига', hint: 'Топ 30 недели' },
+    { key: 'articles', icon: '📚', title: 'Мои статьи', hint: `${learnedCount} выучено` },
+    { key: 'shop', icon: '🛍️', title: 'Магазин', hint: 'Гемы, жизни, костюмы' },
+    { key: 'premium', icon: '💎', title: 'LexBear Plus', hint: 'Без лимита жизней', gold: true },
+  ];
 
-  const levelXp = gamification?.xp ?? 0;
-  const nextLevelXp = gamification?.next_level_xp || 100;
-  const xpProgress = Math.min(100, Math.round((levelXp / nextLevelXp) * 100));
+  const navigate = (key) => {
+    const map = { bear: 'Bear', league: 'League', articles: 'Articles', shop: 'Shop', premium: 'Premium' };
+    navigation.navigate(map[key]);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Профиль</Text>
-
-      {/* Header с пользователем и маскотом */}
-      <View style={styles.headerCard}>
-        <AnimatedMascot />
-        <View style={styles.userInfo}>
-          <Text style={styles.username}>{user?.username || user?.email || 'Юрист'}</Text>
-          <Text style={styles.level}>Уровень {gamification?.level ?? 1}</Text>
+      {/* Шапка */}
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+          <AnimatedMascot size={88} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+          <Text style={styles.meta}>Лига: <Text style={{ fontWeight: '800' }}>{user?.league || 'Бронза'}</Text> · с 2026</Text>
+          <Pressable
+            style={styles.settingsChip}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.settingsChipText}>⚙️ Настройки</Text>
+          </Pressable>
         </View>
       </View>
 
-      {/* Статистика */}
-      <View style={styles.statsRow}>
-        <StatCard icon="🔥" value={gamification?.streak ?? 0} label="Стрик" />
-        <StatCard icon="⭐" value={gamification?.xp ?? 0} label="XP" />
-        <StatCard icon="💎" value={gamification?.gems ?? 0} label="Гемы" />
-        <StatCard
-          icon="✅"
-          value={progress?.total_completed ?? 0}
-          label="Уроки"
-        />
-      </View>
-
-      {/* Прогресс уровня */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Прогресс уровня</Text>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${xpProgress}%` }]} />
-        </View>
-        <Text style={styles.progressText}>
-          {levelXp} / {nextLevelXp} XP до следующего уровня
-        </Text>
-      </View>
-
-      {/* Достижения */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Достижения</Text>
-        {achievements.length === 0 ? (
-          <Text style={styles.emptyText}>
-            Пока нет достижений. Погладь Lex 10 раз, чтобы получить «Друг Lex»!
-          </Text>
-        ) : (
-          achievements.map((a) => (
-            <View key={a.code} style={styles.achievement}>
-              <Text style={styles.achievementTitle}>🏅 {a.title}</Text>
-              <Text style={styles.achievementDesc}>{a.description}</Text>
-            </View>
-          ))
-        )}
-        {mascot.petCount > 0 && (
-          <View style={styles.petProgress}>
-            <Text style={styles.petProgressText}>
-              🐻 Поглаживаний Lex: {mascot.petCount} / 10
-            </Text>
+      {/* Метрики */}
+      <View style={styles.metricsRow}>
+        {metrics.map((m) => (
+          <View key={m.label} style={styles.metric}>
+            <Text style={styles.metricIcon}>{m.icon}</Text>
+            <Text style={styles.metricValue}>{m.value}</Text>
+            <Text style={styles.metricLabel}>{m.label}</Text>
           </View>
-        )}
+        ))}
       </View>
 
-      <View style={styles.footer}>
-        <Pressable style={styles.logoutBtn} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.logoutText}>⚙️ Настройки</Text>
-        </Pressable>
+      {/* Ссылки */}
+      <View style={styles.rows}>
+        {rows.map((r) => (
+          <Pressable
+            key={r.key}
+            style={[styles.row, r.gold && styles.rowGold]}
+            onPress={() => navigate(r.key)}
+          >
+            <View style={[styles.rowIcon, r.gold && { backgroundColor: colors.accent }]}>
+              <Text style={styles.rowIconText}>{r.icon}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{r.title}</Text>
+              <Text style={styles.rowHint}>{r.hint}</Text>
+            </View>
+            <Text style={styles.rowArrow}>→</Text>
+          </Pressable>
+        ))}
       </View>
     </ScrollView>
   );
 }
 
-function StatCard({ icon, value, label }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 20, paddingBottom: 40 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  title: { fontSize: 28, fontWeight: '800', color: colors.text, marginBottom: 16 },
-  headerCard: {
-    flexDirection: 'row',
+  content: { padding: 16, paddingBottom: 120 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 3,
+    borderColor: colors.border,
+    backgroundColor: '#FFF7DE',
+    overflow: 'hidden',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 22,
+    justifyContent: 'center',
+  },
+  name: { fontSize: 26, fontWeight: '900', color: colors.text },
+  meta: { fontSize: 14, color: colors.subtext, marginTop: 2 },
+  settingsChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     borderWidth: 2,
     borderColor: colors.border,
-    padding: 18,
-    gap: 16,
+    backgroundColor: colors.card,
+    marginTop: 8,
   },
-  userInfo: { flex: 1 },
-  username: { fontSize: 20, fontWeight: '800', color: colors.text },
-  level: { fontSize: 14, color: colors.subtext, marginTop: 4 },
-  statsRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  statCard: {
+  settingsChipText: { fontSize: 13, fontWeight: '700', color: colors.text },
+  metricsRow: { flexDirection: 'row', gap: 8, marginTop: 20 },
+  metric: {
     flex: 1,
     backgroundColor: colors.card,
     borderRadius: 16,
     borderWidth: 2,
+    borderColor: colors.track,
+    padding: 10,
+    alignItems: 'center',
+  },
+  metricIcon: { fontSize: 18 },
+  metricValue: { fontSize: 18, fontWeight: '900', color: colors.text, marginTop: 4 },
+  metricLabel: { fontSize: 10, color: colors.subtext, fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
+  rows: { marginTop: 24, gap: 12 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderWidth: 3,
     borderColor: colors.border,
+    borderRadius: 18,
     padding: 12,
-    alignItems: 'center',
   },
-  statIcon: { fontSize: 20 },
-  statValue: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 4 },
-  statLabel: { fontSize: 11, color: colors.subtext, marginTop: 2 },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
+  rowGold: { backgroundColor: '#FFF7DE' },
+  rowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.border,
-    padding: 16,
-    marginTop: 16,
-  },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: 12 },
-  progressTrack: {
-    height: 12,
-    backgroundColor: '#E6DFCE',
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 6 },
-  progressText: { fontSize: 12, color: colors.subtext, marginTop: 8 },
-  emptyText: { fontSize: 13, color: colors.subtext, lineHeight: 20 },
-  achievement: { marginBottom: 12 },
-  achievementTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  achievementDesc: { fontSize: 13, color: colors.subtext, marginTop: 2 },
-  petProgress: { marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E6DFCE' },
-  petProgressText: { fontSize: 13, color: colors.text, fontWeight: '600' },
-  footer: { marginTop: 24 },
-  logoutBtn: {
     backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoutText: { fontSize: 16, fontWeight: '700', color: colors.text },
+  rowIconText: { fontSize: 22 },
+  rowTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
+  rowHint: { fontSize: 12, color: colors.subtext, marginTop: 2 },
+  rowArrow: { fontSize: 20, color: colors.subtext },
 });

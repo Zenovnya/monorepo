@@ -32,8 +32,8 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
-  // Обновление данных юзера отдельно
-  setUser: (user) => set({ user }),
+  // Обновление данных юзера отдельно (частичное обновление полей)
+  setUser: (patch) => set((state) => ({ user: { ...(state.user || {}), ...patch } })),
 
   logout: async () => {
     await SecureStore.deleteItemAsync('accessToken');

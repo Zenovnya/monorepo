@@ -22,12 +22,25 @@ class UserLogin(BaseModel):
 
 
 class UserRead(BaseModel):
-    """Схема представления пользователя."""
+    """Схема представления пользователя (профиль LexBear)."""
 
     id: uuid.UUID
     email: EmailStr
     username: str | None
+    name: str
     is_active: bool
+    xp: int
+    level: int
+    streak: int
+    gems: int
+    lives: int
+    league: str
+    daily_goal: int
+    onboarded: bool
+    bear_mood: int
+    bear_hunger: int
+    bear_level: int
+    bear_outfit: dict
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

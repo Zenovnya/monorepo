@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,34 @@ class User(Base):
         nullable=True,
     )
     gems: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # --- Профиль LexBear ---
+    name: Mapped[str] = mapped_column(
+        String(255),
+        default="Юрист",
+        nullable=False,
+    )
+    lives: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    league: Mapped[str] = mapped_column(
+        String(32),
+        default="Бронза",
+        nullable=False,
+    )
+    daily_goal: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    onboarded: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+    # Настроение и сытость мишки (0..100)
+    bear_mood: Mapped[int] = mapped_column(Integer, default=80, nullable=False)
+    bear_hunger: Mapped[int] = mapped_column(Integer, default=70, nullable=False)
+    bear_level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    bear_outfit: Mapped[dict] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

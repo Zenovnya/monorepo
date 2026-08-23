@@ -91,12 +91,10 @@ class Lesson(Base):
 
 
 class Case(Base):
-    """Кейс (практическое задание) внутри урока.
+    """Кейс (практическое задание).
 
-    Поддерживает несколько типов кейсов через ``case_type``:
-    - ``simple`` — обычный кейс с вариантами ответа;
-    - ``lex_entrance`` — кейс с появлением персонажа Lex;
-    - ``scene`` — зарезервировано под будущие полные сцены.
+    Может быть привязан к уроку (lesson_id) либо быть самостоятельным
+    (вкладка «Кейсы» в LexBear, когда lesson_id is None).
     """
 
     __tablename__ = "cases"
@@ -106,10 +104,10 @@ class Case(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    lesson_id: Mapped[uuid.UUID] = mapped_column(
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("lessons.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     situation: Mapped[str] = mapped_column(Text, nullable=False)
@@ -147,7 +145,19 @@ class Case(Base):
     )
     scene_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    lesson: Mapped["Lesson"] = relationship(back_populates="cases")
+    # --- Поля LexBear (вкладка «Кейсы») ---
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    codex: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    case_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    featured: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    lesson: Mapped["Lesson | None"] = relationship(back_populates="cases")
     options: Mapped[list["CaseOption"]] = relationship(
         back_populates="case",
         cascade="all, delete-orphan",
