@@ -16,7 +16,7 @@ export const AnimatedButton = ({ title, onPress, loading, style, variant = 'prim
   const [pressed, setPressed] = useState(false);
 
   const topStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: pressed ? PRESS_DEPTH : translateY.value }],
   }));
 
   const handlePressIn = () => {
@@ -43,14 +43,7 @@ export const AnimatedButton = ({ title, onPress, loading, style, variant = 'prim
       <Animated.View
         style={[styles.bottomLayer, isOutline ? styles.outlineBottom : styles.primaryBottom]}
       />
-      <Animated.View
-        style={[
-          styles.topLayer,
-          isOutline ? styles.outlineTop : styles.primaryTop,
-          topStyle,
-          pressed && { transform: [{ translateY: PRESS_DEPTH }] },
-        ]}
-      >
+      <Animated.View style={[styles.topLayer, isOutline ? styles.outlineTop : styles.primaryTop, topStyle]}>
         {loading ? (
           <ActivityIndicator color={colors.text} />
         ) : (

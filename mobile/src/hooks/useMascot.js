@@ -34,8 +34,6 @@ export function useMascot() {
       queryClient.setQueryData(['mascot', 'pet-count'], data);
       // Аналитика: событие поглаживания (fire-and-forget).
       analyticsApi.track('mascot_petted', { source: 'home_companion' }).catch(() => {});
-      // Возвращаем фразу на триггер pet.
-      return getPhrase('pet').catch(() => null);
     },
   });
 

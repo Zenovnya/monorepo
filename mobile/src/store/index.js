@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
+import { authApi } from '../api/auth';
 import { syncPushToken } from '../utils/notifications';
 
 /**
@@ -59,10 +60,37 @@ export const useAuthStore = create((set, get) => ({
       isHydrated: true,
     });
 
-    // Если сессия есть — синхронизируем push-токен устройства.
-    if (accessToken) {
-      syncPushToken();
+    // Если сессии нет — выходим.
+    if (!accessToken) return;
+
+    // Подгружаем актуальные данные пользователя по access-токену.
+    try {
+      const user = await authApi.me(accessToken);
+      set({ user });
+    } catch {
+      // Не удалось получить пользователя — токен мог истечь. Пробуем refresh.
+      try {
+        const refreshed = await authApi.refresh(refreshToken);
+        const user = await authApi.me(refreshed.access_token);
+
+        set({
+          user,
+          accessToken: refreshed.access_token,
+          refreshToken: refreshed.refresh_token,
+          isAuthenticated: true,
+        });
+        await SecureStore.setItemAsync('accessToken', refreshed.access_token);
+        await SecureStore.setItemAsync('refreshToken', refreshed.refresh_token);
+      } catch {
+        // Сессия невосстановима — выходим.
+        await SecureStore.deleteItemAsync('accessToken');
+        await SecureStore.deleteItemAsync('refreshToken');
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      }
     }
+
+    // Если сессия есть — синхронизируем push-токен устройства.
+    syncPushToken();
   },
 }));
 

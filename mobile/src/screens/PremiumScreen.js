@@ -34,10 +34,10 @@ export default function PremiumScreen({ navigation }) {
 
   const createPayment = useMutation({
     mutationFn: (p) => paymentsApi.createPayment(p),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Аналитика: событие покупки подписки (fire-and-forget).
-      analyticsApi.track('subscription_purchased', { plan }).catch(() => {});
+      analyticsApi.track('subscription_purchased', { plan: variables }).catch(() => {});
       if (data.confirmation_url) {
         // Для MVP открываем confirmation_url во внешнем браузере.
         // Встроенный WebView можно включить после установки react-native-webview.

@@ -10,6 +10,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { lexbearApi } from '../api/lexbear';
+import { gamificationApi } from '../api/gamification';
+import { progressApi } from '../api/progress';
 import { colors } from '../theme/colors';
 
 /**
@@ -18,17 +20,38 @@ import { colors } from '../theme/colors';
 export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
 
+  // Статьи со статусом изучения.
   const { data: articles } = useQuery({
     queryKey: ['lexbear-articles'],
     queryFn: lexbearApi.articles,
   });
 
+  // Состояние геймификации (XP, уровень, стрик, достижения).
+  const { data: gamification } = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+  });
+
+  // Сводка прогресса по урокам (короны).
+  const { data: progress } = useQuery({
+    queryKey: ['progress-overview'],
+    queryFn: progressApi.overview,
+  });
+
+  // Достижения пользователя.
+  const { data: achData } = useQuery({
+    queryKey: ['gamification-achievements'],
+    queryFn: gamificationApi.achievements,
+  });
+  const achievements = achData?.achievements ?? [];
+
   const learnedCount = (articles ?? []).filter((a) => a.learned).length;
-  const totalCrowns = 0; // упрощённо; берётся из прогресса позже
+  const totalCrowns = progress?.total_crowns ?? 0;
+  const level = gamification?.level ?? user?.level ?? 1;
 
   const metrics = [
-    { icon: '🔥', value: user?.streak ?? 0, label: 'Стрик' },
-    { icon: '⭐', value: user?.xp ?? 0, label: 'XP' },
+    { icon: '🔥', value: gamification?.streak ?? user?.streak ?? 0, label: 'Стрик' },
+    { icon: '⭐', value: gamification?.xp ?? user?.xp ?? 0, label: 'XP' },
     { icon: '👑', value: totalCrowns, label: 'Короны' },
     { icon: '📖', value: learnedCount, label: 'Статьи' },
   ];
@@ -55,7 +78,9 @@ export default function ProfileScreen({ navigation }) {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
-          <Text style={styles.meta}>Лига: <Text style={{ fontWeight: '800' }}>{user?.league || 'Бронза'}</Text> · с 2026</Text>
+          <Text style={styles.meta}>
+            Лига: <Text style={{ fontWeight: '800' }}>{user?.league || 'Бронза'}</Text> · Уровень {level}
+          </Text>
           <Pressable
             style={styles.settingsChip}
             onPress={() => navigation.navigate('Settings')}
@@ -75,6 +100,23 @@ export default function ProfileScreen({ navigation }) {
           </View>
         ))}
       </View>
+
+      {/* Достижения */}
+      {achievements.length > 0 && (
+        <View style={styles.achSection}>
+          <Text style={styles.sectionTitle}>Достижения</Text>
+          <View style={styles.achList}>
+            {achievements.map((a) => (
+              <View key={a.code} style={styles.achCard}>
+                <Text style={styles.achTitle}>🏅 {a.title}</Text>
+                {a.description ? (
+                  <Text style={styles.achDesc}>{a.description}</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Ссылки */}
       <View style={styles.rows}>
@@ -140,6 +182,11 @@ const styles = StyleSheet.create({
   metricIcon: { fontSize: 18 },
   metricValue: { fontSize: 18, fontWeight: '900', color: colors.text, marginTop: 4 },
   metricLabel: { fontSize: 10, color: colors.subtext, fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
+  sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.subtext, textTransform: 'uppercase', marginTop: 20, marginBottom: 8 },
+  achList: { gap: 8 },
+  achCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 12 },
+  achTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  achDesc: { fontSize: 13, color: colors.subtext, marginTop: 4, lineHeight: 18 },
   rows: { marginTop: 24, gap: 12 },
   row: {
     flexDirection: 'row',

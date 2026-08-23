@@ -40,7 +40,7 @@ export function LockPremium({ navigation, children }) {
       <View style={styles.footer}>
         <AnimatedButton
           title="Открыть премиум"
-          onPress={() => navigation.navigate('Paywall')}
+          onPress={() => navigation.navigate('Premium')}
         />
       </View>
     </View>

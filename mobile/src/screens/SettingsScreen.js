@@ -1,10 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
+import { notificationsApi } from '../api/notifications';
 import { colors } from '../theme/colors';
 
 export default function SettingsScreen({ navigation }) {
   const { isAuthenticated, logout, user } = useAuthStore();
+
+  // Список уведомлений пользователя.
+  const { data } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: notificationsApi.list,
+    enabled: isAuthenticated,
+  });
+  const notifications = data?.notifications ?? [];
 
   const rows = [
     { title: 'Имя', value: user?.name || 'Юрист' },
@@ -38,6 +48,26 @@ export default function SettingsScreen({ navigation }) {
         ))}
       </View>
 
+      {/* Уведомления */}
+      <Text style={styles.sectionTitle}>Уведомления</Text>
+      {notifications.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Пока нет уведомлений</Text>
+        </View>
+      ) : (
+        <View style={styles.notifList}>
+          {notifications.slice(0, 5).map((n) => (
+            <View
+              key={n.id}
+              style={[styles.notifCard, n.read && styles.notifRead]}
+            >
+              <Text style={styles.notifTitle}>{n.title}</Text>
+              {n.body ? <Text style={styles.notifBody}>{n.body}</Text> : null}
+            </View>
+          ))}
+        </View>
+      )}
+
       {isAuthenticated && (
         <Pressable style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Выйти</Text>
@@ -67,6 +97,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 14 },
   rowTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
   rowValue: { fontSize: 13, color: colors.subtext, maxWidth: '60%', textAlign: 'right' },
+  sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.subtext, textTransform: 'uppercase', marginTop: 20, marginBottom: 8 },
+  emptyCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 16, alignItems: 'center' },
+  emptyText: { fontSize: 14, color: colors.subtext },
+  notifList: { gap: 8 },
+  notifCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 14 },
+  notifRead: { opacity: 0.6 },
+  notifTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  notifBody: { fontSize: 13, color: colors.subtext, marginTop: 4, lineHeight: 18 },
   logoutBtn: {
     marginTop: 24,
     height: 56,

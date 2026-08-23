@@ -33,11 +33,14 @@ export default function LessonScreen({ route, navigation }) {
     queryFn: () => lexbearApi.getLesson(lessonId),
   });
 
+  // Завершение урока через lexbear-эндпоинт (XP, короны, стрик).
   const completeMutation = useMutation({
     mutationFn: ({ correct, total }) =>
       lexbearApi.completeLesson(lessonId, { correct, total }),
     onSuccess: () => {
       queryClient.invalidateQueries(['lexbear-learn']);
+      queryClient.invalidateQueries(['progress-overview']);
+      queryClient.invalidateQueries(['gamification-me']);
     },
   });
 

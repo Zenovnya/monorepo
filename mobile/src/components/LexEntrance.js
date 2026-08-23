@@ -22,7 +22,7 @@ export const LexEntrance = ({ hint, onDone }) => {
   const [emotion, setEmotion] = useState('happy');
 
   useEffect(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackStyle.Medium);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // Crossfade эмоций: сначала happy, затем think (въезжает и задумывается).
     setEmotion('cheer');
     translateX.value = withSequence(
