@@ -10,6 +10,9 @@ export const lexbearApi = {
   // Список кейсов (вкладка «Кейсы»)
   cases: () => apiClient.get('/lexbear/cases').then((r) => r.data),
 
+  // Детали отдельного кейса по id
+  getCase: (caseId) => apiClient.get(`/lexbear/cases/${caseId}`).then((r) => r.data),
+
   // Детали урока (теория + вопросы)
   getLesson: (lessonId) =>
     apiClient.get(`/lexbear/lessons/${lessonId}`).then((r) => r.data),

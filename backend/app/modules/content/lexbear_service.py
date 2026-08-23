@@ -25,6 +25,10 @@ class LessonNotFoundError(LexBearContentError):
     """Урок LexBear не найден."""
 
 
+class CaseNotFoundError(LexBearContentError):
+    """Кейс LexBear не найден."""
+
+
 async def list_units(
     session: AsyncSession,
 ) -> list[Unit]:
@@ -96,6 +100,26 @@ async def get_lesson_detail(
     }
 
 
+async def _serialize_case(session: AsyncSession, c) -> dict:
+    """Преобразует ORM-кейс во вкладке «Кейсы» в словарь для API."""
+    await session.refresh(c, attribute_names=["options"])
+    correct_option = next((o for o in c.options if o.is_correct), None)
+    return {
+        "id": str(c.id),
+        "title": c.title,
+        "codex": c.codex,
+        "difficulty": c.difficulty,
+        "case_text": c.case_text,
+        "options": [{"id": o.id, "text": o.text} for o in c.options],
+        "correct": next(
+            (i for i, o in enumerate(c.options) if o.is_correct),
+            None,
+        ),
+        "explanation": correct_option.explanation if correct_option else None,
+        "featured": c.featured,
+    }
+
+
 async def list_cases(session: AsyncSession) -> list[dict]:
     """Возвращает кейсы для отдельной вкладки «Кейсы».
 
@@ -108,26 +132,19 @@ async def list_cases(session: AsyncSession) -> list[dict]:
         # Учитываем только кейсы, заполненные под вкладку «Кейсы».
         if not (c.title and c.codex):
             continue
-        # Явно загружаем options (асинхронная сессия без lazy='selectin').
-        await session.refresh(c, attribute_names=["options"])
-        correct_option = next((o for o in c.options if o.is_correct), None)
-        out.append(
-            {
-                "id": str(c.id),
-                "title": c.title,
-                "codex": c.codex,
-                "difficulty": c.difficulty,
-                "case_text": c.case_text,
-                "options": [{"id": o.id, "text": o.text} for o in c.options],
-                "correct": next(
-                    (i for i, o in enumerate(c.options) if o.is_correct),
-                    None,
-                ),
-                "explanation": correct_option.explanation if correct_option else None,
-                "featured": c.featured,
-            }
-        )
+        out.append(await _serialize_case(session, c))
     return out
+
+
+async def get_case(
+    session: AsyncSession,
+    case_id: uuid.UUID,
+) -> dict:
+    """Возвращает детали отдельного кейса вкладки «Кейсы» по id."""
+    case = await session.get(Case, case_id)
+    if case is None or not (case.title and case.codex):
+        raise CaseNotFoundError("Кейс не найден")
+    return await _serialize_case(session, case)
 
 
 async def get_learn_path(

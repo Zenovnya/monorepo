@@ -46,8 +46,9 @@ export default function CasesScreen({ navigation }) {
   const featured = all.find((c) => c.featured) ?? all[0];
   const rest = all.filter((c) => c.id !== featured?.id);
 
+  // Передаём только id кейса — детали подтягиваются на экране CaseDetail.
   const openCase = (c) =>
-    navigation.navigate('CaseDetail', { caseData: c });
+    navigation.navigate('CaseDetail', { caseId: c.id });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

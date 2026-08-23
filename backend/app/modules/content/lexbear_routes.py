@@ -63,6 +63,22 @@ async def cases(
     return await lexbear_service.list_cases(session)
 
 
+@router.get("/cases/{case_id}")
+async def case_detail(
+    case_id: uuid.UUID,
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Возвращает детали отдельного кейса по id."""
+    try:
+        return await lexbear_service.get_case(session, case_id)
+    except lexbear_service.CaseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
 @router.get("/lessons/{lesson_id}")
 async def lesson_detail(
     lesson_id: int,

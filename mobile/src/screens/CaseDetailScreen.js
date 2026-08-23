@@ -5,17 +5,42 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { colors } from '../theme/colors';
 
 /**
  * Экран прохождения отдельного кейса (адаптация веб-CaseClient).
+ * Данные кейса подтягиваются по id через GET /lexbear/cases/{id}.
  */
 export default function CaseDetailScreen({ route, navigation }) {
-  const { caseData } = route.params;
+  const { caseId } = route.params;
   const [sel, setSel] = useState(null);
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
+
+  const { data: caseData, isLoading, error } = useQuery({
+    queryKey: ['lexbear-case', caseId],
+    queryFn: () => lexbearApi.getCase(caseId),
+  });
+
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (error || !caseData) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>Не удалось загрузить кейс</Text>
+      </View>
+    );
+  }
 
   const options = caseData?.options ?? [];
   const correctIndex = caseData?.correct;
@@ -108,6 +133,8 @@ export default function CaseDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  errorText: { fontSize: 15, fontWeight: '700', color: colors.error },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   backBtn: {
     width: 38,
