@@ -5,8 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Linking,
 } from 'react-native';
+import { useMutation } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
+import { paymentsApi } from '../api/payments';
+import { analyticsApi } from '../api/analytics';
 import { colors } from '../theme/colors';
 
 const items = [
@@ -18,13 +23,25 @@ const items = [
 ];
 
 const bundles = [
-  { icon: '💎', title: '500 гемов', price: '199 ₽' },
-  { icon: '💎', title: '1200 гемов', price: '449 ₽' },
-  { icon: '💎', title: '3000 гемов', price: '999 ₽' },
+  { plan: 'gems_500', icon: '💎', title: '500 гемов', price: '199 ₽' },
+  { plan: 'gems_1200', icon: '💎', title: '1200 гемов', price: '449 ₽' },
+  { plan: 'gems_3000', icon: '💎', title: '3000 гемов', price: '999 ₽' },
 ];
 
 export default function ShopScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
+
+  // Покупка гемов через ЮKassa.
+  const buyGems = useMutation({
+    mutationFn: (plan) => paymentsApi.createPayment(plan),
+    onSuccess: (data, plan) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      analyticsApi.track('gems_purchased', { plan }).catch(() => {});
+      if (data.confirmation_url) {
+        Linking.openURL(data.confirmation_url).catch(() => {});
+      }
+    },
+  });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -46,7 +63,13 @@ export default function ShopScreen({ navigation }) {
               <Text style={styles.itemIconText}>{it.icon}</Text>
             </View>
             <Text style={styles.itemTitle}>{it.title}</Text>
-            <Pressable style={styles.buyBtn}>
+            <Pressable
+              style={styles.buyBtn}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                analyticsApi.track('shop_item_tapped', { item: it.title }).catch(() => {});
+              }}
+            >
               <Text style={styles.buyBtnText}>{it.price}</Text>
             </Pressable>
           </View>
@@ -56,13 +79,19 @@ export default function ShopScreen({ navigation }) {
       <Text style={styles.sectionTitle}>Пополнить гемы · ЮKassa</Text>
       <View style={styles.list}>
         {bundles.map((b) => (
-          <View key={b.title} style={styles.card}>
+          <View key={b.plan} style={styles.card}>
             <View style={[styles.itemIcon, { backgroundColor: '#FFF7DE' }]}>
               <Text style={styles.itemIconText}>{b.icon}</Text>
             </View>
             <Text style={styles.itemTitle}>{b.title}</Text>
-            <Pressable style={[styles.buyBtn, styles.buyGold]}>
-              <Text style={styles.buyBtnText}>{b.price}</Text>
+            <Pressable
+              style={[styles.buyBtn, styles.buyGold]}
+              onPress={() => buyGems.mutate(b.plan)}
+              disabled={buyGems.isPending}
+            >
+              <Text style={[styles.buyBtnText, { color: '#fff' }]}>
+                {buyGems.isPending ? '…' : b.price}
+              </Text>
             </Pressable>
           </View>
         ))}
@@ -103,6 +132,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  buyGold: { backgroundColor: colors.accent },
+  buyGold: { backgroundColor: colors.accent, borderColor: colors.border },
   buyBtnText: { fontSize: 13, fontWeight: '800', color: colors.text },
 });

@@ -16,10 +16,20 @@ from app.modules.payments.models import PaymentHistory, Subscription
 settings = get_settings()
 
 # Цены в копейках.
+# Подписки LexBear Plus.
 PLANS = {
-    "monthly": {"amount_cents": 39900, "days": 30},
-    "yearly": {"amount_cents": 299000, "days": 365},
+    "monthly": {"type": "subscription", "amount_cents": 39900, "days": 30},
+    "yearly": {"type": "subscription", "amount_cents": 299000, "days": 365},
 }
+
+# Пакеты гемов (покупка внутри приложения через ЮKassa).
+GEM_PLANS = {
+    "gems_500": {"type": "gems", "amount_cents": 19900, "gems": 500},
+    "gems_1200": {"type": "gems", "amount_cents": 44900, "gems": 1200},
+    "gems_3000": {"type": "gems", "amount_cents": 99900, "gems": 3000},
+}
+
+ALL_PLANS = {**PLANS, **GEM_PLANS}
 
 
 class PaymentsError(Exception):
@@ -80,11 +90,14 @@ async def create_payment(
     user_id: uuid.UUID,
     plan: str,
 ) -> dict:
-    """Создаёт платёж в ЮKassa и сохраняет запись истории."""
-    if plan not in PLANS:
+    """Создаёт платёж в ЮKassa и сохраняет запись истории.
+
+    Поддерживает подписки (monthly/yearly) и пакеты гемов (gems_*).
+    """
+    if plan not in ALL_PLANS:
         raise PlanNotFoundError(f"Тариф не найден: {plan}")
 
-    plan_cfg = PLANS[plan]
+    plan_cfg = ALL_PLANS[plan]
     payment_id = str(uuid.uuid4())
 
     # Сохраняем запись о платеже (pending).
@@ -95,7 +108,7 @@ async def create_payment(
             amount=plan_cfg["amount_cents"],
             currency="RUB",
             status="pending",
-            description=f"Подписка LexBear Plus ({plan})",
+            description=f"{plan_cfg['type']}:{plan}",
         )
     )
     await session.commit()
@@ -118,7 +131,11 @@ async def confirm_payment(
     yookassa_payment_id: str,
     paid: bool = True,
 ) -> None:
-    """Подтверждает оплату из webhook ЮKassa и активирует подписку."""
+    """Подтверждает оплату из webhook ЮKassa.
+
+    Для подписки — активирует/продлевает Premium.
+    Для пакета гемов — начисляет гемы пользователю.
+    """
     history = await session.scalar(
         select(PaymentHistory).where(
             PaymentHistory.yookassa_payment_id == yookassa_payment_id
@@ -131,32 +148,45 @@ async def confirm_payment(
     if paid:
         history.paid_at = datetime.now(timezone.utc)
 
-        # Определяем план по описанию (для MVP).
-        plan = "monthly"
-        if history.description and "yearly" in history.description:
-            plan = "yearly"
-        plan_cfg = PLANS.get(plan, PLANS["monthly"])
+        # Определяем тип и план из описания (вида "subscription:monthly").
+        kind = "subscription"
+        plan_key = "monthly"
+        if history.description:
+            kind_part, _, plan_part = history.description.partition(":")
+            if kind_part:
+                kind = kind_part
+            if plan_part:
+                plan_key = plan_part
 
-        # Активируем/обновляем подписку пользователя.
         user_id = history.user_id
-        expires_at = datetime.now(timezone.utc) + timedelta(days=plan_cfg["days"])
+        user = await session.get(User, user_id)
 
-        existing = await get_subscription(session, user_id)
-        if existing is None:
-            session.add(
-                Subscription(
-                    user_id=user_id,
-                    status="active",
-                    plan=plan,
-                    yookassa_payment_id=yookassa_payment_id,
-                    expires_at=expires_at,
-                )
-            )
+        if kind == "gems":
+            # Начисляем гемы пользователю.
+            plan_cfg = GEM_PLANS.get(plan_key)
+            if plan_cfg and user is not None:
+                user.gems = (user.gems or 0) + plan_cfg["gems"]
         else:
-            existing.status = "active"
-            existing.plan = plan
-            existing.yookassa_payment_id = yookassa_payment_id
-            existing.expires_at = expires_at
+            # Подписка: активируем/обновляем премиум.
+            plan_cfg = PLANS.get(plan_key, PLANS["monthly"])
+            expires_at = datetime.now(timezone.utc) + timedelta(days=plan_cfg["days"])
+
+            existing = await get_subscription(session, user_id)
+            if existing is None:
+                session.add(
+                    Subscription(
+                        user_id=user_id,
+                        status="active",
+                        plan=plan_key,
+                        yookassa_payment_id=yookassa_payment_id,
+                        expires_at=expires_at,
+                    )
+                )
+            else:
+                existing.status = "active"
+                existing.plan = plan_key
+                existing.yookassa_payment_id = yookassa_payment_id
+                existing.expires_at = expires_at
 
     await session.commit()
 
