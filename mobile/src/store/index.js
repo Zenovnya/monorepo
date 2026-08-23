@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
+import { syncPushToken } from '../utils/notifications';
 
 /**
  * Глобальное хранилище UI-состояния приложения (Zustand).
@@ -57,6 +58,11 @@ export const useAuthStore = create((set, get) => ({
       isAuthenticated: !!accessToken,
       isHydrated: true,
     });
+
+    // Если сессия есть — синхронизируем push-токен устройства.
+    if (accessToken) {
+      syncPushToken();
+    }
   },
 }));
 

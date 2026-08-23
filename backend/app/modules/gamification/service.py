@@ -1,15 +1,20 @@
 """Бизнес-логика геймификации: уровни, стрики, достижения."""
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import cache_delete, cache_get, cache_set
 from app.modules.auth.models import User, UserAchievement
 
 # Порог XP на один уровень.
 XP_PER_LEVEL = 100
+
+# Ключ кэша состояния геймификации.
+_GAMIFICATION_CACHE_TTL = 120  # секунды
 
 
 class GamificationError(Exception):
@@ -18,6 +23,10 @@ class GamificationError(Exception):
 
 class AchievementAlreadyAwardedError(GamificationError):
     """Достижение уже было выдано."""
+
+
+def _gamification_cache_key(user_id: uuid.UUID) -> str:
+    return f"gamification:{user_id}"
 
 
 def level_from_xp(xp: int) -> int:
@@ -69,6 +78,10 @@ async def add_xp(
     leveled_up = new_level > user.level
     user.level = new_level
     await session.flush()
+
+    # Инвалидируем кэш состояния геймификации.
+    await cache_delete(_gamification_cache_key(user.id))
+
     return {
         "xp": user.xp,
         "level": user.level,
@@ -104,6 +117,8 @@ async def award_achievement(
     )
     session.add(achievement)
     await session.flush()
+
+    await cache_delete(_gamification_cache_key(user.id))
     return achievement
 
 
@@ -122,13 +137,21 @@ async def list_achievements(
 async def get_gamification_state(
     session: AsyncSession, user_id: uuid.UUID
 ) -> dict:
-    """Возвращает сводное состояние геймификации пользователя."""
+    """Возвращает сводное состояние геймификации пользователя (с кэшем)."""
+    cache_key = _gamification_cache_key(user_id)
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        try:
+            return json.loads(cached)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     user = await session.get(User, user_id)
     if user is None:
         raise GamificationError("Пользователь не найден")
 
     achievements = await list_achievements(session, user_id)
-    return {
+    state = {
         "xp": user.xp,
         "level": user.level,
         "streak": user.streak,
@@ -144,3 +167,6 @@ async def get_gamification_state(
             for a in achievements
         ],
     }
+
+    await cache_set(cache_key, json.dumps(state), ttl=_GAMIFICATION_CACHE_TTL)
+    return state
