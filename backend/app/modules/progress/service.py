@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.content.models import Case, CaseOption, Lesson
 from app.modules.progress.models import Progress, ReviewLog, ReviewState
-from app.modules.srs.sm2 import sm2
 
 
 class ProgressError(Exception):
@@ -103,6 +102,10 @@ async def answer_case(
     quality: int | None = None,
 ) -> dict:
     """Обрабатывает ответ на кейс: проверяет правильность и обновляет SRS."""
+    # Ленивый импорт SM-2: разрывает циклический импорт
+    # (srs/__init__ -> srs.routes -> progress.service).
+    from app.modules.srs.sm2 import sm2
+
     case = await session.get(Case, case_id)
     if case is None:
         raise CaseNotFoundError("Кейс не найден")
