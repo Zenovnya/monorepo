@@ -27,7 +27,8 @@ export default function SettingsScreen({ navigation }) {
 
   const handleLogout = async () => {
     await logout();
-    navigation.navigate('Login');
+    // RootNavigator автоматически переключится на AuthStack,
+    // когда isAuthenticated станет false — ручная навигация не нужна.
   };
 
   return (

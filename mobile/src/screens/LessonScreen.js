@@ -13,6 +13,21 @@ import { AnimatedMascot } from '../components/AnimatedMascot';
 import { colors } from '../theme/colors';
 
 /**
+ * Нормализует поле `correct` вопроса к массиву индексов правильных ответов.
+ *
+ * Backend хранит `correct` в JSON и может вернуть:
+ * - число (одиночный выбор) — индекс;
+ * - булево (kind = truefalse) — true → 0, false → 1;
+ * - массив индексов (множественный выбор).
+ */
+function normalizeCorrect(correct) {
+  if (Array.isArray(correct)) return correct;
+  if (typeof correct === 'boolean') return [correct ? 0 : 1];
+  if (typeof correct === 'number') return [correct];
+  return [];
+}
+
+/**
  * Экран урока LexBear: теория → практика → результат.
  */
 export default function LessonScreen({ route, navigation }) {
@@ -24,8 +39,9 @@ export default function LessonScreen({ route, navigation }) {
   const [qIdx, setQIdx] = useState(0);
   const [lives, setLives] = useState(3);
   const [correctCount, setCorrectCount] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const [checked, setChecked] = useState(null);
+  const [selected, setSelected] = useState(null); // индекс для одиночного выбора
+  const [multi, setMulti] = useState([]); // индексы для множественного выбора
+  const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [shake, setShake] = useState(false);
 
   const { data: lesson, isLoading, error } = useQuery({
@@ -72,11 +88,26 @@ export default function LessonScreen({ route, navigation }) {
     else setPhase('practice');
   };
 
+  // Проверка ответа: поддерживает одиночный, множественный и true/false выбор.
   const check = () => {
-    if (selected === null) return;
-    const right = selected === questions[qIdx]?.correct;
-    setChecked(right ? 'right' : 'wrong');
-    if (right) setCorrectCount((c) => c + 1);
+    const q = questions[qIdx];
+    if (!q) return;
+    const rightAnswers = normalizeCorrect(q.correct);
+    const isMulti = Array.isArray(q.correct);
+
+    let isRight;
+    if (isMulti) {
+      const sortedUser = [...multi].sort();
+      const sortedRight = [...rightAnswers].sort();
+      isRight =
+        sortedUser.length === sortedRight.length &&
+        sortedUser.every((v, i) => v === sortedRight[i]);
+    } else {
+      isRight = selected === rightAnswers[0];
+    }
+
+    setChecked(isRight ? 'right' : 'wrong');
+    if (isRight) setCorrectCount((c) => c + 1);
     else {
       setShake(true);
       setLives((l) => Math.max(0, l - 1));
@@ -87,6 +118,7 @@ export default function LessonScreen({ route, navigation }) {
   const nextQuestion = () => {
     setChecked(null);
     setSelected(null);
+    setMulti([]);
     if (qIdx + 1 < questions.length && lives > 0) {
       setQIdx(qIdx + 1);
     } else {
@@ -151,9 +183,16 @@ export default function LessonScreen({ route, navigation }) {
           <QuestionView
             q={questions[qIdx]}
             selected={selected}
-            setSelected={(i) => !checked && setSelected(i)}
+            multi={multi}
             checked={checked}
             shake={shake}
+            onSelectSingle={(i) => !checked && setSelected(i)}
+            onToggleMulti={(i) =>
+              !checked &&
+              setMulti((prev) =>
+                prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]
+              )
+            }
           />
         )}
 
@@ -177,8 +216,8 @@ export default function LessonScreen({ route, navigation }) {
         )}
         {effectivePhase === 'practice' && !checked && (
           <Pressable
-            style={[styles.btn, { opacity: selected === null ? 0.55 : 1 }]}
-            disabled={selected === null}
+            style={[styles.btn, { opacity: hasSelection(questions[qIdx], selected, multi) ? 1 : 0.55 }]}
+            disabled={!hasSelection(questions[qIdx], selected, multi)}
             onPress={check}
           >
             <Text style={styles.btnText}>Проверить</Text>
@@ -195,6 +234,13 @@ export default function LessonScreen({ route, navigation }) {
       </View>
     </View>
   );
+}
+
+// Есть ли хотя бы один выбранный ответ (для активации кнопки «Проверить»).
+function hasSelection(q, selected, multi) {
+  if (!q) return false;
+  if (Array.isArray(q.correct)) return multi.length > 0;
+  return selected !== null;
 }
 
 function TheoryView({ card, step, total }) {
@@ -237,11 +283,16 @@ const kindLabels = {
   match: 'Сопоставить',
 };
 
-function QuestionView({ q, selected, setSelected, checked, shake }) {
+function QuestionView({ q, selected, multi, checked, shake, onSelectSingle, onToggleMulti }) {
+  const isMulti = Array.isArray(q.correct);
+
   return (
     <View style={[styles.question, shake && styles.shake]}>
       <Text style={styles.questionKind}>{kindLabels[q.kind] || q.kind}</Text>
       <Text style={styles.questionPrompt}>{q.prompt}</Text>
+      {isMulti && (
+        <Text style={styles.multiHint}>Выберите все подходящие варианты</Text>
+      )}
       {q.case_text ? (
         <View style={styles.card}>
           <Text style={styles.cardText}>{q.case_text}</Text>
@@ -249,13 +300,13 @@ function QuestionView({ q, selected, setSelected, checked, shake }) {
       ) : null}
       <View style={styles.options}>
         {(q.options || []).map((opt, i) => {
-          const isSel = selected === i;
-          const isCorrect = checked && i === q.correct;
-          const isWrongPick = checked === 'wrong' && isSel;
+          const isSel = isMulti ? multi.includes(i) : selected === i;
+          const isCorrect = checked && (normalizeCorrect(q.correct)).includes(i);
+          const isWrongPick = checked === 'wrong' && isSel && !isCorrect;
           return (
             <Pressable
               key={String(i)}
-              onPress={() => setSelected(i)}
+              onPress={() => (isMulti ? onToggleMulti(i) : onSelectSingle(i))}
               style={[
                 styles.option,
                 isCorrect && { backgroundColor: '#DFF5E5', borderColor: colors.success },
@@ -263,8 +314,10 @@ function QuestionView({ q, selected, setSelected, checked, shake }) {
                 isSel && !checked && { backgroundColor: '#FFF7DE', borderColor: colors.accent },
               ]}
             >
-              <View style={styles.optionLetter}>
-                <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
+              <View style={[styles.optionLetter, isSel && { backgroundColor: colors.accent }]}>
+                <Text style={[styles.optionLetterText, isSel && { color: '#fff' }]}>
+                  {isMulti ? (isSel ? '✓' : '') : String.fromCharCode(65 + i)}
+                </Text>
               </View>
               <Text style={styles.optionText}>{opt?.text ?? opt}</Text>
             </Pressable>
@@ -340,6 +393,7 @@ const styles = StyleSheet.create({
   question: { gap: 16 },
   questionKind: { fontSize: 12, fontWeight: '800', color: colors.subtext, textTransform: 'uppercase' },
   questionPrompt: { fontSize: 22, fontWeight: '900', color: colors.text },
+  multiHint: { fontSize: 13, color: colors.subtext, fontWeight: '600' },
   options: { gap: 12 },
   option: {
     flexDirection: 'row',
