@@ -1,5 +1,6 @@
 """Точка входа FastAPI-приложения."""
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -44,8 +45,6 @@ app.add_middleware(
 # Глобальный rate limiter: защита от спама и перерасхода бесплатных лимитов.
 # По умолчанию 300 запросов/мин с одного IP. Можно настроить через переменные
 # окружения RATE_LIMIT_MAX / RATE_LIMIT_WINDOW.
-import os
-
 app.add_middleware(
     GlobalRateLimitMiddleware,
     max_requests=int(os.getenv("RATE_LIMIT_MAX", "300")),
