@@ -19,6 +19,9 @@ class FakeScalarResult:
     def all(self) -> list[Any]:
         return self._items
 
+    def first(self) -> Any:
+        return self._items[0] if self._items else None
+
 
 class FakeSession:
     """Минимальная фейковая асинхронная сессия для тестов сервиса."""
@@ -45,6 +48,11 @@ class FakeSession:
     async def scalars(self, statement: Any) -> FakeScalarResult:
         entity = statement.column_descriptions[0]["entity"]
         return FakeScalarResult(self._all_of(entity))
+
+    async def scalar(self, statement: Any) -> Any:
+        """Возвращает первую запись сущности (аналог session.scalar)."""
+        result = await self.scalars(statement)
+        return result.first()
 
 
 @pytest.fixture()

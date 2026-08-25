@@ -15,7 +15,7 @@ class FakeScalarResult:
     def all(self):
         return self._items
 
-    def one_or_none(self):
+    def first(self):
         return self._items[0] if self._items else None
 
 
@@ -33,8 +33,13 @@ class FakeSession:
 
     def add(self, obj):
         self.added.append(obj)
+        # Кладём по id, если он есть. Для PaymentHistory, у которого на этапе
+        # создания id может быть не заполнен, дополнительно сохраняем по
+        # yookassa_payment_id.
         if getattr(obj, "id", None) is not None:
             self._objects.setdefault(type(obj), {})[obj.id] = obj
+        if isinstance(obj, PaymentHistory) and getattr(obj, "yookassa_payment_id", None):
+            self._objects.setdefault(PaymentHistory, {})[obj.yookassa_payment_id] = obj
 
     async def get(self, model, ident):
         return self._objects.get(model, {}).get(ident)
@@ -42,6 +47,22 @@ class FakeSession:
     async def scalars(self, statement):
         entity = statement.column_descriptions[0]["entity"]
         return FakeScalarResult(self._all_of(entity))
+
+    async def scalar(self, statement):
+        """Возвращает запись сущности по условию where (аналог session.scalar).
+
+        Поддерживает фильтрацию по простым сравнениям полей с литералом.
+        """
+        entity = statement.column_descriptions[0]["entity"]
+        items = self._all_of(entity)
+        for cond in statement._where_criteria:
+            field_name = getattr(cond.left, "key", None)
+            right = getattr(cond, "right", None)
+            if field_name is None or right is None:
+                continue
+            target = right.value if hasattr(right, "value") else right
+            items = [i for i in items if getattr(i, field_name, None) == target]
+        return items[0] if items else None
 
     async def commit(self):
         self.committed = True
@@ -74,10 +95,6 @@ async def test_confirm_payment_activates_subscription(session):
     user_id = uuid.uuid4()
     payment = await service.create_payment(session, user_id, "monthly")
     pid = payment["payment_id"]
-
-    # Находим запись истории в "БД".
-    history = session._objects[PaymentHistory][pid]
-    session._objects[PaymentHistory] = {pid: history}
 
     await service.confirm_payment(session, pid, paid=True)
 
