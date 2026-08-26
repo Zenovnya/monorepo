@@ -39,13 +39,15 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/sourcecraft
       REDIS_URL: redis://localhost:6379
+      # JWT-секрет для CI-миграций и тестов (32+ символов).
+      JWT_SECRET_KEY: ci-only-development-secret-key-0123456789abcdef
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
