@@ -38,9 +38,28 @@ class FakeSession:
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
-        # Также помещаем в хранилище, чтобы последующие запросы его видели.
-        if getattr(obj, "id", None) is not None:
-            self._objects.setdefault(type(obj), {})[obj.id] = obj
+        # Эмулируем поведение БД: если id не задан — генерируем UUID,
+        # а колонки с default получают значения (SQLAlchemy применяет их
+        # при INSERT, в памяти они были бы None).
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+        if isinstance(obj, Progress):
+            if obj.completed is None:
+                obj.completed = False
+            if obj.best_score is None:
+                obj.best_score = 0
+            if obj.attempts is None:
+                obj.attempts = 0
+            if obj.crowns is None:
+                obj.crowns = 0
+        if isinstance(obj, ReviewState):
+            if obj.repetitions is None:
+                obj.repetitions = 0
+            if obj.interval_days is None:
+                obj.interval_days = 0
+            if obj.ease_factor is None:
+                obj.ease_factor = 2.5
+        self._objects.setdefault(type(obj), {})[obj.id] = obj
 
     async def get(self, model: type, ident: Any) -> Any:
         return self._objects.get(model, {}).get(ident)

@@ -33,11 +33,11 @@ class FakeSession:
 
     def add(self, obj):
         self.added.append(obj)
-        # Кладём по id, если он есть. Для PaymentHistory, у которого на этапе
-        # создания id может быть не заполнен, дополнительно сохраняем по
-        # yookassa_payment_id.
-        if getattr(obj, "id", None) is not None:
-            self._objects.setdefault(type(obj), {})[obj.id] = obj
+        # Эмулируем поведение БД: если id не задан — генерируем UUID.
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+        self._objects.setdefault(type(obj), {})[obj.id] = obj
+        # Для PaymentHistory дополнительно сохраняем по yookassa_payment_id.
         if isinstance(obj, PaymentHistory) and getattr(obj, "yookassa_payment_id", None):
             self._objects.setdefault(PaymentHistory, {})[obj.yookassa_payment_id] = obj
 
