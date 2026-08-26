@@ -17,19 +17,6 @@ from app.modules.mascot.schemas import (
 router = APIRouter(prefix="/mascot", tags=["mascot"])
 
 
-def _to_http_error(exc: service.MascotError) -> HTTPException:
-    """Преобразует исключения сервиса в HTTP-ошибки."""
-    if isinstance(exc, (service.UnknownTriggerError, service.NoPhrasesAvailableError)):
-        return HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        )
-    return HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=str(exc),
-    )
-
-
 def _get_current_user_id(
     authorization: str,
 ) -> uuid.UUID:
@@ -43,24 +30,17 @@ def _get_current_user_id(
         ) from exc
 
 
-@router.get(
-    "/phrases",
-    response_model=list[MascotPhraseRead],
-)
+@router.get("/phrases", response_model=list[MascotPhraseRead])
 async def list_phrases(
-    authorization: str = Depends(auth_service.get_bearer_token),
+    _: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
 ) -> list:
     """Возвращает список активных фраз маскота."""
-    _get_current_user_id(authorization)
     return await service.list_active_phrases(session)
 
 
-@router.get(
-    "/phrase/{trigger}",
-    response_model=PhraseRead,
-)
-async def get_phrase(
+@router.get("/phrase/{trigger}", response_model=PhraseRead)
+async def phrase_for_trigger(
     trigger: str,
     authorization: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
@@ -68,16 +48,34 @@ async def get_phrase(
     """Возвращает случайную фразу по триггеру."""
     user_id = _get_current_user_id(authorization)
     try:
-        phrase = await service.get_phrase_for_trigger(session, trigger, user_id)
+        phrase = await service.get_phrase_for_trigger(
+            session, trigger, user_id
+        )
     except service.MascotError as exc:
-        raise _to_http_error(exc) from exc
-    return PhraseRead.model_validate(phrase)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await session.commit()
+    return PhraseRead(
+        id=phrase.id,
+        phrase=phrase.phrase,
+        emotion=phrase.emotion,
+    )
 
 
-@router.post(
-    "/pet",
-    response_model=PetCountRead,
-)
+@router.get("/pet-count", response_model=PetCountRead)
+async def pet_count(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> PetCountRead:
+    """Возвращает счётчик поглаживаний пользователя."""
+    user_id = _get_current_user_id(authorization)
+    count = await service.get_pet_count(session, user_id)
+    return PetCountRead(pet_count=count)
+
+
+@router.post("/pet", response_model=PetCountRead)
 async def pet(
     authorization: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
@@ -86,18 +84,10 @@ async def pet(
     user_id = _get_current_user_id(authorization)
     pet_count = await service.increment_pet_count(session, user_id)
     await session.commit()
-    return PetCountRead(pet_count=pet_count)
 
+    # Отправляем событие аналитики (fire-and-forget, не блокирует ответ).
+    from app.modules.analytics import service as analytics_service
 
-@router.get(
-    "/pet-count",
-    response_model=PetCountRead,
-)
-async def pet_count(
-    authorization: str = Depends(auth_service.get_bearer_token),
-    session: AsyncSession = Depends(get_session),
-) -> PetCountRead:
-    """Возвращает текущий счётчик поглаживаний."""
-    user_id = _get_current_user_id(authorization)
-    pet_count = await service.get_pet_count(session, user_id)
+    await analytics_service.track_mascot_petted(user_id)
+
     return PetCountRead(pet_count=pet_count)

@@ -8,7 +8,8 @@ import os
 
 # Задаём безопасный тестовый секрет до импорта приложения, чтобы
 # валидация конфигурации (запрет небезопасного секрета) прошла корректно.
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci")
+# Ключ должен быть не короче 32 символов (см. app/config.py).
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci-is-long-enough-123456")
 os.environ.setdefault("DEBUG", "false")
 
 import pytest

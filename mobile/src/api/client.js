@@ -1,15 +1,50 @@
 import axios from 'axios';
+import { NativeModules, Platform } from 'react-native';
 
 import { authApi } from './auth';
 import { useAuthStore } from '../store';
 
 /**
+ * Определяет базовый URL API.
+ *
+ * Приоритет:
+ * 1. Переменная окружения EXPO_PUBLIC_API_URL — явная настройка (релиз/прод).
+ * 2. На вебе — относительный путь (тот же origin).
+ * 3. В Expo dev — хост Metro-сервера, чтобы на физическом устройстве
+ *    запросы шли на dev-машину, а не на само устройство (localhost).
+ */
+function resolveBaseUrl() {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
+  // Веб: используем тот же origin (проксирование настроено на сервере).
+  if (Platform.OS === 'web') {
+    return '';
+  }
+
+  // Нативный клиент: извлекаем хост из scriptURL Metro/dev-сервера.
+  // Пример: "http://192.168.1.10:8081/index.bundle" → host "192.168.1.10".
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match) {
+        return `http://${match[1]}:8000`;
+      }
+    }
+  } catch {
+    // Игнорируем — fallback на localhost.
+  }
+
+  return 'http://localhost:8000';
+}
+
+/**
  * Настроенный axios-клиент для обращения к backend API.
- * Базовый URL можно переопределить через переменную окружения
- * EXPO_PUBLIC_API_URL или константу ниже.
  */
 const apiClient = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: resolveBaseUrl(),
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

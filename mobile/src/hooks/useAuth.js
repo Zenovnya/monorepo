@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '../api/auth';
 import { useAuthStore } from '../store';
+import { syncPushToken } from '../utils/notifications';
 
 /**
  * Хук входа в аккаунт.
@@ -21,6 +22,9 @@ export const useLogin = () => {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
       });
+
+      // Синхронизируем push-токен устройства для рассылки уведомлений.
+      syncPushToken();
     },
   });
 };
@@ -43,6 +47,9 @@ export const useRegister = () => {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
       });
+
+      // Синхронизируем push-токен устройства для рассылки уведомлений.
+      syncPushToken();
     },
   });
 };

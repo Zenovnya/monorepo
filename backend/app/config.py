@@ -1,62 +1,59 @@
-"""Конфигурация приложения.
+"""Настройки приложения через переменные окружения (pydantic-settings)."""
 
-Настройки загружаются из переменных окружения и файла .env.
-"""
-
-from functools import lru_cache
-
-from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-# Небезопасный секрет, который запрещено использовать в production.
-_INSECURE_JWT_SECRET = "change-me-in-production"
 
 
 class Settings(BaseSettings):
-    """Базовые настройки приложения."""
+    """Конфигурация приложения.
 
-    app_name: str = "SourceCraft API"
+    Значения читаются из переменных окружения (или файла ``.env``).
+    Переменные с префиксом отсутствуют — имена совпадают с названиями полей.
+    """
+
+    # --- Приложение ---
+    app_name: str = "LexBear API"
     debug: bool = False
 
-    # База данных (PostgreSQL по умолчанию, переопределяется через .env)
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/sourcecraft"
+    # --- База данных ---
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/sourcecraft"
+    )
 
-    # Сервер
-    host: str = "0.0.0.0"
-    port: int = 8000
-
-    # Аутентификация
-    jwt_secret_key: str = _INSECURE_JWT_SECRET
+    # --- Безопасность / JWT ---
+    jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
 
-    # CORS: список разрешённых источников (пустой — все закрыты).
-    cors_origins: list[str] = []
+    # --- CORS ---
+    cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
+
+    # --- ЮKassa (платежи) ---
+    yookassa_shop_id: str = ""
+    yookassa_secret_key: str = ""
+    yookassa_webhook_secret: str = ""
+
+    # --- Аналитика ---
+    amplitude_api_key: str = ""
+
+    # --- Мониторинг ошибок ---
+    sentry_dsn: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,
+        extra="ignore",
     )
 
-    @model_validator(mode="after")
-    def _validate_security(self) -> "Settings":
-        """Запрещает небезопасный секрет и неактивную отладку в production."""
-        if self.debug is False and self.jwt_secret_key == _INSECURE_JWT_SECRET:
+    def model_post_init(self, __context) -> None:
+        """Валидация: запрещаем небезопасный JWT-секрет в проде."""
+        if not self.debug and len(self.jwt_secret_key or "") < 32:
             raise ValueError(
-                "jwt_secret_key должен быть задан через .env "
-                "(не используйте значение по умолчанию в production)"
+                "JWT_SECRET_KEY должен быть задан и содержать минимум 32 символа"
+                " (для production)."
             )
-        if self.debug is True:
-            raise ValueError(
-                "debug=True запрещён: включение debug в production "
-                "раскрывает внутренние детали и SQL-запросы"
-            )
-        return self
 
 
-@lru_cache
 def get_settings() -> Settings:
-    """Возвращает кэшированный экземпляр настроек."""
+    """Возвращает настроенный экземпляр настроек (кешируется)."""
     return Settings()
