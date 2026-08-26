@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -45,15 +45,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ecdsa ещё не имеет исправленной версии (PYSEC-2026-1325),
+      # поэтому временно игнорируем эту уязвимость до выхода фикса.
       - name: Run pip-audit
-        run: pip install pip-audit && pip-audit -r requirements.txt
+        run: pip install pip-audit && pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
