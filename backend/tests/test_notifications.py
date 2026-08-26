@@ -41,7 +41,6 @@ class FakeSession:
 
     async def scalar(self, statement):
         """Возвращает первую запись сущности (аналог session.scalar)."""
-        entity = statement.column_descriptions[0]["entity"]
         result = await self.scalars(statement)
         return result.first()
 
