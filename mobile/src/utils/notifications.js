@@ -21,6 +21,19 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotifications() {
   if (Platform.OS === 'web') return null;
 
+  // Android требует зарегистрированный канал уведомлений, иначе пуши
+  // не отображаются в собранном приложении.
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Уведомления',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    } catch {
+      // Настройка канала не критична для получения токена.
+    }
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   if (existingStatus !== 'granted') {
@@ -30,6 +43,10 @@ export async function registerForPushNotifications() {
   if (finalStatus !== 'granted') return null;
 
   try {
+    // ВАЖНО: для собранных (EAS) приложений getExpoPushTokenAsync требует
+    // EAS projectId. Настройте его через `eas init` и пропишите в app.json:
+    //   { "expo": { "extra": { "eas": { "projectId": "<ваш-projectId>" } } } }
+    // В Expo Go projectId определяется автоматически.
     const tokenData = await Notifications.getExpoPushTokenAsync();
     return tokenData.data;
   } catch {

@@ -198,7 +198,12 @@ def decode_access_token(token: str) -> uuid.UUID:
     sub = payload.get("sub")
     if sub is None:
         raise InvalidCredentialsError("Токен не содержит идентификатора пользователя")
-    return uuid.UUID(sub)
+    try:
+        return uuid.UUID(str(sub))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise InvalidCredentialsError(
+            "Токен содержит некорректный идентификатор пользователя"
+        ) from exc
 
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User:

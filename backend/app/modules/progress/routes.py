@@ -90,11 +90,14 @@ async def progress_answer(
     await session.commit()
 
     # Аналитика: событие следования подсказке LexEntrance.
+    # Отправляем в фоне, чтобы медленный ответ Amplitude не задерживал API.
     if result.get("correct"):
         from app.modules.analytics import service as analytics_service
 
-        await analytics_service.track_lex_entrance_hint_followed(
-            user_id, str(data.case_id)
+        analytics_service.fire_and_forget(
+            analytics_service.track_lex_entrance_hint_followed(
+                user_id, str(data.case_id)
+            )
         )
 
     return result
@@ -109,7 +112,7 @@ async def complete_lesson(
     """Завершает урок: обновляет прогресс и начисляет короны."""
     user_id = _get_current_user_id(authorization)
     try:
-        return await service.complete_lesson(
+        result = await service.complete_lesson(
             session,
             user_id,
             data.lesson_id,
@@ -117,3 +120,5 @@ async def complete_lesson(
         )
     except service.ProgressError as exc:
         raise _to_http_error(exc) from exc
+    await session.commit()
+    return result

@@ -1,5 +1,6 @@
 """Бизнес-логика контента LexBear (юниты, уроки, теория, вопросы, статьи)."""
 
+import re
 import uuid
 
 from sqlalchemy import select
@@ -222,12 +223,17 @@ async def unlock_articles_for_lesson(
 ) -> int:
     """Разблокирует статьи, номер которых встречается в заголовке урока.
 
+    Сравнение идёт по целым числовым токенам, а не по подстроке, иначе
+    номер «1» ошибочно совпал бы с «15», «21» и т.п.
+
     Возвращает количество разблокированных статей.
     """
+    # Числовые токены заголовка: "12", "12.1", "158" и т.п.
+    title_numbers = set(re.findall(r"\d+(?:\.\d+)*", lesson_title or ""))
     articles = await session.scalars(select(Article))
     unlocked = 0
     for article in articles.all():
-        if article.number and article.number in lesson_title:
+        if article.number and article.number in title_numbers:
             existing = await session.scalar(
                 select(LearnedArticle).where(
                     LearnedArticle.user_id == user_id,
@@ -283,15 +289,14 @@ async def complete_lesson(
     progress.completed = True
 
     # Начисляем XP и обновляем стрик через геймификацию.
+    # Используем add_xp: он обновляет уровень, стрик И инвалидирует кэш
+    # состояния геймификации (иначе /gamification/me до 2 минут отдаёт старьё).
     from app.modules.auth.models import User
     from app.modules.gamification import service as gamification_service
 
     user = await session.get(User, user_id)
     if user is not None:
-        gamification_service.update_streak(user)
-        user.xp += xp_gain
-        new_level = gamification_service.level_from_xp(user.xp)
-        user.level = new_level
+        await gamification_service.add_xp(session, user, xp_gain)
 
     # Разблокировка статей по номеру в заголовке урока.
     unlocked = await unlock_articles_for_lesson(session, user_id, lesson.title)

@@ -97,7 +97,10 @@ export default function RootNavigator() {
     if (!isHydrated) hydrate();
   }, [isHydrated, hydrate]);
 
-  if (!isHydrated) {
+  // Показываем спиннер, пока идёт гидратация, либо пока по валидному токену
+  // ещё догружается профиль пользователя (иначе экраны получат user == null
+  // и могут упасть при обращении к его полям).
+  if (!isHydrated || (isAuthenticated && !user)) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.accent} />

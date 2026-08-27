@@ -1,5 +1,7 @@
 """Настройки приложения через переменные окружения (pydantic-settings)."""
 
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +56,7 @@ class Settings(BaseSettings):
             )
 
 
+@lru_cache
 def get_settings() -> Settings:
     """Возвращает настроенный экземпляр настроек (кешируется)."""
     return Settings()
