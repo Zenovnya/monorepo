@@ -85,9 +85,10 @@ async def pet(
     pet_count = await service.increment_pet_count(session, user_id)
     await session.commit()
 
-    # Отправляем событие аналитики (fire-and-forget, не блокирует ответ).
+    # Отправляем событие аналитики в фоне (не блокирует ответ:
+    # запрос к Amplitude может занимать до 5 секунд).
     from app.modules.analytics import service as analytics_service
 
-    await analytics_service.track_mascot_petted(user_id)
+    analytics_service.fire_and_forget(analytics_service.track_mascot_petted(user_id))
 
     return PetCountRead(pet_count=pet_count)

@@ -1,7 +1,8 @@
 """Бизнес-логика аналитики (Amplitude)."""
 
+import asyncio
 import uuid
-from typing import Any
+from typing import Any, Coroutine
 
 import httpx
 
@@ -11,6 +12,21 @@ settings = get_settings()
 
 # Базовая URL Amplitude HTTP API v2.
 AMPLITUDE_URL = "https://api2.amplitude.com/2/httpapi"
+
+# Удерживаем ссылки на фоновые задачи, иначе сборщик мусора может
+# уничтожить задачу до завершения (см. docs asyncio.create_task).
+_background_tasks: set[asyncio.Task] = set()
+
+
+def fire_and_forget(coro: Coroutine) -> None:
+    """Запускает корутину аналитики в фоне, не блокируя вызывающий код.
+
+    Ошибки внутри корутины проглатываются самими track-функциями,
+    поэтому фоновая задача безопасна для основного потока запроса.
+    """
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def track_event(
