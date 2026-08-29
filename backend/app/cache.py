@@ -61,3 +61,25 @@ async def cache_delete(key: str) -> None:
         await get_redis().delete(key)
     except Exception:
         pass
+
+
+# --- Версионирование контента (для инвалидации кэша чтений) ---
+# Ключи кэша контента включают текущую версию. Чтобы разом инвалидировать
+# весь кэшированный контент (кейсы, уроки) после reload/CRUD, достаточно
+# инкрементировать версию — старые ключи перестанут читаться и истекут по TTL.
+_CONTENT_VERSION_KEY = "content:version"
+
+
+async def content_version() -> str:
+    """Возвращает текущую версию контента (строкой). При сбое Redis — '0'."""
+    value = await cache_get(_CONTENT_VERSION_KEY)
+    return value or "0"
+
+
+async def bump_content_version() -> None:
+    """Инкрементирует версию контента → инвалидирует весь кэш контента."""
+    try:
+        await get_redis().incr(_CONTENT_VERSION_KEY)
+    except Exception:
+        # Redis недоступен — кэш и так не используется, ничего страшного.
+        pass

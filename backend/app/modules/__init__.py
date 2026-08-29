@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter
 
+from app.modules.admin.routes import router as admin_router
+from app.modules.admin.ui import router as admin_ui_router
 from app.modules.analytics.routes import router as analytics_router
 from app.modules.auth.router import router as auth_router
 from app.modules.content.lexbear_routes import router as lexbear_router
@@ -26,3 +28,5 @@ api_router.include_router(payments_router)
 api_router.include_router(notifications_router)
 api_router.include_router(analytics_router)
 api_router.include_router(user_router)
+api_router.include_router(admin_router)
+api_router.include_router(admin_ui_router)

@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
 
+    # --- Админ-доступ (сид/управление контентом) ---
+    # Токен для защищённых служебных эндпоинтов (сид и CRUD контента).
+    # Передаётся клиентом в заголовке ``X-Admin-Token``. Если не задан —
+    # админ-эндпоинты недоступны в production (в debug разрешены для удобства).
+    admin_token: str = ""
+
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
 

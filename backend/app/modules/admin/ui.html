@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LexBear · Админка контента</title>
+<style>
+  :root {
+    --bg: #f6f4ee; --card: #fff; --border: #e4ddcf; --text: #2b2b2b;
+    --sub: #7a7264; --accent: #C9A227; --ok: #43A35D; --danger: #E85D4C;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text); }
+  header { background: var(--card); border-bottom: 3px solid var(--border);
+    padding: 12px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .sp { flex: 1; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea {
+    padding: 8px 10px; border: 2px solid var(--border); border-radius: 8px;
+    background: #fff; color: var(--text); width: 100%; }
+  textarea { min-height: 90px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  label { font-size: 12px; font-weight: 700; color: var(--sub); display: block; margin-bottom: 4px; }
+  .field { margin-bottom: 12px; }
+  button { cursor: pointer; border: 2px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; background: var(--card); font-weight: 700; }
+  button.primary { background: var(--ok); color: #fff; border-color: var(--ok); }
+  button.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  button.ghost { background: transparent; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .card { background: var(--card); border: 3px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--sub); font-size: 12px; text-transform: uppercase; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .pill.on { background: #e6f4ea; color: var(--ok); }
+  .pill.off { background: #fdecea; color: var(--danger); }
+  .muted { color: var(--sub); font-size: 13px; }
+  .opt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .opt-row input[type=text] { flex: 1; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: #fff; padding: 10px 16px; border-radius: 10px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; }
+  .toast.show { opacity: 1; }
+  .hide { display: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐻 LexBear · Контент</h1>
+  <span class="sp"></span>
+  <input id="baseUrl" style="width:220px" placeholder="API base (пусто = этот хост)" />
+  <input id="token" type="password" style="width:200px" placeholder="Admin-токен (X-Admin-Token)" />
+  <button class="accent" onclick="saveConfig()">Сохранить</button>
+</header>
+
+<main>
+  <div class="tabs">
+    <button data-tab="cases" class="active" onclick="switchTab('cases')">Кейсы</button>
+    <button data-tab="lessons" onclick="switchTab('lessons')">Уроки</button>
+    <button data-tab="reload" onclick="switchTab('reload')">Загрузка из JSON</button>
+  </div>
+
+  <!-- ================= CASES ================= -->
+  <section id="tab-cases">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <strong>Кейсы вкладки «Кейсы»</strong>
+        <button class="primary" onclick="newCase()">+ Новый кейс</button>
+      </div>
+      <div id="casesList" class="muted" style="margin-top:12px">Загрузка…</div>
+    </div>
+
+    <div id="caseForm" class="card hide">
+      <h3 id="caseFormTitle">Новый кейс</h3>
+      <div class="grid2">
+        <div class="field"><label>slug (уникальный ключ, латиницей)</label>
+          <input id="c_slug" placeholder="phone-in-cafe" /></div>
+        <div class="field"><label>Заголовок</label>
+          <input id="c_title" placeholder="Телефон в кафе" /></div>
+        <div class="field"><label>Кодекс</label>
+          <input id="c_codex" placeholder="УК" /></div>
+        <div class="field"><label>Сложность</label>
+          <select id="c_difficulty">
+            <option value="easy">Лёгкий</option>
+            <option value="medium">Средний</option>
+            <option value="hard">Сложный</option>
+          </select></div>
+      </div>
+      <div class="field"><label>Текст кейса</label>
+        <textarea id="c_text" placeholder="Опишите ситуацию…"></textarea></div>
+      <div class="field row">
+        <label style="margin:0"><input type="checkbox" id="c_featured" style="width:auto"> Кейс дня (featured)</label>
+      </div>
+      <div class="field">
+        <label>Варианты ответа (отметьте правильный)</label>
+        <div id="c_options"></div>
+        <button class="ghost" onclick="addOption()">+ добавить вариант</button>
+      </div>
+      <div class="row">
+        <button class="primary" onclick="saveCase()">Сохранить кейс</button>
+        <button class="ghost" onclick="hide('caseForm')">Отмена</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LESSONS ================= -->
+  <section id="tab-lessons" class="hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <strong>Уроки</strong>
+        <button class="primary" onclick="newLesson()">+ Новый урок</button>
+      </div>
+      <div id="lessonsList" class="muted" style="margin-top:12px">Загрузка…</div>
+    </div>
+
+    <div id="lessonForm" class="card hide">
+      <h3 id="lessonFormTitle">Новый урок</h3>
+      <div class="grid2">
+        <div class="field"><label>Юнит</label><select id="l_unit"></select></div>
+        <div class="field"><label>slug (уникальный ключ)</label>
+          <input id="l_slug" placeholder="uk-158-krazha" /></div>
+        <div class="field"><label>Заголовок</label>
+          <input id="l_title" placeholder="Ст. 158 — Кража" /></div>
+        <div class="grid2">
+          <div class="field"><label>Порядок</label><input id="l_order" type="number" value="1" /></div>
+          <div class="field"><label>XP</label><input id="l_xp" type="number" value="15" /></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Теория (карточки) — JSON-массив</label>
+        <textarea id="l_cards">[
+  {"order":1,"title":"...","definition":"...","practical":"...","chips":["..."],"bear_line":"..."}
+]</textarea>
+      </div>
+      <div class="field">
+        <label>Вопросы — JSON-массив</label>
+        <textarea id="l_questions">[
+  {"order":1,"kind":"choice","prompt":"...","case_text":null,"options":["A","B"],"correct":0,"explanation":"..."}
+]</textarea>
+      </div>
+      <div class="row">
+        <button class="primary" onclick="saveLesson()">Сохранить урок</button>
+        <button class="ghost" onclick="hide('lessonForm')">Отмена</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RELOAD ================= -->
+  <section id="tab-reload" class="hide">
+    <div class="card">
+      <strong>Загрузка из JSON-паков</strong>
+      <p class="muted">Синхронизирует БД с файлами <code>app/content_packs/*.json</code>
+        на сервере. Добавленное/изменённое в файлах будет создано/обновлено.</p>
+      <label style="margin:12px 0"><input type="checkbox" id="prune" style="width:auto">
+        prune — деактивировать то, чего нет в файлах (мягкое удаление, прогресс сохраняется)</label>
+      <div class="row" style="margin-top:12px">
+        <button class="accent" onclick="reloadContent()">Запустить загрузку</button>
+      </div>
+      <pre id="reloadResult" class="muted" style="white-space:pre-wrap;margin-top:12px"></pre>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ---------- config ----------
+let baseUrl = localStorage.getItem('lb_base') || '';
+let token = localStorage.getItem('lb_token') || '';
+document.getElementById('baseUrl').value = baseUrl;
+document.getElementById('token').value = token;
+
+function saveConfig() {
+  baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, '');
+  token = document.getElementById('token').value.trim();
+  localStorage.setItem('lb_base', baseUrl);
+  localStorage.setItem('lb_token', token);
+  toast('Сохранено');
+  loadCases(); loadUnits(); loadLessons();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+function hide(id) { document.getElementById(id).classList.add('hide'); }
+function show(id) { document.getElementById(id).classList.remove('hide'); }
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ 'Content-Type': 'application/json', 'X-Admin-Token': token }, opts.headers || {});
+  const res = await fetch(baseUrl + path, Object.assign({}, opts, { headers }));
+  if (!res.ok) {
+    let detail = res.status;
+    try { detail = (await res.json()).detail || detail; } catch {}
+    throw new Error(detail);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function switchTab(name) {
+  ['cases', 'lessons', 'reload'].forEach(n => {
+    document.getElementById('tab-' + n).classList.toggle('hide', n !== name);
+    document.querySelector(`[data-tab="${n}"]`).classList.toggle('active', n === name);
+  });
+}
+
+// ---------- cases ----------
+async function loadCases() {
+  const el = document.getElementById('casesList');
+  try {
+    const cases = await api('/admin/content/cases');
+    if (!cases.length) { el.innerHTML = 'Кейсов пока нет.'; return; }
+    el.innerHTML = `<table><tr><th>Заголовок</th><th>Кодекс</th><th>Сложность</th><th>Статус</th><th></th></tr>` +
+      cases.map(c => `<tr>
+        <td>${esc(c.title)} ${c.featured ? '⭐' : ''}<br><span class="muted">${esc(c.slug)}</span></td>
+        <td>${esc(c.codex || '')}</td><td>${esc(c.difficulty || '')}</td>
+        <td>${c.is_active ? '<span class="pill on">активен</span>' : '<span class="pill off">скрыт</span>'}</td>
+        <td class="row">
+          <button class="ghost" onclick='editCase(${JSON.stringify(c)})'>✎</button>
+          <button class="danger" onclick="delCase('${esc(c.slug)}')">🗑</button>
+        </td></tr>`).join('');
+  } catch (e) { el.innerHTML = `<span style="color:var(--danger)">Ошибка: ${esc(e.message)}</span>`; }
+}
+
+function newCase() {
+  document.getElementById('caseFormTitle').textContent = 'Новый кейс';
+  ['c_slug','c_title','c_codex','c_text'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('c_slug').disabled = false;
+  document.getElementById('c_difficulty').value = 'easy';
+  document.getElementById('c_featured').checked = false;
+  document.getElementById('c_options').innerHTML = '';
+  addOption(); addOption();
+  show('caseForm');
+}
+function editCase(c) {
+  document.getElementById('caseFormTitle').textContent = 'Редактирование: ' + c.title;
+  document.getElementById('c_slug').value = c.slug; document.getElementById('c_slug').disabled = true;
+  document.getElementById('c_title').value = c.title || '';
+  document.getElementById('c_codex').value = c.codex || '';
+  document.getElementById('c_difficulty').value = c.difficulty || 'easy';
+  document.getElementById('c_text').value = c.case_text || '';
+  document.getElementById('c_featured').checked = !!c.featured;
+  document.getElementById('c_options').innerHTML = '';
+  (c.options || []).forEach(o => addOption(o.text, o.is_correct, o.explanation));
+  show('caseForm');
+}
+function addOption(text = '', correct = false, expl = '') {
+  const wrap = document.getElementById('c_options');
+  const div = document.createElement('div');
+  div.className = 'opt-row';
+  div.innerHTML = `<input type="radio" name="correct" style="width:auto" ${correct ? 'checked' : ''}>
+    <input type="text" class="opt-text" placeholder="Вариант" value="${esc(text)}">
+    <input type="text" class="opt-expl" placeholder="Пояснение" value="${esc(expl)}" style="flex:1">
+    <button class="ghost" onclick="this.parentNode.remove()">✕</button>`;
+  wrap.appendChild(div);
+}
+async function saveCase() {
+  const rows = [...document.querySelectorAll('#c_options .opt-row')];
+  const options = rows.map(r => ({
+    text: r.querySelector('.opt-text').value.trim(),
+    is_correct: r.querySelector('input[type=radio]').checked,
+    explanation: r.querySelector('.opt-expl').value.trim() || null,
+  })).filter(o => o.text);
+  if (options.length < 2) return toast('Нужно минимум 2 варианта');
+  if (!options.some(o => o.is_correct)) return toast('Отметьте правильный вариант');
+  const body = {
+    slug: document.getElementById('c_slug').value.trim(),
+    title: document.getElementById('c_title').value.trim(),
+    codex: document.getElementById('c_codex').value.trim(),
+    difficulty: document.getElementById('c_difficulty').value,
+    case_text: document.getElementById('c_text').value.trim(),
+    featured: document.getElementById('c_featured').checked,
+    options,
+  };
+  if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  try { await api('/admin/content/cases', { method: 'PUT', body: JSON.stringify(body) });
+    toast('Сохранено'); hide('caseForm'); loadCases();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+}
+async function delCase(slug) {
+  if (!confirm('Скрыть кейс «' + slug + '»? (мягкое удаление, можно вернуть)')) return;
+  try { await api('/admin/content/cases/' + encodeURIComponent(slug), { method: 'DELETE' });
+    toast('Скрыто'); loadCases();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+}
+
+// ---------- units + lessons ----------
+let unitsCache = [];
+async function loadUnits() {
+  try {
+    unitsCache = await api('/admin/content/units');
+    const sel = document.getElementById('l_unit');
+    sel.innerHTML = unitsCache.map(u => `<option value="${esc(u.code)}">${esc(u.title)} (${esc(u.code)})</option>`).join('');
+  } catch (e) { /* показ ошибок в списках */ }
+}
+async function loadLessons() {
+  const el = document.getElementById('lessonsList');
+  try {
+    const lessons = await api('/admin/content/lessons');
+    const byCode = Object.fromEntries(unitsCache.map(u => [u.id, u.title]));
+    if (!lessons.length) { el.innerHTML = 'Уроков пока нет.'; return; }
+    el.innerHTML = `<table><tr><th>Урок</th><th>Юнит</th><th>Теория/Вопросы</th><th>Статус</th><th></th></tr>` +
+      lessons.map(l => `<tr>
+        <td>${esc(l.title)}<br><span class="muted">${esc(l.slug || '—')}</span></td>
+        <td>${esc(byCode[l.unit_id] || l.unit_id)}</td>
+        <td>${l.cards} / ${l.questions}</td>
+        <td>${l.is_active ? '<span class="pill on">активен</span>' : '<span class="pill off">скрыт</span>'}</td>
+        <td>${l.slug ? `<button class="danger" onclick="delLesson('${esc(l.slug)}')">🗑</button>` : '<span class="muted">нет slug</span>'}</td>
+      </tr>`).join('');
+  } catch (e) { el.innerHTML = `<span style="color:var(--danger)">Ошибка: ${esc(e.message)}</span>`; }
+}
+function newLesson() {
+  document.getElementById('lessonFormTitle').textContent = 'Новый урок';
+  document.getElementById('l_slug').value = '';
+  document.getElementById('l_title').value = '';
+  document.getElementById('l_order').value = 1;
+  document.getElementById('l_xp').value = 15;
+  show('lessonForm');
+}
+async function saveLesson() {
+  let cards, questions;
+  try { cards = JSON.parse(document.getElementById('l_cards').value || '[]'); }
+  catch { return toast('Теория: некорректный JSON'); }
+  try { questions = JSON.parse(document.getElementById('l_questions').value || '[]'); }
+  catch { return toast('Вопросы: некорректный JSON'); }
+  const unitCode = document.getElementById('l_unit').value;
+  const body = {
+    slug: document.getElementById('l_slug').value.trim(),
+    title: document.getElementById('l_title').value.trim(),
+    order: parseInt(document.getElementById('l_order').value || '0', 10),
+    xp_reward: parseInt(document.getElementById('l_xp').value || '10', 10),
+    cards, questions,
+  };
+  if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  try { await api('/admin/content/units/' + encodeURIComponent(unitCode) + '/lessons',
+      { method: 'PUT', body: JSON.stringify(body) });
+    toast('Урок сохранён'); hide('lessonForm'); loadLessons();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+}
+async function delLesson(slug) {
+  if (!confirm('Скрыть урок «' + slug + '»?')) return;
+  try { await api('/admin/content/lessons/' + encodeURIComponent(slug), { method: 'DELETE' });
+    toast('Скрыто'); loadLessons();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+}
+
+// ---------- reload ----------
+async function reloadContent() {
+  const prune = document.getElementById('prune').checked;
+  const out = document.getElementById('reloadResult');
+  out.textContent = 'Загрузка…';
+  try {
+    const r = await api('/admin/content/reload?prune=' + prune, { method: 'POST' });
+    out.textContent = JSON.stringify(r.report, null, 2);
+    toast('Готово'); loadCases(); loadUnits(); loadLessons();
+  } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, m => (
+  { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+// init
+loadUnits().then(loadLessons);
+loadCases();
+</script>
+</body>
+</html>

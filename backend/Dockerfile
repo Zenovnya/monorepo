@@ -14,4 +14,10 @@ COPY migrations ./migrations
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Число воркеров задаётся переменной WEB_CONCURRENCY (по умолчанию 2).
+# ВНИМАНИЕ: суммарное число соединений с БД = DB_POOL_SIZE × WEB_CONCURRENCY
+# (+ overflow). Держите его в пределах лимита Postgres/Supabase; при большом
+# числе воркеров используйте пул-прокси (Supabase pooler / PgBouncer).
+# Rate-limit теперь распределённый (Redis), поэтому несколько воркеров
+# считают лимит совместно.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-2}"]

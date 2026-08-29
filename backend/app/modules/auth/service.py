@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+from anyio import to_thread
 from fastapi import Header, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -40,18 +41,46 @@ class UserNotFoundError(AuthError):
 
 
 def hash_password(password: str) -> str:
-    """Хеширует пароль с помощью bcrypt."""
+    """Хеширует пароль с помощью bcrypt (синхронно).
+
+    ВНИМАНИЕ: bcrypt — CPU-затратная операция (~50–100 мс), которая блокирует
+    поток. В async-обработчиках используйте ``hash_password_async``, чтобы не
+    блокировать event loop. Эта синхронная версия оставлена для тестов и
+    прямых вызовов вне запроса.
+    """
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Проверяет пароль против хеша."""
+    """Проверяет пароль против хеша (синхронно).
+
+    См. примечание к ``hash_password``: в async-коде используйте
+    ``verify_password_async``.
+    """
     try:
         return bcrypt.checkpw(
             plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
     except ValueError:
         return False
+
+
+async def hash_password_async(password: str) -> str:
+    """Асинхронная обёртка над ``hash_password``.
+
+    Выполняет тяжёлое bcrypt-хеширование в отдельном потоке, чтобы не
+    блокировать event loop (критично при одном uvicorn-воркере).
+    """
+    return await to_thread.run_sync(hash_password, password)
+
+
+async def verify_password_async(
+    plain_password: str, hashed_password: str
+) -> bool:
+    """Асинхронная обёртка над ``verify_password`` (bcrypt в отдельном потоке)."""
+    return await to_thread.run_sync(
+        verify_password, plain_password, hashed_password
+    )
 
 
 def _create_access_token(user_id: uuid.UUID) -> str:
@@ -95,7 +124,7 @@ async def register(session: AsyncSession, data: UserRegister) -> User:
     user = User(
         email=data.email,
         username=data.username,
-        hashed_password=hash_password(data.password),
+        hashed_password=await hash_password_async(data.password),
     )
     session.add(user)
     await session.commit()
@@ -108,7 +137,9 @@ async def authenticate(
 ) -> User:
     """Проверяет учётные данные и возвращает пользователя."""
     user = await session.scalar(select(User).where(User.email == email))
-    if user is None or not verify_password(password, user.hashed_password):
+    if user is None or not await verify_password_async(
+        password, user.hashed_password
+    ):
         raise InvalidCredentialsError("Неверный email или пароль")
     if not user.is_active:
         raise AuthError("Пользователь деактивирован")
