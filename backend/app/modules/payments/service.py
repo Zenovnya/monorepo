@@ -143,6 +143,11 @@ async def confirm_payment(
     if history is None:
         raise SubscriptionNotFoundError("Платёж не найден")
 
+    # Идемпотентность: ЮKassa повторяет webhook при сбоях доставки.
+    # Если платёж уже проведён — ничего не начисляем повторно.
+    if history.status == "succeeded":
+        return
+
     history.status = "succeeded" if paid else "canceled"
     if paid:
         history.paid_at = datetime.now(timezone.utc)

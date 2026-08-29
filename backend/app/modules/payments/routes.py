@@ -89,9 +89,19 @@ async def yookassa_webhook(
     body = await request.body()
     signature = request.headers.get("Idempotence-Key", "")
 
-    # Для MVP подпись не строгая (настраивается через yookassa_webhook_secret).
+    # Безопасность: в production секрет webhook обязателен, иначе любой
+    # может отправить payment.succeeded и получить премиум/гемы бесплатно.
+    # В debug (локальная разработка) проверку подписи пропускаем.
+    # TODO: заменить HMAC на официальную верификацию ЮKassa
+    #       (проверка IP-адресов + запрос статуса платежа через API).
     secret = service.settings.yookassa_webhook_secret
-    if secret and not service._verify_signature(body, signature):
+    if not secret:
+        if not service.settings.debug:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Платёжный webhook не настроен",
+            )
+    elif not service._verify_signature(body, signature):
         raise HTTPException(status_code=400, detail="Неверная подпись")
 
     try:

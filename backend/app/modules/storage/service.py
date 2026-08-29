@@ -8,6 +8,7 @@ R2 совместим с S3 API, поэтому используется boto3.
 - R2_BUCKET_NAME
 """
 
+import asyncio
 import os
 import uuid
 from typing import Optional
@@ -63,7 +64,10 @@ async def upload_file(
 
     try:
         client = _get_s3_client()
-        client.put_object(
+        # boto3 синхронный — выносим блокирующий вызов в отдельный поток,
+        # чтобы не блокировать event loop на время загрузки.
+        await asyncio.to_thread(
+            client.put_object,
             Bucket=_bucket(),
             Key=key,
             Body=content,

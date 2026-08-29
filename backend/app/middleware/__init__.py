@@ -29,10 +29,30 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self._request_count = 0
+
+    def _sweep_stale(self, now: float) -> None:
+        """Удаляет из словаря IP-адреса без активных запросов в окне.
+
+        Без этого словарь растёт неограниченно: каждый уникальный IP
+        оставляет пустую очередь навсегда (утечка памяти).
+        """
+        stale = [
+            ip
+            for ip, q in self._requests.items()
+            if not q or now - q[-1] > self.window_seconds
+        ]
+        for ip in stale:
+            del self._requests[ip]
 
     async def dispatch(self, request, call_next):
         client_ip = request.client.host if request.client else "unknown"
         now = time.monotonic()
+
+        # Периодическая чистка устаревших IP (раз в 1000 запросов).
+        self._request_count += 1
+        if self._request_count % 1000 == 0:
+            self._sweep_stale(now)
 
         queue = self._requests[client_ip]
         # Убираем устаревшие записи (вне окна).
