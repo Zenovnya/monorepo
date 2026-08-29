@@ -46,6 +46,13 @@ class Unit(Base):
         default="",
         nullable=False,
     )
+    # Мягкое удаление: неактивные юниты не отдаются клиентам, но не удаляются
+    # физически (сохраняется прогресс/FK). Управляется загрузчиком контента.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
 
 class LexBearLesson(Base):
@@ -60,9 +67,21 @@ class LexBearLesson(Base):
         nullable=False,
         index=True,
     )
+    # Стабильный человекочитаемый ключ для upsert из JSON-паков контента.
+    slug: Mapped[str | None] = mapped_column(
+        String(96),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     xp_reward: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
 
 class TheoryCard(Base):
@@ -144,6 +163,11 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     plain: Mapped[str] = mapped_column(Text, nullable=False)
     full: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
 
 class LearnedArticle(Base):

@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "slug": "phone-in-cafe",
+      "title": "Телефон в кафе",
+      "codex": "УК",
+      "difficulty": "easy",
+      "case_text": "Мужчина взял телефон со стола в кафе, пока владелец отвернулся. Никто не заметил.",
+      "featured": true,
+      "options": [
+        {"text": "Ст. 158 УК", "is_correct": true, "explanation": "Тайное хищение = кража."},
+        {"text": "Ст. 159 УК", "is_correct": false, "explanation": "Обмана не было."},
+        {"text": "Ст. 161 УК", "is_correct": false, "explanation": "Не открытое."},
+        {"text": "КоАП 7.27", "is_correct": false, "explanation": "Размер крупный."}
+      ]
+    },
+    {
+      "slug": "bank-call",
+      "title": "Звонок «из банка»",
+      "codex": "УК",
+      "difficulty": "easy",
+      "case_text": "«Сотрудник банка» убедил перевести 100 000 ₽ на «безопасный счёт». Жертва перевела сама.",
+      "featured": false,
+      "options": [
+        {"text": "Ст. 158", "is_correct": false, "explanation": "Не тайное."},
+        {"text": "Ст. 159", "is_correct": true, "explanation": "Обман + добровольная передача = мошенничество."},
+        {"text": "Ст. 163", "is_correct": false, "explanation": "Вымогательства нет."},
+        {"text": "КоАП", "is_correct": false, "explanation": "Уголовное дело."}
+      ]
+    },
+    {
+      "slug": "snatched-chain",
+      "title": "Сорвал цепочку",
+      "codex": "УК",
+      "difficulty": "medium",
+      "case_text": "Сорвал цепочку с шеи прохожей и убежал. Свидетели были. Насилие не применял.",
+      "featured": false,
+      "options": [
+        {"text": "Ст. 158", "is_correct": false, "explanation": "Тайного нет."},
+        {"text": "Ст. 161", "is_correct": true, "explanation": "Открыто, без опасного насилия = грабёж."},
+        {"text": "Ст. 162", "is_correct": false, "explanation": "Опасного насилия нет."},
+        {"text": "Ст. 213", "is_correct": false, "explanation": "Не хулиганство."}
+      ]
+    },
+    {
+      "slug": "shop-under-knife",
+      "title": "Магазин под ножом",
+      "codex": "УК",
+      "difficulty": "hard",
+      "case_text": "Двое в масках с ножом ворвались в магазин, потребовали кассу. Забрали 15 000 ₽.",
+      "featured": false,
+      "options": [
+        {"text": "Ст. 158", "is_correct": false, "explanation": "Нападение, не тайно."},
+        {"text": "Ст. 161", "is_correct": false, "explanation": "Опасное насилие."},
+        {"text": "Ст. 162", "is_correct": true, "explanation": "Нападение с угрозой опасным насилием группой лиц."},
+        {"text": "Ст. 163", "is_correct": false, "explanation": "Не вымогательство."}
+      ]
+    },
+    {
+      "slug": "search-without-warrant",
+      "title": "Обыск без бумаги",
+      "codex": "Конституция",
+      "difficulty": "medium",
+      "case_text": "Полиция без решения суда и без экстренных оснований пытается войти в квартиру.",
+      "featured": false,
+      "options": [
+        {"text": "Пустить, спорить потом", "is_correct": false, "explanation": "Ст. 25 защищает."},
+        {"text": "Требовать судебное решение (ст. 25)", "is_correct": true, "explanation": "Жилище неприкосновенно."},
+        {"text": "Позвать соседей", "is_correct": false, "explanation": "Не ключевое."},
+        {"text": "Согласиться письменно", "is_correct": false, "explanation": "Без основания."}
+      ]
+    }
+  ]
+}

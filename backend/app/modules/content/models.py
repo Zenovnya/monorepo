@@ -146,6 +146,13 @@ class Case(Base):
     scene_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # --- Поля LexBear (вкладка «Кейсы») ---
+    # Стабильный ключ для upsert кейса из JSON-паков / админки.
+    slug: Mapped[str | None] = mapped_column(
+        String(96),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     codex: Mapped[str | None] = mapped_column(String(32), nullable=True)
     difficulty: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -154,6 +161,12 @@ class Case(Base):
     featured: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
+        nullable=False,
+    )
+    # Мягкое удаление кейса (не отдаётся клиентам, прогресс/SRS сохраняются).
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
         nullable=False,
     )
 

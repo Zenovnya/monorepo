@@ -1,11 +1,14 @@
 """Бизнес-логика контента LexBear (юниты, уроки, теория, вопросы, статьи)."""
 
+import json
 import re
 import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.cache import cache_get, cache_set, content_version
 from app.modules.content.lexbear_models import (
     Article,
     LearnedArticle,
@@ -33,8 +36,10 @@ class CaseNotFoundError(LexBearContentError):
 async def list_units(
     session: AsyncSession,
 ) -> list[Unit]:
-    """Возвращает все юниты, отсортированные по порядку."""
-    result = await session.scalars(select(Unit).order_by(Unit.order))
+    """Возвращает активные юниты, отсортированные по порядку."""
+    result = await session.scalars(
+        select(Unit).where(Unit.is_active.is_(True)).order_by(Unit.order)
+    )
     return list(result.all())
 
 
@@ -42,10 +47,13 @@ async def list_lessons_for_unit(
     session: AsyncSession,
     unit_id: int,
 ) -> list[LexBearLesson]:
-    """Возвращает уроки юнита, отсортированные по порядку."""
+    """Возвращает активные уроки юнита, отсортированные по порядку."""
     result = await session.scalars(
         select(LexBearLesson)
-        .where(LexBearLesson.unit_id == unit_id)
+        .where(
+            LexBearLesson.unit_id == unit_id,
+            LexBearLesson.is_active.is_(True),
+        )
         .order_by(LexBearLesson.order)
     )
     return list(result.all())
@@ -55,7 +63,20 @@ async def get_lesson_detail(
     session: AsyncSession,
     lesson_id: int,
 ) -> dict:
-    """Возвращает детали урока: теорию и вопросы."""
+    """Возвращает детали урока: теорию и вопросы.
+
+    Данные урока не зависят от пользователя, поэтому кэшируются в Redis
+    (ключ включает версию контента — reload/CRUD инвалидирует кэш).
+    """
+    version = await content_version()
+    cache_key = f"lexbear:v{version}:lesson:{lesson_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        try:
+            return json.loads(cached)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     lesson = await session.get(LexBearLesson, lesson_id)
     if lesson is None:
         raise LessonNotFoundError("Урок не найден")
@@ -70,7 +91,7 @@ async def get_lesson_detail(
         .where(Question.lesson_id == lesson_id)
         .order_by(Question.order)
     )
-    return {
+    detail = {
         "id": lesson.id,
         "title": lesson.title,
         "xp_reward": lesson.xp_reward,
@@ -99,11 +120,17 @@ async def get_lesson_detail(
             for q in questions_result.all()
         ],
     }
+    await cache_set(cache_key, json.dumps(detail), ttl=600)
+    return detail
 
 
-async def _serialize_case(session: AsyncSession, c) -> dict:
-    """Преобразует ORM-кейс во вкладке «Кейсы» в словарь для API."""
-    await session.refresh(c, attribute_names=["options"])
+def _serialize_case(c) -> dict:
+    """Преобразует ORM-кейс во вкладке «Кейсы» в словарь для API.
+
+    Требует, чтобы связь ``options`` была уже загружена (selectinload),
+    иначе обращение к ``c.options`` вызовет ленивую подгрузку. Функция
+    синхронная — без обращений к БД.
+    """
     correct_option = next((o for o in c.options if o.is_correct), None)
     return {
         "id": str(c.id),
@@ -125,15 +152,31 @@ async def list_cases(session: AsyncSession) -> list[dict]:
     """Возвращает кейсы для отдельной вкладки «Кейсы».
 
     Кейсы с заполненными полями LexBear (title, codex, difficulty, case_text).
+    Варианты ответов загружаются одним запросом (selectinload) — без N+1.
+    Результат кэшируется в Redis (ключ включает версию контента).
     """
-    result = await session.scalars(select(Case).order_by(Case.created_at))
-    cases = list(result.all())
-    out = []
-    for c in cases:
+    version = await content_version()
+    cache_key = f"lexbear:v{version}:cases"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        try:
+            return json.loads(cached)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    result = await session.scalars(
+        select(Case)
+        .options(selectinload(Case.options))
+        .where(Case.is_active.is_(True))
+        .order_by(Case.created_at)
+    )
+    out = [
+        _serialize_case(c)
         # Учитываем только кейсы, заполненные под вкладку «Кейсы».
-        if not (c.title and c.codex):
-            continue
-        out.append(await _serialize_case(session, c))
+        for c in result.all()
+        if c.title and c.codex
+    ]
+    await cache_set(cache_key, json.dumps(out), ttl=600)
     return out
 
 
@@ -142,10 +185,14 @@ async def get_case(
     case_id: uuid.UUID,
 ) -> dict:
     """Возвращает детали отдельного кейса вкладки «Кейсы» по id."""
-    case = await session.get(Case, case_id)
+    case = await session.scalar(
+        select(Case)
+        .options(selectinload(Case.options))
+        .where(Case.id == case_id)
+    )
     if case is None or not (case.title and case.codex):
         raise CaseNotFoundError("Кейс не найден")
-    return await _serialize_case(session, case)
+    return _serialize_case(case)
 
 
 async def get_learn_path(
@@ -154,6 +201,17 @@ async def get_learn_path(
 ) -> list[dict]:
     """Возвращает карту обучения с прогрессом пользователя по урокам."""
     units = await list_units(session)
+
+    # Все активные уроки одним запросом (без N+1), затем группируем в памяти.
+    lessons_result = await session.scalars(
+        select(LexBearLesson)
+        .where(LexBearLesson.is_active.is_(True))
+        .order_by(LexBearLesson.unit_id, LexBearLesson.order)
+    )
+    lessons_by_unit: dict[int, list[LexBearLesson]] = {}
+    for lesson in lessons_result.all():
+        lessons_by_unit.setdefault(lesson.unit_id, []).append(lesson)
+
     progress_result = await session.scalars(
         select(LexBearProgress).where(LexBearProgress.user_id == user_id)
     )
@@ -161,7 +219,7 @@ async def get_learn_path(
 
     result = []
     for unit in units:
-        lessons = await list_lessons_for_unit(session, unit.id)
+        lessons = lessons_by_unit.get(unit.id, [])
         result.append(
             {
                 "id": unit.id,
@@ -196,7 +254,9 @@ async def list_articles(
     user_id: uuid.UUID,
 ) -> list[dict]:
     """Возвращает статьи со статусом «выучено» для пользователя."""
-    articles = await session.scalars(select(Article).order_by(Article.id))
+    articles = await session.scalars(
+        select(Article).where(Article.is_active.is_(True)).order_by(Article.id)
+    )
     learned_result = await session.scalars(
         select(LearnedArticle).where(LearnedArticle.user_id == user_id)
     )
@@ -230,7 +290,9 @@ async def unlock_articles_for_lesson(
     """
     # Числовые токены заголовка: "12", "12.1", "158" и т.п.
     title_numbers = set(re.findall(r"\d+(?:\.\d+)*", lesson_title or ""))
-    articles = await session.scalars(select(Article))
+    articles = await session.scalars(
+        select(Article).where(Article.is_active.is_(True))
+    )
     unlocked = 0
     for article in articles.all():
         if article.number and article.number in title_numbers:

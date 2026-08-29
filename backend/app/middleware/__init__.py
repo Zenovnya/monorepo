@@ -1,18 +1,15 @@
 """Глобальный rate limiter для защиты API от спама и перерасхода ресурсов.
 
 Работает как Starlette middleware и ограничивает число запросов с одного IP
-в скользящем окне времени. Состояние хранится в памяти процесса.
-
-Внимание: при горизонтальном масштабировании (несколько воркеров) состояние
-должно храниться во внешнем хранилище (например, Redis). Для одиночного
-контейнера на Railway этого достаточно.
+в скользящем окне времени. Состояние хранится в Redis (общее для всех
+воркеров) с автоматическим откатом на память процесса при недоступности Redis
+— см. ``app.ratelimit``.
 """
-
-import time
-from collections import defaultdict, deque
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+
+from app.ratelimit import check_rate_limit
 
 
 class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
@@ -28,38 +25,17 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self._requests: dict[str, deque[float]] = defaultdict(deque)
-        self._request_count = 0
-
-    def _sweep_stale(self, now: float) -> None:
-        """Удаляет из словаря IP-адреса без активных запросов в окне.
-
-        Без этого словарь растёт неограниченно: каждый уникальный IP
-        оставляет пустую очередь навсегда (утечка памяти).
-        """
-        stale = [
-            ip
-            for ip, q in self._requests.items()
-            if not q or now - q[-1] > self.window_seconds
-        ]
-        for ip in stale:
-            del self._requests[ip]
 
     async def dispatch(self, request, call_next):
         client_ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
 
-        # Периодическая чистка устаревших IP (раз в 1000 запросов).
-        self._request_count += 1
-        if self._request_count % 1000 == 0:
-            self._sweep_stale(now)
-
-        queue = self._requests[client_ip]
-        # Убираем устаревшие записи (вне окна).
-        while queue and now - queue[0] > self.window_seconds:
-            queue.popleft()
-
-        if len(queue) >= self.max_requests:
+        allowed = await check_rate_limit(
+            "global",
+            client_ip,
+            self.max_requests,
+            self.window_seconds,
+        )
+        if not allowed:
             return JSONResponse(
                 status_code=429,
                 content={
@@ -67,6 +43,4 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        queue.append(now)
-        response = await call_next(request)
-        return response
+        return await call_next(request)

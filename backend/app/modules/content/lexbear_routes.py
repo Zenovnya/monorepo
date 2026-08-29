@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.modules.admin.security import require_admin
 from app.modules.auth import service as auth_service
 from app.modules.content import lexbear_service
 
@@ -33,11 +34,15 @@ def _get_current_user_id(
         ) from exc
 
 
-@router.post("/seed")
+@router.post("/seed", dependencies=[Depends(require_admin)])
 async def seed(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Запускает сид контента LexBear (идемпотентно)."""
+    """Запускает сид контента LexBear (идемпотентно).
+
+    Защищён admin-токеном (заголовок ``X-Admin-Token``): служебный эндпоинт,
+    недоступный обычным клиентам.
+    """
     from app.modules.content import lexbear_seed
 
     result = await lexbear_seed.run_lexbear_seed(session)
