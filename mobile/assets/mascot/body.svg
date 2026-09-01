@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 520" width="100%" height="100%">
+  <defs>
+    <style>
+      .o { stroke: #2A1810; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+      .t { stroke: #2A1810; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+    </style>
+  </defs>
+  <!-- Ноги + брюки -->
+  <path d="M 148 420 Q 146 470 150 495 Q 152 502 162 502 L 188 502 Q 192 495 192 470 L 192 420 Z" fill="#3D2A1B" class="o"/>
+  <path d="M 208 420 L 208 470 Q 208 495 212 502 L 238 502 Q 248 502 250 495 Q 252 470 252 420 Z" fill="#3D2A1B" class="o"/>
+  <!-- Ботинки -->
+  <ellipse cx="172" cy="502" rx="24" ry="10" fill="#1F140A" class="o"/>
+  <ellipse cx="228" cy="502" rx="24" ry="10" fill="#1F140A" class="o"/>
+  <!-- Пиджак -->
+  <path d="M 120 310 Q 115 355 118 400 Q 122 445 145 452 L 255 452 Q 278 445 282 400 Q 285 355 280 310 Q 260 295 200 295 Q 140 295 120 310 Z" fill="#3D2A1B" class="o"/>
+  <!-- Лацканы -->
+  <path d="M 155 305 L 200 385 L 245 305 L 235 305 L 200 365 L 165 305 Z" fill="#2A1A0F" class="t"/>
+  <!-- Рубашка -->
+  <path d="M 175 305 L 200 355 L 225 305 Z" fill="#F0E8D8" class="t"/>
+  <path d="M 175 305 L 195 325 L 200 315 L 205 325 L 225 305" fill="#F0E8D8" class="t"/>
+  <!-- Галстук -->
+  <path d="M 195 320 L 190 335 L 210 335 L 205 320 Z" fill="#6B2E1E" class="t"/>
+  <path d="M 190 335 L 187 384 Q 200 389 213 384 L 210 335 Z" fill="#7A3823" class="t"/>
+  <!-- Флажок России -->
+  <g transform="translate(225 340)">
+    <rect x="0" y="0" width="20" height="16" fill="#F5F5F5" stroke="#2A1810" stroke-width="1.5"/>
+    <rect x="0" y="0" width="20" height="5.3" fill="#F5F5F5"/>
+    <rect x="0" y="5.3" width="20" height="5.4" fill="#0039A6"/>
+    <rect x="0" y="10.7" width="20" height="5.3" fill="#D52B1E"/>
+  </g>
+  <!-- Пуговицы -->
+  <circle cx="200" cy="395" r="2.5" fill="#2A1810"/>
+  <circle cx="200" cy="415" r="2.5" fill="#2A1810"/>
+</svg>
