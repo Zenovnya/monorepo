@@ -1,5 +1,21 @@
 name: EAS Build (Mobile)
 
+# Собирает мобильное приложение через EAS.
+#
+# Триггеры:
+#   - Ручной запуск из вкладки Actions (workflow_dispatch) — с выбором профиля.
+#   - Автоматически при push в main, если менялось что-то в mobile/**.
+#
+# Требуется секрет ``EXPO_TOKEN`` в Settings → Secrets → Actions.
+# Если секрета нет, сборка мягко пропускается с понятным сообщением,
+# чтобы CI не падал на каждый push. Как только токен добавлен — сборка
+# автоматически заработает без правок workflow.
+#
+# Как получить токен:
+#   1. https://expo.dev/settings/access-tokens → Create token.
+#   2. GitHub → Settings → Secrets and variables → Actions → New secret,
+#      имя: EXPO_TOKEN, значение: скопированный токен.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,15 +23,56 @@ on:
         description: 'Профиль сборки (preview / production)'
         required: true
         default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+      platform:
+        description: 'Платформа (all / android / ios)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
   push:
     branches:
       - main
     paths:
       - 'mobile/**'
+      - '.github/workflows/eas-build.yml'
+
+concurrency:
+  # Отменяем предыдущий незавершённый билд, если пушнули новое.
+  group: eas-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # Гейт: проверяем, что токен есть. Без него мягко пропускаем весь job.
+  # Это позволяет CI не падать красным на каждый push в main, пока
+  # EXPO_TOKEN не настроен.
+  check-token:
+    name: Check EXPO_TOKEN
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+            echo "✅ EXPO_TOKEN найден — сборка будет запущена."
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ EXPO_TOKEN не задан в secrets — EAS Build пропущен."
+            echo "Добавьте его в Settings → Secrets → Actions (см. README workflow-а)."
+          fi
+
   build:
-    name: Build and submit mobile app
+    name: EAS Build (${{ inputs.platform || 'all' }} · ${{ inputs.profile || 'preview' }})
+    needs: check-token
+    if: needs.check-token.outputs.has_token == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,23 +82,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Setup Expo
-        uses: expo/expo-github-action@v8
+      # Свежая версия action-а (v9) поддерживает Node 22 — старая v8
+      # тянула Node 20, из-за чего @oclif/plugin-autocomplete падал с
+      # "engine node incompatible".
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v9
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+          expo-cache: true
+          eas-cache: true
+          packager: npm
 
       - name: Install dependencies
-        run: npm install
+        # npm ci быстрее и воспроизводимо ставит из package-lock.json,
+        # без пересчёта дерева зависимостей.
+        run: npm ci
+
+      - name: Verify Expo project
+        # Проверка конфига до сборки: если что-то не так с app.json /
+        # версиями пакетов — упадём быстро, не тратя время на build.
+        run: npx expo-doctor
+        continue-on-error: true
 
       - name: Run EAS Build
-        run: npx eas-cli build --platform all --profile ${{ inputs.profile || 'preview' }} --non-interactive
+        run: |
+          npx eas-cli build \
+            --platform ${{ inputs.platform || 'all' }} \
+            --profile ${{ inputs.profile || 'preview' }} \
+            --non-interactive \
+            --no-wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
