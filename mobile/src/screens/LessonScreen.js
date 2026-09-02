@@ -136,14 +136,40 @@ export default function LessonScreen({ route, navigation }) {
     const accuracy = questions.length > 0
       ? Math.round((correctCount / questions.length) * 100)
       : 0;
+
+    // Умная реакция медведя на итог:
+    //   идеально (100% без потерь) → perfect_lesson (звёзды в глазах);
+    //   80%+ → celebrate (correct_big с прыжком);
+    //   60%+ → нейтрально-позитивно (idle + happy);
+    //   ниже → wrong_sad (опускание + слёзы).
+    const isPerfect = accuracy === 100 && lives === 3 && questions.length > 0;
+    const isGreat = !isPerfect && accuracy >= 80;
+    const isPassed = !isPerfect && !isGreat && accuracy >= 60;
+    const isFailed = !isPerfect && !isGreat && !isPassed;
+
+    const titleText = isPerfect
+      ? 'Идеально! ⭐'
+      : isGreat
+      ? 'Отличный урок!'
+      : isPassed
+      ? 'Урок пройден!'
+      : 'Ещё раз попробуем?';
+
     return (
       <View style={styles.resultContainer}>
-        <Text style={styles.resultTitle}>Урок пройден!</Text>
-        <Text style={styles.resultSubtitle}>Ты становишься сильнее ⚖️</Text>
-        <AnimatedMascot size={180} emotion={accuracy >= 60 ? 'cheer' : 'sad'} />
+        <Text style={styles.resultTitle}>{titleText}</Text>
+        <Text style={styles.resultSubtitle}>
+          {isFailed ? 'Не всё получилось — повтори теорию.' : 'Ты становишься сильнее ⚖️'}
+        </Text>
+        <AnimatedMascot
+          size={180}
+          perfect={isPerfect}
+          celebrate={isGreat}
+          emotion={isPassed ? 'happy' : isFailed ? 'sad' : undefined}
+        />
         <View style={styles.resultStats}>
           <StatCard label="Точность" value={`${accuracy}%`} color={colors.skyDark} />
-          <StatCard label="Стрик" value={`🔥 ${lives}`} color={colors.error} />
+          <StatCard label="Жизни" value={`❤️ ${lives}`} color={colors.error} />
         </View>
         <Pressable
           style={[styles.btn, { marginTop: 24, alignSelf: 'stretch' }]}
@@ -198,7 +224,13 @@ export default function LessonScreen({ route, navigation }) {
 
         {effectivePhase === 'practice' && checked && (
           <View style={[styles.feedback, { backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC' }]}>
-            <AnimatedMascot size={60} emotion={checked === 'right' ? 'cheer' : 'sad'} />
+            {/* При потере последней жизни — сильнее грусть (wrong_sad + слёзы). */}
+            <AnimatedMascot
+              size={60}
+              celebrate={checked === 'right'}
+              error={checked === 'wrong' && lives > 1}
+              emotion={checked === 'wrong' && lives <= 1 ? 'sad' : undefined}
+            />
             <View style={{ flex: 1 }}>
               <Text style={styles.feedbackTitle}>{checked === 'right' ? 'Верно!' : 'Не то'}</Text>
               <Text style={styles.feedbackText}>{questions[qIdx]?.explanation}</Text>
@@ -264,7 +296,8 @@ function TheoryView({ card, step, total }) {
       </View>
       {card.bear_line ? (
         <View style={styles.bearLine}>
-          <AnimatedMascot size={80} emotion="think" />
+          {/* Медведь говорит реплику — циклический рот (talk_loop). */}
+          <AnimatedMascot size={80} emotion="happy" talking />
           <View style={styles.bubble}>
             <Text style={styles.bubbleText}>{card.bear_line}</Text>
           </View>

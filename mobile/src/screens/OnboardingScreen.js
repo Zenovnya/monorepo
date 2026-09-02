@@ -57,7 +57,8 @@ export default function OnboardingScreen() {
         {step === 0 && (
           <>
             <View style={styles.centerBlock}>
-              <AnimatedMascot size={180} />
+              {/* Приветственный махание лапой + говорящий рот. */}
+              <AnimatedMascot size={180} wave talking />
               <View style={styles.bubble}>
                 <Text style={styles.bubbleText}>
                   Привет! Я <Text style={{ fontWeight: '900' }}>LexBear</Text>. Научу тебя праву без скуки.
@@ -70,6 +71,7 @@ export default function OnboardingScreen() {
             </View>
           </>
         )}
+
 
         {step === 1 && (
           <>

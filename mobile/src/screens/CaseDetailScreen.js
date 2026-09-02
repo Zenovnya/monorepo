@@ -97,10 +97,14 @@ export default function CaseDetailScreen({ route, navigation }) {
           })}
         </View>
 
-        {/* Обратная связь */}
+        {/* Обратная связь: правильно → correct_big с прыжком, ошибка → wrong_soft */}
         {checked && (
           <View style={[styles.feedback, { backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC' }]}>
-            <AnimatedMascot size={70} emotion={checked === 'right' ? 'cheer' : 'sad'} />
+            <AnimatedMascot
+              size={70}
+              celebrate={checked === 'right'}
+              error={checked === 'wrong'}
+            />
             <View style={{ flex: 1 }}>
               <Text style={styles.feedbackTitle}>
                 {checked === 'right' ? 'Верно!' : 'Не то'}
