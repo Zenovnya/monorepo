@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -49,6 +49,20 @@ export default function ProfileScreen({ navigation }) {
   const totalCrowns = progress?.total_crowns ?? 0;
   const level = gamification?.level ?? user?.level ?? 1;
 
+  // Ловим повышение уровня: сравниваем текущий level с предыдущим значением.
+  // При изменении вверх — включаем маскота в состоянии level_up на 2.5 сек
+  // (короткий «выброс» реакции, потом возврат в обычный idle).
+  const prevLevelRef = useRef(level);
+  const [levelUpPulse, setLevelUpPulse] = useState(false);
+  useEffect(() => {
+    if (prevLevelRef.current != null && level > prevLevelRef.current) {
+      setLevelUpPulse(true);
+      const t = setTimeout(() => setLevelUpPulse(false), 2500);
+      return () => clearTimeout(t);
+    }
+    prevLevelRef.current = level;
+  }, [level]);
+
   const metrics = [
     { icon: '🔥', value: gamification?.streak ?? user?.streak ?? 0, label: 'Стрик' },
     { icon: '⭐', value: gamification?.xp ?? user?.xp ?? 0, label: 'XP' },
@@ -74,7 +88,8 @@ export default function ProfileScreen({ navigation }) {
       {/* Шапка */}
       <View style={styles.header}>
         <View style={styles.avatar}>
-          <AnimatedMascot size={88} />
+          {/* На повышении уровня — короткий залп level_up, иначе радостный idle. */}
+          <AnimatedMascot size={88} levelUp={levelUpPulse} mood={levelUpPulse ? undefined : 'happy'} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
