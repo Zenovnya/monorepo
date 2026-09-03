@@ -102,6 +102,9 @@ class CaseIn(BaseModel):
     difficulty: str = "easy"
     case_text: str
     featured: bool = False
+    # Опциональная подсказка для кнопки «Подсказка» на экране кейса —
+    # ссылка на статью/закон, не раскрывающая правильный ответ.
+    hint: str | None = None
     options: list[CaseOptionIn] = Field(min_length=2)
 
 

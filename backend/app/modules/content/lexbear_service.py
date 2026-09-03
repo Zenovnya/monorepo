@@ -138,6 +138,7 @@ def _serialize_case(c) -> dict:
         "codex": c.codex,
         "difficulty": c.difficulty,
         "case_text": c.case_text,
+        "hint": c.hint,
         "options": [{"id": o.id, "text": o.text} for o in c.options],
         "correct": next(
             (i for i, o in enumerate(c.options) if o.is_correct),

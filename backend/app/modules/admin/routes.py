@@ -62,6 +62,7 @@ def _serialize_case_admin(case: Case) -> dict:
         "codex": case.codex,
         "difficulty": case.difficulty,
         "case_text": case.case_text,
+        "hint": case.hint,
         "featured": case.featured,
         "is_active": case.is_active,
         "options": [

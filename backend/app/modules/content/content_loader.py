@@ -117,6 +117,7 @@ async def upsert_case(session: AsyncSession, case_in: CaseIn) -> Case:
     case.situation = case_in.case_text
     case.featured = case_in.featured
     case.correct = _correct_index(case_in.options)
+    case.hint = case_in.hint
     case.is_active = True
     await session.flush()
 
