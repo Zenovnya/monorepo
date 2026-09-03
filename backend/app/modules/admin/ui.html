@@ -98,6 +98,8 @@
       </div>
       <div class="field"><label>Текст кейса</label>
         <textarea id="c_text" placeholder="Опишите ситуацию…"></textarea></div>
+      <div class="field"><label>Подсказка (кнопка "Подсказка" на экране кейса, необязательно)</label>
+        <textarea id="c_hint" placeholder="Обрати внимание на ст. XX УК РФ…" style="min-height:60px"></textarea></div>
       <div class="field row">
         <label style="margin:0"><input type="checkbox" id="c_featured" style="width:auto"> Кейс дня (featured)</label>
       </div>
@@ -236,7 +238,7 @@ async function loadCases() {
 
 function newCase() {
   document.getElementById('caseFormTitle').textContent = 'Новый кейс';
-  ['c_slug','c_title','c_codex','c_text'].forEach(id => document.getElementById(id).value = '');
+  ['c_slug','c_title','c_codex','c_text','c_hint'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('c_slug').disabled = false;
   document.getElementById('c_difficulty').value = 'easy';
   document.getElementById('c_featured').checked = false;
@@ -251,6 +253,7 @@ function editCase(c) {
   document.getElementById('c_codex').value = c.codex || '';
   document.getElementById('c_difficulty').value = c.difficulty || 'easy';
   document.getElementById('c_text').value = c.case_text || '';
+  document.getElementById('c_hint').value = c.hint || '';
   document.getElementById('c_featured').checked = !!c.featured;
   document.getElementById('c_options').innerHTML = '';
   (c.options || []).forEach(o => addOption(o.text, o.is_correct, o.explanation));
@@ -281,6 +284,7 @@ async function saveCase() {
     codex: document.getElementById('c_codex').value.trim(),
     difficulty: document.getElementById('c_difficulty').value,
     case_text: document.getElementById('c_text').value.trim(),
+    hint: document.getElementById('c_hint').value.trim() || null,
     featured: document.getElementById('c_featured').checked,
     options,
   };

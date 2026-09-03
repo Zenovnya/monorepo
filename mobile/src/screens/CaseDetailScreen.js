@@ -20,6 +20,7 @@ export default function CaseDetailScreen({ route, navigation }) {
   const { caseId } = route.params;
   const [sel, setSel] = useState(null);
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
+  const [hintShown, setHintShown] = useState(false);
 
   const { data: caseData, isLoading, error } = useQuery({
     queryKey: ['lexbear-case', caseId],
@@ -71,6 +72,26 @@ export default function CaseDetailScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.questionTitle}>Квалификация?</Text>
+
+        {/* Кнопка «Подсказка»: показываем до проверки, если для кейса есть hint.
+            После первого клика раскрывается блок с текстом наводки. */}
+        {caseData?.hint && !checked && (
+          <View style={styles.hintBlock}>
+            {!hintShown ? (
+              <Pressable
+                style={styles.hintBtn}
+                onPress={() => setHintShown(true)}
+              >
+                <Text style={styles.hintBtnText}>💡 Подсказка</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.hintCard}>
+                <Text style={styles.hintTitle}>💡 Подсказка</Text>
+                <Text style={styles.hintText}>{caseData.hint}</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.options}>
           {options.map((opt, i) => {
@@ -173,6 +194,26 @@ const styles = StyleSheet.create({
   },
   caseText: { fontSize: 15, color: colors.text, lineHeight: 21 },
   questionTitle: { fontSize: 20, fontWeight: '900', color: colors.text, marginTop: 24 },
+  hintBlock: { marginTop: 16 },
+  hintBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFF7DE',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  hintBtnText: { fontWeight: '800', color: colors.text, fontSize: 14 },
+  hintCard: {
+    backgroundColor: '#FFF7DE',
+    borderWidth: 2,
+    borderColor: colors.accent,
+    borderRadius: 14,
+    padding: 12,
+  },
+  hintTitle: { fontSize: 13, fontWeight: '900', color: colors.accentPressed },
+  hintText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
   options: { gap: 12, marginTop: 12 },
   option: {
     flexDirection: 'row',

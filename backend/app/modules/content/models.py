@@ -158,6 +158,9 @@ class Case(Base):
     difficulty: Mapped[str | None] = mapped_column(String(16), nullable=True)
     case_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     correct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Опциональная подсказка — показывается по кнопке "Подсказка" на экране
+    # прохождения кейса, наводит на нужную статью/закон без раскрытия ответа.
+    hint: Mapped[str | None] = mapped_column(Text, nullable=True)
     featured: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
