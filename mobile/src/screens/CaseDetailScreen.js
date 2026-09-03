@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
   },
-  hintTitle: { fontSize: 13, fontWeight: '900', color: colors.accentDark || colors.text },
+  hintTitle: { fontSize: 13, fontWeight: '900', color: colors.accentPressed },
   hintText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
   options: { gap: 12, marginTop: 12 },
   option: {
