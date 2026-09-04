@@ -10,6 +10,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { LegalText } from '../components/LegalText';
 import { colors } from '../theme/colors';
 
 /**
@@ -233,7 +234,7 @@ export default function LessonScreen({ route, navigation }) {
             />
             <View style={{ flex: 1 }}>
               <Text style={styles.feedbackTitle}>{checked === 'right' ? 'Верно!' : 'Не то'}</Text>
-              <Text style={styles.feedbackText}>{questions[qIdx]?.explanation}</Text>
+              <LegalText style={styles.feedbackText}>{questions[qIdx]?.explanation}</LegalText>
             </View>
           </View>
         )}
@@ -281,11 +282,11 @@ function TheoryView({ card, step, total }) {
       <Text style={styles.theoryMeta}>Теория · {step}/{total}</Text>
       <Text style={styles.theoryTitle}>{card.title}</Text>
       <View style={styles.card}>
-        <Text style={styles.cardText}>{card.definition}</Text>
+        <LegalText style={styles.cardText}>{card.definition}</LegalText>
       </View>
       <View style={[styles.card, styles.practicalCard]}>
         <Text style={styles.practicalLabel}>НА ПРАКТИКЕ</Text>
-        <Text style={styles.cardText}>{card.practical}</Text>
+        <LegalText style={styles.cardText}>{card.practical}</LegalText>
       </View>
       <View style={styles.chips}>
         {(card.chips || []).map((chip) => (
@@ -299,7 +300,7 @@ function TheoryView({ card, step, total }) {
           {/* Медведь говорит реплику — циклический рот (talk_loop). */}
           <AnimatedMascot size={80} emotion="happy" talking />
           <View style={styles.bubble}>
-            <Text style={styles.bubbleText}>{card.bear_line}</Text>
+            <LegalText style={styles.bubbleText}>{card.bear_line}</LegalText>
           </View>
         </View>
       ) : null}
