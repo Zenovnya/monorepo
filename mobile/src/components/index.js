@@ -10,5 +10,6 @@ export { default as BearRig, STATES as BearStates, MOODS as BearMoods } from './
 export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';
 export { SpeechBubble } from './SpeechBubble';
+export { LegalText } from './LegalText';
 export { LexEntrance } from './LexEntrance';
 export { LockPremium } from './LockPremium';

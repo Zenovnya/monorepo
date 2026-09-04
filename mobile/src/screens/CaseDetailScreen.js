@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,20 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { SpeechBubble } from '../components/SpeechBubble';
+import { LegalText } from '../components/LegalText';
 import { colors } from '../theme/colors';
 
 /**
- * Экран прохождения отдельного кейса (адаптация веб-CaseClient).
- * Данные кейса подтягиваются по id через GET /lexbear/cases/{id}.
+ * Экран прохождения отдельного кейса.
+ *
+ * Медведь встроен в экран сверху и «говорит» через SpeechBubble:
+ * реплики меняются в зависимости от фазы (вступление → размышление →
+ * подсказка → результат). Кнопка «Подсказка» не рисует отдельный
+ * card — она заставляет медведя произнести hint через облачко.
+ *
+ * Ссылки на статьи и законы в тексте (case_text, explanation, hint)
+ * автоматически кликабельны — открывают Консультант Плюс.
  */
 export default function CaseDetailScreen({ route, navigation }) {
   const { caseId } = route.params;
@@ -27,6 +36,47 @@ export default function CaseDetailScreen({ route, navigation }) {
     queryFn: () => lexbearApi.getCase(caseId),
   });
 
+  const options = caseData?.options ?? [];
+  const correctIndex = caseData?.correct;
+  const explanation = caseData?.explanation;
+  const hint = caseData?.hint;
+
+  // Реплика и настроение медведя в текущей фазе кейса.
+  const { bearText, bearProps } = useMemo(() => {
+    // 1) Результат проверки — реагируем.
+    if (checked === 'right') {
+      return {
+        bearText: 'Верно! Смотри, почему именно так.',
+        bearProps: { celebrate: true, talking: true },
+      };
+    }
+    if (checked === 'wrong') {
+      return {
+        bearText: 'Не то. Разбираем правильный вариант.',
+        bearProps: { error: true, talking: true },
+      };
+    }
+    // 2) Подсказка (пока не проверили).
+    if (hintShown && hint) {
+      return {
+        bearText: hint,
+        bearProps: { emotion: 'happy', mood: 'excited', talking: true },
+      };
+    }
+    // 3) Выбрали вариант, но ещё не проверили — «думаем вместе».
+    if (sel !== null) {
+      return {
+        bearText: 'Уверен? Проверь ещё раз, если сомневаешься.',
+        bearProps: { emotion: 'think', talking: true },
+      };
+    }
+    // 4) Дефолт — вступление.
+    return {
+      bearText: 'Разберём эту ситуацию как юристы. Выбирай вариант.',
+      bearProps: { emotion: 'happy', talking: true },
+    };
+  }, [checked, hintShown, hint, sel]);
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -38,20 +88,16 @@ export default function CaseDetailScreen({ route, navigation }) {
   if (error || !caseData) {
     return (
       <View style={styles.center}>
+        <AnimatedMascot size={120} networkError />
         <Text style={styles.errorText}>Не удалось загрузить кейс</Text>
       </View>
     );
   }
 
-  const options = caseData?.options ?? [];
-  const correctIndex = caseData?.correct;
-
   const check = () => {
     if (sel === null) return;
     setChecked(sel === correctIndex ? 'right' : 'wrong');
   };
-
-  const explanation = caseData?.explanation;
 
   return (
     <View style={styles.container}>
@@ -60,38 +106,30 @@ export default function CaseDetailScreen({ route, navigation }) {
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>←</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>{caseData?.title}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {caseData?.title}
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.codexChip}>
           <Text style={styles.codexText}>{caseData?.codex}</Text>
         </View>
+
+        {/* --- Медведь + его облачко: всегда сверху экрана кейса --- */}
+        <View style={styles.bearRow}>
+          <AnimatedMascot size={110} {...bearProps} />
+          <View style={styles.bubbleWrap}>
+            <SpeechBubble text={bearText} />
+          </View>
+        </View>
+
+        {/* Текст кейса */}
         <View style={styles.caseCard}>
-          <Text style={styles.caseText}>{caseData?.case_text}</Text>
+          <LegalText style={styles.caseText}>{caseData?.case_text}</LegalText>
         </View>
 
         <Text style={styles.questionTitle}>Квалификация?</Text>
-
-        {/* Кнопка «Подсказка»: показываем до проверки, если для кейса есть hint.
-            После первого клика раскрывается блок с текстом наводки. */}
-        {caseData?.hint && !checked && (
-          <View style={styles.hintBlock}>
-            {!hintShown ? (
-              <Pressable
-                style={styles.hintBtn}
-                onPress={() => setHintShown(true)}
-              >
-                <Text style={styles.hintBtnText}>💡 Подсказка</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.hintCard}>
-                <Text style={styles.hintTitle}>💡 Подсказка</Text>
-                <Text style={styles.hintText}>{caseData.hint}</Text>
-              </View>
-            )}
-          </View>
-        )}
 
         <View style={styles.options}>
           {options.map((opt, i) => {
@@ -110,7 +148,9 @@ export default function CaseDetailScreen({ route, navigation }) {
                 ]}
               >
                 <View style={styles.optionLetter}>
-                  <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
+                  <Text style={styles.optionLetterText}>
+                    {String.fromCharCode(65 + i)}
+                  </Text>
                 </View>
                 <Text style={styles.optionText}>{opt?.text ?? opt}</Text>
               </Pressable>
@@ -118,25 +158,37 @@ export default function CaseDetailScreen({ route, navigation }) {
           })}
         </View>
 
-        {/* Обратная связь: правильно → correct_big с прыжком, ошибка → wrong_soft */}
-        {checked && (
-          <View style={[styles.feedback, { backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC' }]}>
-            <AnimatedMascot
-              size={70}
-              celebrate={checked === 'right'}
-              error={checked === 'wrong'}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.feedbackTitle}>
-                {checked === 'right' ? 'Верно!' : 'Не то'}
-              </Text>
-              <Text style={styles.feedbackText}>{explanation}</Text>
-            </View>
-          </View>
+        {/* Кнопка «Подсказка» — до проверки, если есть hint.
+            По клику меняем состояние медведя — он произнесёт hint в облачке. */}
+        {hint && !checked && !hintShown && (
+          <Pressable
+            style={styles.hintBtn}
+            onPress={() => setHintShown(true)}
+          >
+            <Text style={styles.hintBtnText}>💡 Попросить подсказку у мишки</Text>
+          </Pressable>
         )}
+
+        {/* Разбор после проверки — с кликабельными ссылками на статьи. */}
+        {checked && explanation ? (
+          <View
+            style={[
+              styles.explainCard,
+              {
+                backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC',
+                borderColor: checked === 'right' ? colors.success : colors.error,
+              },
+            ]}
+          >
+            <Text style={styles.explainTitle}>
+              {checked === 'right' ? 'Почему верно' : 'Почему нет'}
+            </Text>
+            <LegalText style={styles.explainText}>{explanation}</LegalText>
+          </View>
+        ) : null}
       </ScrollView>
 
-      {/* Кнопка */}
+      {/* Нижняя кнопка */}
       <View style={styles.footer}>
         {!checked ? (
           <Pressable
@@ -158,7 +210,7 @@ export default function CaseDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, gap: 12 },
   errorText: { fontSize: 15, fontWeight: '700', color: colors.error },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   backBtn: {
@@ -173,7 +225,7 @@ const styles = StyleSheet.create({
   },
   backText: { fontSize: 18, fontWeight: '900', color: colors.text },
   headerTitle: { fontSize: 18, fontWeight: '900', color: colors.text, flex: 1 },
-  content: { paddingHorizontal: 16, paddingBottom: 120 },
+  content: { paddingHorizontal: 16, paddingBottom: 140 },
   codexChip: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -185,6 +237,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   codexText: { fontWeight: '700', color: colors.text, fontSize: 13 },
+
+  bearRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 16,
+    minHeight: 130,
+  },
+  bubbleWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingTop: 12,
+  },
+
   caseCard: {
     backgroundColor: colors.card,
     borderWidth: 3,
@@ -194,26 +260,6 @@ const styles = StyleSheet.create({
   },
   caseText: { fontSize: 15, color: colors.text, lineHeight: 21 },
   questionTitle: { fontSize: 20, fontWeight: '900', color: colors.text, marginTop: 24 },
-  hintBlock: { marginTop: 16 },
-  hintBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#FFF7DE',
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  hintBtnText: { fontWeight: '800', color: colors.text, fontSize: 14 },
-  hintCard: {
-    backgroundColor: '#FFF7DE',
-    borderWidth: 2,
-    borderColor: colors.accent,
-    borderRadius: 14,
-    padding: 12,
-  },
-  hintTitle: { fontSize: 13, fontWeight: '900', color: colors.accentPressed },
-  hintText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
   options: { gap: 12, marginTop: 12 },
   option: {
     flexDirection: 'row',
@@ -237,19 +283,38 @@ const styles = StyleSheet.create({
   },
   optionLetterText: { fontSize: 13, fontWeight: '700', color: colors.text },
   optionText: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
-  feedback: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+
+  hintBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: '#FFF7DE',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  hintBtnText: { fontWeight: '800', color: colors.text, fontSize: 14 },
+
+  explainCard: {
+    marginTop: 20,
+    borderWidth: 3,
+    borderRadius: 16,
+    padding: 14,
+  },
+  explainTitle: { fontSize: 15, fontWeight: '900', color: colors.text },
+  explainText: { fontSize: 14, color: colors.text, marginTop: 6, lineHeight: 20 },
+
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: colors.background,
     borderTopWidth: 3,
     borderTopColor: colors.border,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 16,
   },
-  feedbackTitle: { fontSize: 18, fontWeight: '900', color: colors.text },
-  feedbackText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: colors.background, borderTopWidth: 3, borderTopColor: colors.border },
   btn: {
     height: 56,
     borderRadius: 16,
