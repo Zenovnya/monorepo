@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LegalText } from '../components/LegalText';
+import { useMascotToast } from '../components/MascotToast';
 import { colors } from '../theme/colors';
 
 /**
@@ -50,14 +51,41 @@ export default function LessonScreen({ route, navigation }) {
     queryFn: () => lexbearApi.getLesson(lessonId),
   });
 
+  const toast = useMascotToast();
+
   // Завершение урока через lexbear-эндпоинт (XP, короны, стрик).
+  // Ответ содержит level_up / streak_incremented / achievements_unlocked —
+  // по ним показываем очередь тостов с медведем в нужной мимике.
   const completeMutation = useMutation({
     mutationFn: ({ correct, total }) =>
       lexbearApi.completeLesson(lessonId, { correct, total }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
       queryClient.invalidateQueries(['gamification-me']);
+
+      // Очередь событий-реакций от сервера:
+      if (data?.level_up) {
+        toast.show({
+          kind: 'level_up',
+          title: `Уровень ${data.level}`,
+          text: 'Ты растёшь. Погнали дальше.',
+        });
+      }
+      if (data?.streak_incremented && data?.streak) {
+        toast.show({
+          kind: 'streak_celebrate',
+          title: `Стрик ${data.streak} 🔥`,
+          text: 'Занимаешься каждый день — так держать.',
+        });
+      }
+      for (const ach of data?.achievements_unlocked ?? []) {
+        toast.show({
+          kind: 'achievement',
+          title: `🏅 ${ach.title}`,
+          text: ach.description || 'Новое достижение получено.',
+        });
+      }
     },
   });
 

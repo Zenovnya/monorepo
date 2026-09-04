@@ -5,6 +5,7 @@ import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { MascotToastProvider } from './src/components';
 import { RootNavigator } from './src/navigation';
 
 const queryClient = new QueryClient();
@@ -15,8 +16,10 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <NavigationContainer>
-            <RootNavigator />
-            <StatusBar style="auto" />
+            <MascotToastProvider>
+              <RootNavigator />
+              <StatusBar style="auto" />
+            </MascotToastProvider>
           </NavigationContainer>
         </QueryClientProvider>
       </SafeAreaProvider>

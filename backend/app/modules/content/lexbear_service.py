@@ -358,11 +358,61 @@ async def complete_lesson(
     from app.modules.gamification import service as gamification_service
 
     user = await session.get(User, user_id)
+
+    # Фиксируем «до» — чтобы отдать клиенту флаги level_up / streak_incremented
+    # и корректный список только что разблокированных ачивок. Клиент по этим
+    # флагам решает, какие тосты с реакцией маскота показать.
+    prev_level = user.level if user is not None else 0
+    prev_streak = user.streak if user is not None else 0
+
     if user is not None:
         await gamification_service.add_xp(session, user, xp_gain)
 
     # Разблокировка статей по номеру в заголовке урока.
     unlocked = await unlock_articles_for_lesson(session, user_id, lesson.title)
+
+    # Простые встроенные триггеры достижений (проверяются после add_xp,
+    # чтобы обновлённый уровень уже был учтён). Идемпотентно за счёт
+    # UniqueConstraint по (user_id, code) внутри award_achievement.
+    achievements_unlocked: list[dict] = []
+    if user is not None:
+        # 1) Первый пройденный урок.
+        if is_new:
+            try:
+                a = await gamification_service.award_achievement(
+                    session, user,
+                    code="first_lesson",
+                    title="Первый шаг",
+                    description="Ты прошёл свой первый урок. Погнали дальше.",
+                )
+                achievements_unlocked.append(_achievement_to_dict(a))
+            except gamification_service.AchievementAlreadyAwardedError:
+                pass
+        # 2) Идеальный урок (100% без потерь).
+        if accuracy >= 0.999:
+            try:
+                a = await gamification_service.award_achievement(
+                    session, user,
+                    code="perfect_lesson",
+                    title="Идеально",
+                    description="Прошёл урок без единой ошибки.",
+                )
+                achievements_unlocked.append(_achievement_to_dict(a))
+            except gamification_service.AchievementAlreadyAwardedError:
+                pass
+        # 3) Streak-рубежи: 3, 7, 30 дней.
+        for milestone in (3, 7, 30):
+            if user.streak >= milestone > prev_streak:
+                try:
+                    a = await gamification_service.award_achievement(
+                        session, user,
+                        code=f"streak_{milestone}",
+                        title=f"Стрик {milestone} дней",
+                        description=f"Занимаешься {milestone} дней подряд.",
+                    )
+                    achievements_unlocked.append(_achievement_to_dict(a))
+                except gamification_service.AchievementAlreadyAwardedError:
+                    pass
 
     await session.commit()
 
@@ -372,7 +422,21 @@ async def complete_lesson(
         "crowns": progress.crowns,
         "accuracy": round(accuracy * 100),
         "streak": user.streak if user else 0,
+        "level": user.level if user else 0,
         "is_new": is_new,
         "unlocked_articles": unlocked,
         "completed": was_completed,
+        # Флаги для мобилки, чтобы показать реакцию маскота нужным тостом.
+        "level_up": bool(user and user.level > prev_level),
+        "streak_incremented": bool(user and user.streak > prev_streak),
+        "achievements_unlocked": achievements_unlocked,
+    }
+
+
+def _achievement_to_dict(a) -> dict:
+    """Сериализует ORM-достижение в словарь для JSON-ответа."""
+    return {
+        "code": a.code,
+        "title": a.title,
+        "description": a.description,
     }
