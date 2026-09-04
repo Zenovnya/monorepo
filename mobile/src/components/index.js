@@ -11,5 +11,6 @@ export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';
 export { SpeechBubble } from './SpeechBubble';
 export { LegalText } from './LegalText';
+export { MascotToastProvider, useMascotToast } from './MascotToast';
 export { LexEntrance } from './LexEntrance';
 export { LockPremium } from './LockPremium';
