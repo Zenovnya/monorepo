@@ -5,14 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Linking,
 } from 'react-native';
-import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { paymentsApi } from '../api/payments';
-import { analyticsApi } from '../api/analytics';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { usePremium } from '../hooks/usePremium';
 import { colors } from '../theme/colors';
 
 const PLANS = [
@@ -30,22 +27,12 @@ const perks = [
 
 export default function PremiumScreen({ navigation }) {
   const [plan, setPlan] = useState('yearly');
-  const [paymentUrl, setPaymentUrl] = useState(null);
+  const { isPremium, startCheckout, isCheckingOut } = usePremium();
 
-  const createPayment = useMutation({
-    mutationFn: (p) => paymentsApi.createPayment(p),
-    onSuccess: (data, variables) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Аналитика: событие покупки подписки (fire-and-forget).
-      analyticsApi.track('subscription_purchased', { plan: variables }).catch(() => {});
-      if (data.confirmation_url) {
-        // Для MVP открываем confirmation_url во внешнем браузере.
-        // Встроенный WebView можно включить после установки react-native-webview.
-        Linking.openURL(data.confirmation_url).catch(() => {});
-      }
-      setPaymentUrl(data.confirmation_url);
-    },
-  });
+  const onSubscribe = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    startCheckout(plan);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -55,6 +42,12 @@ export default function PremiumScreen({ navigation }) {
         </Pressable>
         <Text style={styles.title}>LexBear Plus</Text>
       </View>
+
+      {isPremium ? (
+        <View style={styles.activeBanner}>
+          <Text style={styles.activeText}>✓ Премиум активен — спасибо!</Text>
+        </View>
+      ) : null}
 
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>Премиум</Text>
@@ -90,16 +83,18 @@ export default function PremiumScreen({ navigation }) {
         ))}
       </View>
 
-      {paymentUrl ? (
+      {isCheckingOut ? (
         <Text style={styles.paymentHint}>
-          Оплата открыта в браузере. После оплаты вернитесь в приложение.
+          Оплата открыта в браузере. После оплаты вернитесь в приложение —
+          статус обновится автоматически.
         </Text>
       ) : null}
 
       <AnimatedButton
-        title="Оформить подписку"
-        onPress={() => createPayment.mutate(plan)}
-        loading={createPayment.isPending}
+        title={isPremium ? 'Подписка активна' : 'Оформить подписку'}
+        onPress={onSubscribe}
+        loading={isCheckingOut}
+        disabled={isPremium}
       />
       <Text style={styles.terms}>Первые 7 дней бесплатно. Отмена в любой момент.</Text>
     </ScrollView>
@@ -155,6 +150,17 @@ const styles = StyleSheet.create({
   perkIcon: { fontSize: 24 },
   perkText: { flex: 1, fontSize: 15, fontWeight: '800', color: colors.text },
   perkCheck: { fontSize: 16, color: colors.success, fontWeight: '900' },
+  activeBanner: {
+    marginTop: 16,
+    backgroundColor: '#DFF5E5',
+    borderWidth: 3,
+    borderColor: colors.success,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  activeText: { fontSize: 15, fontWeight: '900', color: colors.text },
   paymentHint: {
     textAlign: 'center',
     marginTop: 16,

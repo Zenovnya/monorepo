@@ -43,7 +43,17 @@ class Settings(BaseSettings):
     # — иначе заголовок можно подделать при прямом доступе к приложению.
     trust_proxy_headers: bool = False
 
-    # --- ЮKassa (платежи) ---
+    # --- Платежи (общий слой, провайдеро-независимый) ---
+    # Активный платёжный провайдер: "" (заглушка/manual) | "robokassa" |
+    # "prodamus" | "yoomoney" | "cloudpayments" | "yookassa" | ...
+    # Реализация выбирается в app.modules.payments.providers.
+    payment_provider: str = ""
+    # Общий секрет для проверки HMAC-подписи webhook платёжного шлюза.
+    payments_webhook_secret: str = ""
+    # URL возврата пользователя после оплаты (в приложение/на страницу).
+    payments_return_url: str = ""
+
+    # --- ЮKassa (наследие; используется провайдером yookassa, если включён) ---
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_webhook_secret: str = ""
