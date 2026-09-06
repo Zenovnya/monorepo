@@ -40,6 +40,17 @@ class UserNotFoundError(AuthError):
     """Пользователь не найден."""
 
 
+def _password_bytes(password: str) -> bytes:
+    """Кодирует пароль в UTF-8 и обрезает до 72 байт.
+
+    bcrypt использует только первые 72 байта пароля, а новые версии библиотеки
+    выбрасывают ошибку на более длинных значениях. Обрезаем сами — так длинный
+    пароль (до 128 символов по схеме, что в UTF-8 может превышать 72 байта) не
+    приводит к 500, а поведение hash/verify остаётся согласованным.
+    """
+    return password.encode("utf-8")[:72]
+
+
 def hash_password(password: str) -> str:
     """Хеширует пароль с помощью bcrypt (синхронно).
 
@@ -48,7 +59,7 @@ def hash_password(password: str) -> str:
     блокировать event loop. Эта синхронная версия оставлена для тестов и
     прямых вызовов вне запроса.
     """
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -59,7 +70,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     try:
         return bcrypt.checkpw(
-            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+            _password_bytes(plain_password), hashed_password.encode("utf-8")
         )
     except ValueError:
         return False

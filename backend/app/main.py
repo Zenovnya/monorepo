@@ -31,6 +31,11 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.debug,
     lifespan=lifespan,
+    # Интерактивная документация и схема доступны только в debug — в проде
+    # не раскрываем структуру API публично.
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
 
 # Настраиваем CORS только для явно разрешённых источников.

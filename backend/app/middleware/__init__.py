@@ -9,7 +9,7 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from app.ratelimit import check_rate_limit
+from app.ratelimit import check_rate_limit, get_client_ip
 
 
 class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
@@ -27,7 +27,7 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         self.window_seconds = window_seconds
 
     async def dispatch(self, request, call_next):
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
 
         allowed = await check_rate_limit(
             "global",

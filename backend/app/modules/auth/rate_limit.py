@@ -9,7 +9,7 @@ from typing import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 
-from app.ratelimit import check_rate_limit
+from app.ratelimit import check_rate_limit, get_client_ip
 
 
 def _rate_limit(
@@ -18,7 +18,7 @@ def _rate_limit(
     """Возвращает async FastAPI-зависимость, ограничивающую число запросов по IP."""
 
     async def dependency(request: Request) -> None:
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         allowed = await check_rate_limit(
             namespace, client_ip, max_requests, window_seconds
         )

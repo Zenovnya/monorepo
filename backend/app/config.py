@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
 
+    # --- Прокси ---
+    # Включайте в production, если приложение работает за доверенным реверс-
+    # прокси (nginx, облачный балансировщик). Тогда IP клиента для rate-limit
+    # берётся из X-Forwarded-For, а не из адреса прокси. По умолчанию выключено
+    # — иначе заголовок можно подделать при прямом доступе к приложению.
+    trust_proxy_headers: bool = False
+
     # --- ЮKassa (платежи) ---
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
