@@ -11,7 +11,8 @@ import { colors } from '../theme/colors';
 
 const PRESS_DEPTH = 6;
 
-export const AnimatedButton = ({ title, onPress, loading, style, variant = 'primary' }) => {
+export const AnimatedButton = ({ title, onPress, loading, disabled, style, variant = 'primary' }) => {
+  const isDisabled = loading || disabled;
   const translateY = useSharedValue(0);
   const [pressed, setPressed] = useState(false);
 
@@ -20,6 +21,7 @@ export const AnimatedButton = ({ title, onPress, loading, style, variant = 'prim
   }));
 
   const handlePressIn = () => {
+    if (isDisabled) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     translateY.value = withTiming(PRESS_DEPTH, { duration: 80 });
     setPressed(true);
@@ -37,8 +39,8 @@ export const AnimatedButton = ({ title, onPress, loading, style, variant = 'prim
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      disabled={loading}
-      style={[styles.wrapper, style]}
+      disabled={isDisabled}
+      style={[styles.wrapper, style, isDisabled && { opacity: 0.6 }]}
     >
       <Animated.View
         style={[styles.bottomLayer, isOutline ? styles.outlineBottom : styles.primaryBottom]}

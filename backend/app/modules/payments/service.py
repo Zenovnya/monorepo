@@ -97,30 +97,40 @@ async def create_payment(
         raise PlanNotFoundError(f"Тариф не найден: {plan}")
 
     plan_cfg = ALL_PLANS[plan]
-    payment_id = str(uuid.uuid4())
+    # order_id — наш внутренний идентификатор платежа; передаём его провайдеру
+    # как номер заказа, чтобы затем сопоставить webhook.
+    order_id = str(uuid.uuid4())
+    description = f"{plan_cfg['type']}:{plan}"
 
     # Сохраняем запись о платеже (pending).
     session.add(
         PaymentHistory(
             user_id=user_id,
-            yookassa_payment_id=payment_id,
+            yookassa_payment_id=order_id,
             amount=plan_cfg["amount_cents"],
             currency="RUB",
             status="pending",
-            description=f"{plan_cfg['type']}:{plan}",
+            description=description,
         )
     )
     await session.commit()
 
-    # В реальной интеграции здесь был бы POST /v3/payments в ЮKassa.
-    # Для MVP возвращаем заглушку confirmation_url.
-    confirmation_url = (
-        f"https://pay.yookassa.ru/sdk/{payment_id}?lang=ru"
+    # Создаём оплату у активного провайдера (по умолчанию — заглушка).
+    # Импорт локальный, чтобы избежать цикла и не тянуть провайдеров в тестах,
+    # которые проверяют только бизнес-логику.
+    from app.modules.payments.providers import get_payment_provider
+
+    provider = get_payment_provider()
+    checkout = await provider.create_checkout(
+        order_id=order_id,
+        amount_cents=plan_cfg["amount_cents"],
+        description=description,
+        return_url=settings.payments_return_url,
     )
 
     return {
-        "payment_id": payment_id,
-        "confirmation_url": confirmation_url,
+        "payment_id": order_id,
+        "confirmation_url": checkout.confirmation_url,
         "status": "pending",
     }
 

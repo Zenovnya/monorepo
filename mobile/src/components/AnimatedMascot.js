@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 
 import BearRig from './mascot/BearRig';
+import MascotImage from './MascotImage';
 
 /**
  * AnimatedMascot — единый API маскота для экранов.
@@ -35,8 +36,21 @@ export const AnimatedMascot = ({
   networkError,
   talking,
   mood: moodProp,
-  size = 220,
+  vector = false,
+  size = 160,
 }) => {
+  // Лёгкая реакция для растрового маскота (по умолчанию).
+  const reaction = useMemo(() => {
+    if (perfect || levelUp || achievement || celebrate || wave || streak === 'celebrate') {
+      return 'celebrate';
+    }
+    if (error || networkError || streak === 'broken' || emotion === 'sad') {
+      return 'sad';
+    }
+    if (emotion === 'cheer') return 'celebrate';
+    return 'idle';
+  }, [perfect, levelUp, achievement, celebrate, wave, streak, error, networkError, emotion]);
+
   const { state, mood, isTalking } = useMemo(() => {
     const t = !!talking;
     // Специализированные состояния — идут первыми, важнее generic.
@@ -77,7 +91,12 @@ export const AnimatedMascot = ({
     moodProp,
   ]);
 
-  return <BearRig size={size} state={state} mood={mood} isTalking={isTalking} />;
+  // По умолчанию — лёгкий растровый маскот (плавно на любом устройстве).
+  // Векторный риг доступен по флагу vector для экранов, где он оправдан.
+  if (vector) {
+    return <BearRig size={size} state={state} mood={mood} isTalking={isTalking} />;
+  }
+  return <MascotImage size={size} reaction={reaction} />;
 };
 
 export default AnimatedMascot;

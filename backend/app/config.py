@@ -36,7 +36,24 @@ class Settings(BaseSettings):
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
 
-    # --- ЮKassa (платежи) ---
+    # --- Прокси ---
+    # Включайте в production, если приложение работает за доверенным реверс-
+    # прокси (nginx, облачный балансировщик). Тогда IP клиента для rate-limit
+    # берётся из X-Forwarded-For, а не из адреса прокси. По умолчанию выключено
+    # — иначе заголовок можно подделать при прямом доступе к приложению.
+    trust_proxy_headers: bool = False
+
+    # --- Платежи (общий слой, провайдеро-независимый) ---
+    # Активный платёжный провайдер: "" (заглушка/manual) | "robokassa" |
+    # "prodamus" | "yoomoney" | "cloudpayments" | "yookassa" | ...
+    # Реализация выбирается в app.modules.payments.providers.
+    payment_provider: str = ""
+    # Общий секрет для проверки HMAC-подписи webhook платёжного шлюза.
+    payments_webhook_secret: str = ""
+    # URL возврата пользователя после оплаты (в приложение/на страницу).
+    payments_return_url: str = ""
+
+    # --- ЮKassa (наследие; используется провайдером yookassa, если включён) ---
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_webhook_secret: str = ""

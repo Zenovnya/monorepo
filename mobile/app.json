@@ -1,11 +1,13 @@
 {
   "expo": {
-    "name": "SourceCraft Mobile",
-    "slug": "sourcecraft-mobile",
+    "name": "Лапа закона",
+    "slug": "lapa-zakona-dbqt7w5rtluxkgwktyx",
+    "owner": "kakichs-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -15,9 +17,11 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lapazakona.app"
     },
     "android": {
+      "package": "com.lapazakona.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -25,6 +29,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "670b972d-c126-418c-bd6c-efd33398d71e"
+      }
     }
   }
 }

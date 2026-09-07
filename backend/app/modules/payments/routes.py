@@ -1,6 +1,5 @@
 """Роуты модуля платежей."""
 
-import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -9,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.modules.auth import service as auth_service
 from app.modules.payments import service
+from app.modules.payments.providers import (
+    WebhookError,
+    WebhookNotConfigured,
+    get_payment_provider,
+)
 from app.modules.payments.schemas import (
     PaymentCreateOut,
     PremiumStatusRead,
@@ -81,40 +85,36 @@ async def create_payment(
 
 
 @router.post("/webhook")
-async def yookassa_webhook(
+async def payment_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Обрабатывает webhook от ЮKassa (подтверждение оплаты)."""
+    """Обрабатывает webhook активного платёжного провайдера (подтверждение оплаты).
+
+    Проверку подписи и разбор формата делает провайдер (см.
+    ``payments.providers``). Начисление Premium/гемов — общее
+    (``service.confirm_payment``). Так подключение реального шлюза не требует
+    правок этого роута.
+    """
+    provider = get_payment_provider()
     body = await request.body()
-    signature = request.headers.get("Idempotence-Key", "")
-
-    # Безопасность: в production секрет webhook обязателен, иначе любой
-    # может отправить payment.succeeded и получить премиум/гемы бесплатно.
-    # В debug (локальная разработка) проверку подписи пропускаем.
-    # TODO: заменить HMAC на официальную верификацию ЮKassa
-    #       (проверка IP-адресов + запрос статуса платежа через API).
-    secret = service.settings.yookassa_webhook_secret
-    if not secret:
-        if not service.settings.debug:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Платёжный webhook не настроен",
-            )
-    elif not service._verify_signature(body, signature):
-        raise HTTPException(status_code=400, detail="Неверная подпись")
 
     try:
-        payload = json.loads(body)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Некорректный JSON") from exc
-
-    payment_id = payload.get("object", {}).get("id", "")
-    event = payload.get("event", "")
-    paid = event == "payment.succeeded"
+        event = await provider.parse_webhook(body=body, headers=request.headers)
+    except WebhookNotConfigured as exc:
+        # Приём webhook не настроен (нет секрета) — сервис недоступен.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except WebhookError as exc:
+        # Неверная подпись или формат.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        await service.confirm_payment(session, payment_id, paid=paid)
+        await service.confirm_payment(
+            session, event.external_id, paid=event.paid
+        )
     except service.PaymentsError as exc:
         raise _to_http_error(exc) from exc
 

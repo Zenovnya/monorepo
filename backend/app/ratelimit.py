@@ -14,6 +14,32 @@ import time
 from collections import defaultdict, deque
 
 from app.cache import get_redis
+from app.config import get_settings
+
+_settings = get_settings()
+
+
+def get_client_ip(request) -> str:
+    """Возвращает IP клиента для нужд rate-limit.
+
+    По умолчанию — адрес прямого подключения (``request.client.host``).
+
+    Если включён ``trust_proxy_headers`` (деплой за доверенным реверс-прокси),
+    берётся ПРАВЫЙ элемент ``X-Forwarded-For`` — адрес, который увидел крайний
+    доверенный прокси. Именно правый устойчив к подделке: даже если клиент
+    пришлёт свой ``X-Forwarded-For``, прокси допишет настоящий IP справа.
+    Откат — на ``X-Real-IP``, затем на адрес подключения.
+    """
+    direct = request.client.host if request.client else "unknown"
+    if not _settings.trust_proxy_headers:
+        return direct
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.headers.get("x-real-ip", "").strip() or direct
+
 
 # In-memory fallback: {namespace: {identifier: deque[timestamps]}}
 _mem: dict[str, dict[str, deque]] = defaultdict(lambda: defaultdict(deque))
