@@ -1,0 +1,49 @@
+on:
+  pull_request:
+    - workflows: [backend-ci]
+      filter:
+        target_branches: ["main"]
+        paths: ["backend/**", ".sourcecraft/ci.yaml"]
+    - workflows: [mobile-ci]
+      filter:
+        target_branches: ["main"]
+        paths: ["mobile/**", ".sourcecraft/ci.yaml"]
+
+  push:
+    - workflows: [backend-ci]
+      filter:
+        branches: ["main"]
+        paths: ["backend/**", ".sourcecraft/ci.yaml"]
+    - workflows: [mobile-ci]
+      filter:
+        branches: ["main"]
+        paths: ["mobile/**", ".sourcecraft/ci.yaml"]
+
+workflows:
+  backend-ci:
+    tasks:
+      - name: backend-test
+        cubes:
+          # Все шаги выполняются в одном контейнере, чтобы установленные
+          # зависимости были доступны и lint, и pytest.
+          - name: backend-check
+            image: docker.io/library/python:3.12
+            script:
+              - pip install --upgrade pip
+              - pip install -r backend/requirements.txt
+              - cd backend
+              - ruff check .
+              - python -m pytest
+
+  mobile-ci:
+    tasks:
+      - name: mobile-check
+        cubes:
+          # Установка зависимостей и lint выполняются в одном контейнере,
+          # чтобы npm-пакеты были доступны ESLint.
+          - name: mobile-lint
+            image: docker.io/library/node:20
+            script:
+              - cd mobile
+              - if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+              - npx eslint .

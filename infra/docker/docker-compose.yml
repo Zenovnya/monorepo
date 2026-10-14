@@ -1,0 +1,55 @@
+# LexBear backend — самодостаточный деплой на своём сервере (бесплатно).
+#
+# Поднимает PostgreSQL + FastAPI-бэкенд в контейнерах. Redis не нужен
+# (кэш при его отсутствии молча деградирует). Миграции применяются
+# автоматически при старте бэкенда.
+#
+# Запуск:
+#   cd infra/docker
+#   cp .env.example .env      # и впишите свои значения
+#   docker compose up -d --build
+#   # разовый сид контента (после старта):
+#   curl -X POST http://localhost:8000/lexbear/seed -H "X-Admin-Token: <ADMIN_TOKEN из .env>"
+#
+# Проверка: curl http://localhost:8000/health
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lexbear
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lexbear
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lexbear -d lexbear"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Асинхронный драйвер asyncpg + внутренний хост db из compose-сети.
+      DATABASE_URL: postgresql+asyncpg://lexbear:${POSTGRES_PASSWORD}@db:5432/lexbear
+      # Обязательно ≥32 символов (в проде проверяется).
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      DEBUG: "false"
+      # Токен для служебных эндпоинтов (сид/админка контента).
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      # За обратным прокси (nginx) включите, чтобы rate-limit видел реальный IP.
+      TRUST_PROXY_HEADERS: "false"
+    # Миграции Alembic перед запуском, затем Uvicorn.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
