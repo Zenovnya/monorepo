@@ -18,6 +18,7 @@ from app.database import Base
 from app.modules.auth import models  # noqa: F401
 from app.modules.content import models  # noqa: F401
 from app.modules.mascot import models  # noqa: F401
+from app.modules.learning import models as learning_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

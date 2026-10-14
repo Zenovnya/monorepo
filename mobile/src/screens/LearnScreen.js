@@ -46,6 +46,15 @@ export default function LearnScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.title}>Учёба</Text>
         <Text style={styles.subtitle}>Короткие уроки · живые кейсы · мишка-юрист</Text>
+
+      <Pressable style={styles.adaptiveButton} onPress={() => navigation.navigate('AdaptiveLearning')}>
+        <Text style={styles.adaptiveButtonTitle}>Продолжить адаптивную сессию</Text>
+        <Text style={styles.adaptiveButtonText}>Следующий кейс подберёт система по твоим компетенциям</Text>
+      </Pressable>
+      <Pressable style={styles.assessmentButton} onPress={() => navigation.navigate('Assessment')}>
+        <Text style={styles.assessmentButtonTitle}>Пройти начальную диагностику</Text>
+        <Text style={styles.assessmentButtonText}>Система точнее подберёт первые кейсы</Text>
+      </Pressable>
       </View>
 
       {units.map((unit) => (
@@ -128,6 +137,12 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, marginTop: 16 },
   title: { fontSize: 28, fontWeight: '900', color: colors.text },
   subtitle: { fontSize: 14, color: colors.subtext, marginTop: 4 },
+  adaptiveButton: { marginHorizontal: 16, marginTop: 18, padding: 16, borderRadius: 18, backgroundColor: colors.accent, borderWidth: 3, borderColor: colors.border },
+  adaptiveButtonTitle: { color: colors.text, fontSize: 16, fontWeight: '900' },
+  adaptiveButtonText: { color: colors.text, marginTop: 5, lineHeight: 18 },
+  assessmentButton: { marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border },
+  assessmentButtonTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
+  assessmentButtonText: { color: colors.subtext, marginTop: 4 },
   unit: {
     marginHorizontal: 16,
     marginTop: 20,

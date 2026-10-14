@@ -20,6 +20,9 @@ import ArticlesScreen from '../screens/ArticlesScreen';
 import ShopScreen from '../screens/ShopScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
+import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
+import AssessmentScreen from '../screens/AssessmentScreen';
+import LearningProgressScreen from '../screens/LearningProgressScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -86,6 +89,9 @@ function MainStack() {
       <Stack.Screen name="Shop" component={ShopScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Premium" component={PremiumScreen} />
+      <Stack.Screen name="AdaptiveLearning" component={AdaptiveLearningScreen} />
+      <Stack.Screen name="Assessment" component={AssessmentScreen} />
+      <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
     </Stack.Navigator>
   );
 }

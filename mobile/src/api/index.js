@@ -12,3 +12,4 @@ export { notificationsApi } from './notifications';
 export { analyticsApi } from './analytics';
 export { lexbearApi } from './lexbear';
 export { userApi } from './user';
+export { learningApi } from './learning';
