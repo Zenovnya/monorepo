@@ -11,6 +11,10 @@ import os
 # Ключ должен быть не короче 32 символов (см. app/config.py).
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci-is-long-enough-123456")
 os.environ.setdefault("DEBUG", "false")
+os.environ.setdefault(
+    "CORS_ORIGIN_REGEX",
+    r"^http://192\.168\.0\.\d{1,3}:8081$",
+)
 
 import pytest
 from fastapi.testclient import TestClient

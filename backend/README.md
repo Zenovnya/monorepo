@@ -32,6 +32,18 @@ pip install -r requirements.txt
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/sourcecraft
 ```
 
+Для Expo Web, открытого с другого устройства в локальной сети, разрешите
+origin dev-сервера явно или регулярным выражением:
+
+```bash
+CORS_ORIGINS='["http://localhost:8081","http://192.168.0.108:8081"]'
+# либо для меняющегося адреса в этой локальной подсети:
+CORS_ORIGIN_REGEX='^http://192\.168\.0\.\d{1,3}:8081$'
+```
+
+В production рекомендуется задавать точный `CORS_ORIGINS`, а regex оставлять
+пустым.
+
 По умолчанию подключение идёт к локальному PostgreSQL:
 
 ```

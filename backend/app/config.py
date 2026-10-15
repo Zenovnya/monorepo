@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
+    # Необязательное регулярное выражение для динамических dev-origin (например,
+    # LAN-адреса Expo). В production оставляйте пустым и используйте allowlist.
+    cors_origin_regex: str | None = None
 
     # --- Прокси ---
     # Включайте в production, если приложение работает за доверенным реверс-
