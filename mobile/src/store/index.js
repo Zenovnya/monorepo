@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
 import { authApi } from '../api/auth';
 import { syncPushToken } from '../utils/notifications';
+import tokenStorage from '../utils/tokenStorage';
 
 /**
  * Глобальное хранилище UI-состояния приложения (Zustand).
@@ -12,7 +12,7 @@ const useAppStore = create(() => ({}));
 /**
  * Хранилище состояния аутентификации (Zustand) — единственный источник
  * правды о пользователе и состоянии авторизации.
- * Токены хранятся в SecureStore, сессия восстанавливается при старте приложения.
+ * Токены хранятся в platform-specific storage, сессия восстанавливается при старте приложения.
  */
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -21,10 +21,10 @@ export const useAuthStore = create((set, get) => ({
   refreshToken: null,
   isHydrated: false,
 
-  // Сохраняет токены в SecureStore + юзера в память
+  // Сохраняет токены в platform-specific storage + юзера в память
   setAuth: async ({ user, accessToken, refreshToken }) => {
-    if (accessToken) await SecureStore.setItemAsync('accessToken', accessToken);
-    if (refreshToken) await SecureStore.setItemAsync('refreshToken', refreshToken);
+    if (accessToken) await tokenStorage.setItemAsync('accessToken', accessToken);
+    if (refreshToken) await tokenStorage.setItemAsync('refreshToken', refreshToken);
 
     set({
       user: user ?? get().user,
@@ -38,8 +38,8 @@ export const useAuthStore = create((set, get) => ({
   setUser: (patch) => set((state) => ({ user: { ...(state.user || {}), ...patch } })),
 
   logout: async () => {
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
+    await tokenStorage.deleteItemAsync('accessToken');
+    await tokenStorage.deleteItemAsync('refreshToken');
     set({
       user: null,
       accessToken: null,
@@ -50,8 +50,26 @@ export const useAuthStore = create((set, get) => ({
 
   // Восстановление сессии при старте приложения
   hydrate: async () => {
-    const accessToken = await SecureStore.getItemAsync('accessToken');
-    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    let accessToken;
+    let refreshToken;
+
+    try {
+      [accessToken, refreshToken] = await Promise.all([
+        tokenStorage.getItemAsync('accessToken'),
+        tokenStorage.getItemAsync('refreshToken'),
+      ]);
+    } catch {
+      // Storage may be unavailable (for example, localStorage can be blocked
+      // by browser privacy settings). Never leave the app on the loader.
+      set({
+        user: null,
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+        isHydrated: true,
+      });
+      return;
+    }
 
     set({
       accessToken,
@@ -79,12 +97,12 @@ export const useAuthStore = create((set, get) => ({
           refreshToken: refreshed.refresh_token,
           isAuthenticated: true,
         });
-        await SecureStore.setItemAsync('accessToken', refreshed.access_token);
-        await SecureStore.setItemAsync('refreshToken', refreshed.refresh_token);
+        await tokenStorage.setItemAsync('accessToken', refreshed.access_token);
+        await tokenStorage.setItemAsync('refreshToken', refreshed.refresh_token);
       } catch {
         // Сессия невосстановима — выходим.
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
+        await tokenStorage.deleteItemAsync('accessToken');
+        await tokenStorage.deleteItemAsync('refreshToken');
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       }
     }
