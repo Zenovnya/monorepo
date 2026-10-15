@@ -1,8 +1,24 @@
-"""Pure tests for the deterministic adaptive-learning baseline."""
+"""Pure tests for adaptive-learning service helpers."""
+
+import uuid
 
 import pytest
 
-from app.modules.learning.service import adaptive_score
+from app.modules.learning.service import adaptive_score, new_competency_state
+
+
+def test_new_competency_state_has_usable_numeric_defaults() -> None:
+    """A new ORM state can be updated before it is flushed to the database."""
+    state = new_competency_state(uuid.uuid4(), uuid.uuid4())
+
+    state.attempts += 1
+    state.correct_count += 1
+    state.mastery += 0.12
+
+    assert state.attempts == 1
+    assert state.correct_count == 1
+    assert state.mastery == pytest.approx(0.12)
+    assert state.confidence == 0.0
 
 
 def test_adaptive_score_prefers_weaker_competency() -> None:

@@ -1,10 +1,13 @@
 """Точка входа FastAPI-приложения."""
 
+import logging
 import os
+import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import get_settings
@@ -13,6 +16,19 @@ from app.middleware import GlobalRateLimitMiddleware
 from app.modules import api_router
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def is_allowed_origin(origin: str | None) -> bool:
+    """Check an origin against the same allowlist used by CORS middleware."""
+    if origin is None:
+        return False
+    if origin in settings.cors_origins:
+        return True
+    return bool(
+        settings.cors_origin_regex
+        and re.fullmatch(settings.cors_origin_regex, origin)
+    )
 
 
 @asynccontextmanager
@@ -37,6 +53,28 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
     openapi_url="/openapi.json" if settings.debug else None,
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Log unexpected failures and return a stable response through CORS."""
+    logger.exception("Unhandled error while processing %s", request.url.path, exc_info=exc)
+    origin = request.headers.get("origin")
+    headers = {}
+    if is_allowed_origin(origin):
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
+        }
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Внутренняя ошибка сервера"},
+        headers=headers,
+    )
 
 # Настраиваем CORS только для явно разрешённых источников.
 app.add_middleware(

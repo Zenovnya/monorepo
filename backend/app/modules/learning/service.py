@@ -14,6 +14,21 @@ class LearningError(Exception):
     pass
 
 
+def new_competency_state(
+    user_id: uuid.UUID,
+    competency_id: uuid.UUID,
+) -> UserCompetencyState:
+    """Create an immediately usable state without relying on flush-time defaults."""
+    return UserCompetencyState(
+        user_id=user_id,
+        competency_id=competency_id,
+        mastery=0.0,
+        confidence=0.0,
+        attempts=0,
+        correct_count=0,
+    )
+
+
 def adaptive_score(weakness: float, difficulty: float) -> float:
     """Deterministic, explainable baseline score used by the MVP ranker."""
     return 0.65 * weakness + 0.25 * (1 - difficulty) + 0.10
@@ -93,7 +108,7 @@ async def evaluate(session: AsyncSession, user_id: uuid.UUID, data):
     for link in links:
         state = (await session.execute(select(UserCompetencyState).where(UserCompetencyState.user_id == user_id, UserCompetencyState.competency_id == link.competency_id))).scalars().first()
         if not state:
-            state = UserCompetencyState(user_id=user_id, competency_id=link.competency_id)
+            state = new_competency_state(user_id, link.competency_id)
             session.add(state)
         state.attempts += 1
         state.correct_count += int(answer.is_correct)
