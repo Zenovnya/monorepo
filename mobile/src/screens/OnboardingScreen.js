@@ -19,22 +19,25 @@ const goals = [
 ];
 const minutes = [5, 10, 15];
 
-export default function OnboardingScreen() {
+export default function OnboardingScreen({ onComplete }) {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('rights');
   const [mins, setMins] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
 
   const finish = async () => {
     setLoading(true);
+    setError(false);
     try {
       await userApi.onboard({ goal, minutes: mins });
-      // Обновляем пользователя в сторе.
+      onComplete();
       setUser({ onboarded: true });
     } catch {
-      // Игнорируем ошибку сети — онбординг считается пройденным локально.
-      setUser({ onboarded: true });
+      setError(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -115,6 +118,7 @@ export default function OnboardingScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
+        {error ? <Text style={styles.error}>Не удалось сохранить настройки. Проверь соединение и повтори.</Text> : null}
         {step > 0 && (
           <Pressable
             style={[styles.btn, styles.btnWhite]}
@@ -178,7 +182,8 @@ const styles = StyleSheet.create({
   },
   minValue: { fontSize: 32, fontWeight: '900', color: colors.text },
   minLabel: { fontSize: 14, color: colors.subtext },
-  footer: { flexDirection: 'row', gap: 12, padding: 24, paddingBottom: 40 },
+  footer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, padding: 24, paddingBottom: 40 },
+  error: { width: '100%', color: colors.error, fontWeight: '700', textAlign: 'center' },
   btn: {
     flex: 1,
     height: 56,

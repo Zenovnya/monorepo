@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -78,9 +78,9 @@ function AuthStack() {
   );
 }
 
-function MainStack() {
+function MainStack({ startWithAssessment = false }) {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName={startWithAssessment ? 'Assessment' : 'MainTabs'} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Lesson" component={LessonScreen} />
       <Stack.Screen name="CaseDetail" component={CaseDetailScreen} />
@@ -98,10 +98,15 @@ function MainStack() {
 
 export default function RootNavigator() {
   const { isHydrated, isAuthenticated, user, hydrate } = useAuthStore();
+  const [startWithAssessment, setStartWithAssessment] = useState(false);
 
   useEffect(() => {
     if (!isHydrated) hydrate();
   }, [isHydrated, hydrate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) setStartWithAssessment(false);
+  }, [isAuthenticated]);
 
   // Показываем спиннер, пока идёт гидратация, либо пока по валидному токену
   // ещё догружается профиль пользователя (иначе экраны получат user == null
@@ -116,8 +121,8 @@ export default function RootNavigator() {
 
   // Пользователь ещё не прошёл онбординг — показываем его.
   if (isAuthenticated && user && !user.onboarded) {
-    return <OnboardingScreen />;
+    return <OnboardingScreen onComplete={() => setStartWithAssessment(true)} />;
   }
 
-  return isAuthenticated ? <MainStack /> : <AuthStack />;
+  return isAuthenticated ? <MainStack startWithAssessment={startWithAssessment} /> : <AuthStack />;
 }
