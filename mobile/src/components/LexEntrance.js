@@ -16,7 +16,7 @@ import { colors } from '../theme/colors';
  * LexEntrance — анимация въезда персонажа Lex в кейс типа lex_entrance.
  * Показывает подсказку (hint) после анимации и вибрацию.
  */
-export const LexEntrance = ({ hint, onDone }) => {
+export const LexEntrance = ({ hint, onDone: _onDone }) => {
   const translateX = useSharedValue(-300);
   const opacity = useSharedValue(0);
   const [emotion, setEmotion] = useState('happy');

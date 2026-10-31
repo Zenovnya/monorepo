@@ -45,6 +45,8 @@ export default function LessonScreen({ route, navigation }) {
   const [multi, setMulti] = useState([]); // индексы для множественного выбора
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [shake, setShake] = useState(false);
+  // id вопроса -> ответ. Уходит на сервер: результат считает он.
+  const [answers, setAnswers] = useState({});
 
   const { data: lesson, isLoading, error } = useQuery({
     queryKey: ['lexbear-lesson', lessonId],
@@ -57,9 +59,13 @@ export default function LessonScreen({ route, navigation }) {
   // Ответ содержит level_up / streak_incremented / achievements_unlocked —
   // по ним показываем очередь тостов с медведем в нужной мимике.
   const completeMutation = useMutation({
-    mutationFn: ({ correct, total }) =>
-      lexbearApi.completeLesson(lessonId, { correct, total }),
+    mutationFn: ({ answers: payload }) =>
+      lexbearApi.completeLesson(lessonId, { answers: payload }),
     onSuccess: (data) => {
+      // Итог на экране берём с сервера: он же начислил XP.
+      if (typeof data?.correct === 'number') {
+        setCorrectCount(data.correct);
+      }
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
       queryClient.invalidateQueries(['gamification-me']);
@@ -124,6 +130,10 @@ export default function LessonScreen({ route, navigation }) {
     const rightAnswers = normalizeCorrect(q.correct);
     const isMulti = Array.isArray(q.correct);
 
+    // Ответ уходит на сервер как есть: сервер сам сравнит с эталоном.
+    const given = isMulti ? [...multi].sort() : selected;
+    setAnswers((prev) => ({ ...prev, [q.id]: given }));
+
     let isRight;
     if (isMulti) {
       const sortedUser = [...multi].sort();
@@ -151,11 +161,8 @@ export default function LessonScreen({ route, navigation }) {
     if (qIdx + 1 < questions.length && lives > 0) {
       setQIdx(qIdx + 1);
     } else {
-      // Завершение урока.
-      completeMutation.mutate({
-        correct: correctCount,
-        total: questions.length,
-      });
+      // Завершение урока: отправляем ответы, сервер считает результат.
+      completeMutation.mutate({ answers });
       setPhase('done');
     }
   };
