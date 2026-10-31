@@ -3,12 +3,14 @@
 import json
 import re
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.cache import cache_get, cache_set, content_version
+from app.modules.content import lexbear_scoring
 from app.modules.content.lexbear_models import (
     Article,
     LearnedArticle,
@@ -315,16 +317,31 @@ async def complete_lesson(
     session: AsyncSession,
     user_id: uuid.UUID,
     lesson_id: int,
-    correct: int,
-    total: int,
+    answers: dict[str, Any],
 ) -> dict:
     """Завершает урок LexBear: начисляет XP, короны, стрик и разблокирует статьи.
+
+    ``answers`` — ответы пользователя (``id вопроса -> ответ``). Результат
+    считается здесь, по вопросам из БД: клиентский счёт не принимается.
 
     Возвращает результат, аналогичный веб-эндпоинту /api/lesson/complete.
     """
     lesson = await session.get(LexBearLesson, lesson_id)
     if lesson is None:
         raise LessonNotFoundError("Урок не найден")
+
+    # Вопросы берём из БД, а не из запроса: клиент не должен влиять ни на
+    # знаменатель, ни на то, какие ответы считаются правильными.
+    questions_result = await session.scalars(
+        select(Question)
+        .where(Question.lesson_id == lesson_id)
+        .order_by(Question.order)
+    )
+    questions = [
+        {"id": q.id, "correct": q.correct} for q in questions_result.all()
+    ]
+
+    correct, total = lexbear_scoring.score_answers(questions, answers)
 
     accuracy = correct / total if total > 0 else 0
     crowns = 3 if accuracy >= 0.95 else 2 if accuracy >= 0.75 else 1 if accuracy >= 0.5 else 0
@@ -418,6 +435,10 @@ async def complete_lesson(
 
     return {
         "ok": True,
+        # Серверный счёт — источник истины. Клиент показывает именно его,
+        # чтобы итог на экране всегда совпадал с начисленным XP.
+        "correct": correct,
+        "total": total,
         "xp_gain": xp_gain,
         "crowns": progress.crowns,
         "accuracy": round(accuracy * 100),

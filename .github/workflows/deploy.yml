@@ -1,4 +1,4 @@
-name: Backend CI
+name: CI
 
 on:
   push:
@@ -6,11 +6,15 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'mobile/**'
+      - '.github/workflows/deploy.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'backend/**'
+      - 'mobile/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 jobs:
@@ -60,4 +64,27 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
+
+  mobile-lint:
+    name: Lint (mobile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
         run: pytest
