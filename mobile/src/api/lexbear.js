@@ -17,10 +17,11 @@ export const lexbearApi = {
   getLesson: (lessonId) =>
     apiClient.get(`/lexbear/lessons/${lessonId}`).then((r) => r.data),
 
-  // Завершение урока (XP, короны, стрик, разблокировка статей)
-  completeLesson: (lessonId, { correct, total }) =>
+  // Завершение урока (XP, короны, стрик, разблокировка статей).
+  // Сервер сам считает результат по ответам — счёт с клиента не принимается.
+  completeLesson: (lessonId, { answers }) =>
     apiClient
-      .post(`/lexbear/lessons/${lessonId}/complete`, { correct, total })
+      .post(`/lexbear/lessons/${lessonId}/complete`, { answers })
       .then((r) => r.data),
 
   // Статьи со статусом изучения

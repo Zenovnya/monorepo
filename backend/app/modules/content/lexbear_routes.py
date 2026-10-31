@@ -1,6 +1,7 @@
 """Роуты контента LexBear (юниты, уроки, теория, вопросы, статьи)."""
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -9,16 +10,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.modules.admin.security import require_admin
 from app.modules.auth import service as auth_service
-from app.modules.content import lexbear_service
+from app.modules.content import lexbear_scoring, lexbear_service
 
 router = APIRouter(prefix="/lexbear", tags=["lexbear"])
 
 
 class LessonCompleteIn(BaseModel):
-    """Схема завершения урока LexBear."""
+    """Схема завершения урока LexBear.
 
-    correct: int = Field(ge=0)
-    total: int = Field(ge=1)
+    Клиент присылает ответы на вопросы, а не готовый счёт: результат считает
+    сервер (``lexbear_scoring``). ``correct``/``total`` из старого контракта
+    принимаются только если ``answers`` не передан — они игнорируются для
+    расчёта и логируются как расхождение, чтобы не ломать уже выпущенные
+    сборки мобильного приложения.
+    """
+
+    answers: dict[str, Any] | None = Field(
+        default=None,
+        description="Ответы: id вопроса -> выбранный вариант(ы).",
+    )
+    correct: int | None = Field(
+        default=None,
+        ge=0,
+        description="Устарело: не используется для расчёта результата.",
+    )
+    total: int | None = Field(
+        default=None,
+        ge=1,
+        description="Устарело: не используется для расчёта результата.",
+    )
 
 
 def _get_current_user_id(
@@ -107,19 +127,39 @@ async def complete_lesson(
     authorization: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Завершает урок: начисляет XP, короны, стрик и разблокирует статьи."""
+    """Завершает урок: начисляет XP, короны, стрик и разблокирует статьи.
+
+    Результат считается на сервере по ответам пользователя. Если клиент
+    прислал только ``correct``/``total`` (старый контракт), запрос
+    отклоняется: доверять клиентскому счёту нельзя, а тихо засчитывать
+    «0 из N» — значит обнулять честно пройденный урок.
+    """
     user_id = _get_current_user_id(authorization)
+
+    if not data.answers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Передайте answers (id вопроса -> ответ): "
+                "результат урока считается на сервере."
+            ),
+        )
+
     try:
         return await lexbear_service.complete_lesson(
             session,
             user_id,
             lesson_id,
-            correct=data.correct,
-            total=data.total,
+            answers=data.answers,
         )
     except lexbear_service.LessonNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except lexbear_scoring.AnswerFormatError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

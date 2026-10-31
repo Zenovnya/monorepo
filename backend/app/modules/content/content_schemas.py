@@ -59,6 +59,9 @@ class UnitIn(BaseModel):
     color: str = "#C9A227"
     locked: bool = False
     why_practical: str = ""
+    # False — юнит остаётся в паках, но не отдаётся клиенту и деактивируется в БД
+    # (мягкое удаление: прогресс и FK сохраняются).
+    is_active: bool = True
     lessons: list[LessonIn] = Field(default_factory=list)
 
 

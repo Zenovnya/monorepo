@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { userApi } from '../api/user';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { colors } from '../theme/colors';
+import { AnimatedButton } from '../components/AnimatedButton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { AnimatedStep } from '../components/motion/AnimatedStep';
+import { colors, radius, spacing, typography } from '../theme/tokens';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { StepDots, GoalCard, MinuteCard } from './onboarding/parts';
 
 const goals = [
   { key: 'rights', label: 'Знать свои права', icon: '🛡️' },
@@ -18,13 +18,33 @@ const goals = [
   { key: 'work', label: 'Для работы', icon: '💼' },
 ];
 const minutes = [5, 10, 15];
+const STEP_COUNT = 3;
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState('forward');
   const [goal, setGoal] = useState('rights');
   const [mins, setMins] = useState(10);
   const [loading, setLoading] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
+  const reduced = useReducedMotion();
+  // Растёт при каждом выборе цели — маскот реагирует на действие.
+  const [cheerKey, setCheerKey] = useState(0);
+  const scrollRef = useRef(null);
+
+  const goTo = useCallback((next, dir) => {
+    setDirection(dir);
+    setStep(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, []);
+
+  const onGoal = (key) => {
+    setGoal(key);
+    setCheerKey((k) => k + 1);
+    if (!reduced) {
+      Haptics.selectionAsync();
+    }
+  };
 
   const finish = async () => {
     setLoading(true);
@@ -38,100 +58,85 @@ export default function OnboardingScreen() {
     }
   };
 
+  const primaryLabel =
+    step === STEP_COUNT - 1
+      ? (loading ? 'Готовим путь…' : 'Начать путь')
+      : (step === 0 ? 'Начать' : 'Дальше');
+
   return (
     <View style={styles.container}>
-      {/* Прогресс-точки */}
-      <View style={styles.dots}>
-        {[0, 1, 2].map((i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              { width: i === step ? 32 : 16, backgroundColor: i <= step ? colors.accent : colors.track },
-            ]}
-          />
-        ))}
-      </View>
+      <StepDots step={step} count={STEP_COUNT} />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {step === 0 && (
-          <>
-            <View style={styles.centerBlock}>
-              {/* Приветственный махание лапой + говорящий рот. */}
-              <AnimatedMascot size={180} wave talking />
-              <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>
-                  Привет! Я <Text style={{ fontWeight: '900' }}>LexBear</Text>. Научу тебя праву без скуки.
-                </Text>
-              </View>
-              <Text style={styles.title}>Учи законы как в игре</Text>
-              <Text style={styles.subtitle}>
-                УК, КоАП, ГК, ТК — короткие уроки, живые кейсы и мишка-юрист.
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <AnimatedStep step={step} direction={direction} active={step === 0}>
+          <View style={styles.centerBlock}>
+            {/* Приветственный жест + говорящая реплика. */}
+            <AnimatedMascot size={180} wave talking />
+            <View style={styles.bubble}>
+              <Text style={styles.bubbleText}>
+                Привет! Я <Text style={styles.bold}>LexBear</Text>. Научу тебя праву без скуки.
               </Text>
             </View>
-          </>
-        )}
+            <Text style={styles.title}>Учи законы как в игре</Text>
+            <Text style={styles.subtitle}>
+              УК, КоАП, ГК, ТК — короткие уроки, живые кейсы и мишка-юрист.
+            </Text>
+          </View>
+        </AnimatedStep>
 
+        <AnimatedStep step={step} direction={direction} active={step === 1}>
+          <Text style={styles.title}>Зачем ты здесь?</Text>
+          <View style={styles.grid}>
+            {goals.map((g, index) => (
+              <FadeInView key={g.key} index={index} style={styles.goalCell}>
+                <GoalCard
+                  icon={g.icon}
+                  label={g.label}
+                  selected={goal === g.key}
+                  onPress={() => onGoal(g.key)}
+                />
+              </FadeInView>
+            ))}
+          </View>
+        </AnimatedStep>
 
-        {step === 1 && (
-          <>
-            <Text style={styles.title}>Зачем ты здесь?</Text>
-            <View style={styles.grid}>
-              {goals.map((g) => (
-                <Pressable
-                  key={g.key}
-                  onPress={() => setGoal(g.key)}
-                  style={[
-                    styles.goalCard,
-                    goal === g.key && styles.cardSelected,
-                  ]}
-                >
-                  <Text style={styles.goalIcon}>{g.icon}</Text>
-                  <Text style={styles.goalLabel}>{g.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <Text style={styles.title}>Сколько минут в день?</Text>
-            <View style={styles.minRow}>
-              {minutes.map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => setMins(m)}
-                  style={[styles.minCard, mins === m && styles.cardSelected]}
-                >
-                  <Text style={styles.minValue}>{m}</Text>
-                  <Text style={styles.minLabel}>мин</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.subtitle}>Всегда можно поменять в настройках.</Text>
-          </>
-        )}
+        <AnimatedStep step={step} direction={direction} active={step === 2}>
+          <Text style={styles.title}>Сколько минут в день?</Text>
+          <View style={styles.minRow}>
+            {minutes.map((m, index) => (
+              <FadeInView key={m} index={index} style={styles.minCell}>
+                <MinuteCard value={m} selected={mins === m} onPress={() => setMins(m)} />
+              </FadeInView>
+            ))}
+          </View>
+          <Text style={styles.subtitle}>Всегда можно поменять в настройках.</Text>
+          <View style={styles.cheerMascot}>
+            <AnimatedMascot key={cheerKey} size={96} celebrate={cheerKey > 0} emotion="happy" />
+          </View>
+        </AnimatedStep>
       </ScrollView>
 
       <View style={styles.footer}>
-        {step > 0 && (
-          <Pressable
-            style={[styles.btn, styles.btnWhite]}
-            onPress={() => setStep((s) => s - 1)}
-          >
-            <Text style={styles.btnWhiteText}>Назад</Text>
-          </Pressable>
-        )}
-        <Pressable
-          style={[styles.btn, styles.btnGreen, { flex: 2 }]}
-          onPress={step < 2 ? () => setStep((s) => s + 1) : finish}
-          disabled={loading}
-        >
-          <Text style={styles.btnText}>
-            {step < 2 ? (step === 0 ? 'Начать' : 'Дальше') : loading ? 'Готовим путь…' : 'Начать путь'}
-          </Text>
-        </Pressable>
+        {step > 0 ? (
+          <View style={styles.footerSecondary}>
+            <AnimatedButton
+              title="Назад"
+              variant="outline"
+              onPress={() => goTo(step - 1, 'backward')}
+            />
+          </View>
+        ) : null}
+        <View style={styles.footerPrimary}>
+          <AnimatedButton
+            title={primaryLabel}
+            loading={loading}
+            onPress={() => (step < STEP_COUNT - 1 ? goTo(step + 1, 'forward') : finish())}
+          />
+        </View>
       </View>
     </View>
   );
@@ -139,57 +144,58 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 24 },
-  dot: { height: 8, borderRadius: 4 },
-  content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
-  centerBlock: { alignItems: 'center', gap: 16 },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    gap: spacing.base,
+  },
+  centerBlock: { alignItems: 'center', gap: spacing.base },
   bubble: {
     backgroundColor: colors.card,
     borderWidth: 3,
     borderColor: colors.border,
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: radius.xl,
+    padding: spacing.md + 2,
     maxWidth: 320,
   },
-  bubbleText: { fontSize: 15, fontWeight: '600', color: colors.text, textAlign: 'center' },
-  title: { fontSize: 28, fontWeight: '900', color: colors.text, textAlign: 'center' },
-  subtitle: { fontSize: 14, color: colors.subtext, textAlign: 'center', maxWidth: 300 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, width: '100%', maxWidth: 360, justifyContent: 'center' },
-  goalCard: {
-    width: '47%',
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.track,
-    borderRadius: 18,
-    padding: 16,
+  bubbleText: { ...typography.body, color: colors.text, textAlign: 'center' },
+  bold: { fontWeight: '900' },
+  title: { ...typography.display, color: colors.text, textAlign: 'center' },
+  subtitle: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.subtext,
+    textAlign: 'center',
+    maxWidth: 300,
   },
-  cardSelected: { borderWidth: 3, borderColor: colors.accent, backgroundColor: '#FFF7DE' },
-  goalIcon: { fontSize: 28 },
-  goalLabel: { fontWeight: '700', color: colors.text, marginTop: 6 },
-  minRow: { flexDirection: 'row', gap: 12, width: '100%', maxWidth: 360 },
-  minCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.track,
-    borderRadius: 18,
-    padding: 20,
-    alignItems: 'center',
-  },
-  minValue: { fontSize: 32, fontWeight: '900', color: colors.text },
-  minLabel: { fontSize: 14, color: colors.subtext },
-  footer: { flexDirection: 'row', gap: 12, padding: 24, paddingBottom: 40 },
-  btn: {
-    flex: 1,
-    height: 56,
-    borderRadius: 16,
-    alignItems: 'center',
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    width: '100%',
+    maxWidth: 360,
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.border,
+    marginTop: spacing.base,
   },
-  btnGreen: { backgroundColor: colors.success, shadowColor: colors.successDark, shadowOpacity: 1, shadowOffset: { width: 0, height: 4 }, shadowRadius: 0 },
-  btnWhite: { backgroundColor: colors.card },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
-  btnWhiteText: { color: colors.text, fontWeight: '800', fontSize: 17 },
+  goalCell: { width: '47%' },
+  minRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    width: '100%',
+    maxWidth: 360,
+    marginTop: spacing.base,
+  },
+  minCell: { flex: 1 },
+  cheerMascot: { alignItems: 'center', marginTop: spacing.lg },
+  footer: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl + spacing.sm,
+    backgroundColor: colors.background,
+  },
+  footerSecondary: { flex: 1 },
+  footerPrimary: { flex: 2 },
 });

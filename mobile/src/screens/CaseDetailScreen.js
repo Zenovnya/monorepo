@@ -1,18 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { AnimatedButton } from '../components/AnimatedButton';
+import { FeedbackCard } from '../components/FeedbackCard';
+import { FadeInView } from '../components/motion/FadeInView';
+import { AnimatedStep } from '../components/motion/AnimatedStep';
+import { ErrorState, LoadingState } from '../components/StateViews';
 import { SpeechBubble } from '../components/SpeechBubble';
 import { LegalText } from '../components/LegalText';
-import { colors } from '../theme/colors';
+import { AnswerRow } from './assessment/AnswerRow';
+import { colors, radius, spacing, typography, sizes } from '../theme/tokens';
 
 /**
  * Экран прохождения отдельного кейса.
@@ -31,7 +30,7 @@ export default function CaseDetailScreen({ route, navigation }) {
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [hintShown, setHintShown] = useState(false);
 
-  const { data: caseData, isLoading, error } = useQuery({
+  const { data: caseData, isLoading, error, refetch } = useQuery({
     queryKey: ['lexbear-case', caseId],
     queryFn: () => lexbearApi.getCase(caseId),
   });
@@ -79,17 +78,20 @@ export default function CaseDetailScreen({ route, navigation }) {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={styles.container}>
+        <LoadingState label="Открываем дело…" />
       </View>
     );
   }
 
   if (error || !caseData) {
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={120} networkError />
-        <Text style={styles.errorText}>Не удалось загрузить кейс</Text>
+      <View style={styles.container}>
+        <ErrorState
+          title="Не удалось загрузить кейс"
+          message="Проверь соединение и попробуй снова."
+          onRetry={() => refetch()}
+        />
       </View>
     );
   }
@@ -111,12 +113,12 @@ export default function CaseDetailScreen({ route, navigation }) {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.codexChip}>
           <Text style={styles.codexText}>{caseData?.codex}</Text>
         </View>
 
-        {/* --- Медведь + его облачко: всегда сверху экрана кейса --- */}
+        {/* Медведь + реплика: состояние меняется вместе с фазой кейса. */}
         <View style={styles.bearRow}>
           <AnimatedMascot size={110} {...bearProps} />
           <View style={styles.bubbleWrap}>
@@ -124,84 +126,79 @@ export default function CaseDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Текст кейса */}
-        <View style={styles.caseCard}>
-          <LegalText style={styles.caseText}>{caseData?.case_text}</LegalText>
-        </View>
+        {/* Текст кейса. */}
+        <FadeInView>
+          <View style={styles.caseCard}>
+            <LegalText style={styles.caseText}>{caseData?.case_text}</LegalText>
+          </View>
+        </FadeInView>
 
-        <Text style={styles.questionTitle}>Квалификация?</Text>
+        <AnimatedStep step={checked ? 1 : 0} direction="forward">
+          <Text style={styles.questionTitle}>Квалификация?</Text>
 
-        <View style={styles.options}>
-          {options.map((opt, i) => {
-            const isSel = sel === i;
-            const isCorrect = checked && i === correctIndex;
-            const isWrongPick = checked === 'wrong' && isSel;
-            return (
-              <Pressable
-                key={String(i)}
-                onPress={() => !checked && setSel(i)}
-                style={[
-                  styles.option,
-                  isCorrect && { backgroundColor: '#DFF5E5', borderColor: colors.success },
-                  isWrongPick && { backgroundColor: '#FDE0DC', borderColor: colors.error },
-                  isSel && !checked && { backgroundColor: '#FFF7DE', borderColor: colors.accent },
-                ]}
-              >
-                <View style={styles.optionLetter}>
-                  <Text style={styles.optionLetterText}>
-                    {String.fromCharCode(65 + i)}
-                  </Text>
-                </View>
-                <Text style={styles.optionText}>{opt?.text ?? opt}</Text>
+          <View style={styles.options}>
+            {options.map((opt, i) => {
+              const isSel = sel === i;
+              const isAnswer = checked && i === correctIndex;
+              const isWrongPick = checked === 'wrong' && isSel;
+              return (
+                <FadeInView key={String(i)} index={i}>
+                  <AnswerRow
+                    index={i}
+                    text={opt?.text ?? opt}
+                    selected={isSel}
+                    disabled={Boolean(checked)}
+                    status={
+                      isAnswer
+                        ? 'correct'
+                        : isWrongPick
+                          ? 'incorrect'
+                          : isSel
+                            ? 'selected'
+                            : 'idle'
+                    }
+                    onPress={() => !checked && setSel(i)}
+                  />
+                </FadeInView>
+              );
+            })}
+          </View>
+
+          {/* «Подсказка» — медведь произносит её в облачке, без отдельной карточки. */}
+          {hint && !checked && !hintShown ? (
+            <FadeInView delay={80}>
+              <Pressable style={styles.hintBtn} onPress={() => setHintShown(true)}>
+                <Text style={styles.hintBtnText}>💡 Попросить подсказку у мишки</Text>
               </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Кнопка «Подсказка» — до проверки, если есть hint.
-            По клику меняем состояние медведя — он произнесёт hint в облачке. */}
-        {hint && !checked && !hintShown && (
-          <Pressable
-            style={styles.hintBtn}
-            onPress={() => setHintShown(true)}
-          >
-            <Text style={styles.hintBtnText}>💡 Попросить подсказку у мишки</Text>
-          </Pressable>
-        )}
+            </FadeInView>
+          ) : null}
+        </AnimatedStep>
 
         {/* Разбор после проверки — с кликабельными ссылками на статьи. */}
         {checked && explanation ? (
-          <View
-            style={[
-              styles.explainCard,
-              {
-                backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC',
-                borderColor: checked === 'right' ? colors.success : colors.error,
-              },
-            ]}
-          >
-            <Text style={styles.explainTitle}>
-              {checked === 'right' ? 'Почему верно' : 'Почему нет'}
-            </Text>
+          <FeedbackCard
+            status={checked === 'right' ? 'correct' : 'incorrect'}
+            title={checked === 'right' ? 'Почему верно' : 'Почему нет'}
+            style={styles.explainCard}
+          />
+        ) : null}
+        {checked && explanation ? (
+          <FadeInView delay={60} style={styles.explainBody}>
             <LegalText style={styles.explainText}>{explanation}</LegalText>
-          </View>
+          </FadeInView>
         ) : null}
       </ScrollView>
 
-      {/* Нижняя кнопка */}
+      {/* Нижняя кнопка: всегда одна — следующее логичное действие. */}
       <View style={styles.footer}>
         {!checked ? (
-          <Pressable
-            style={[styles.btn, { opacity: sel === null ? 0.55 : 1 }]}
+          <AnimatedButton
+            title="Проверить"
             disabled={sel === null}
             onPress={check}
-          >
-            <Text style={styles.btnText}>Проверить</Text>
-          </Pressable>
+          />
         ) : (
-          <Pressable style={styles.btn} onPress={() => navigation.goBack()}>
-            <Text style={styles.btnText}>К списку кейсов</Text>
-          </Pressable>
+          <AnimatedButton title="К списку кейсов" onPress={() => navigation.goBack()} />
         )}
       </View>
     </View>
@@ -210,119 +207,97 @@ export default function CaseDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, gap: 12 },
-  errorText: { fontSize: 15, fontWeight: '700', color: colors.error },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.base,
+  },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: sizes.iconButton,
+    height: sizes.iconButton,
+    borderRadius: sizes.iconButton / 2,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { fontSize: 18, fontWeight: '900', color: colors.text },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: colors.text, flex: 1 },
-  content: { paddingHorizontal: 16, paddingBottom: 140 },
+  backText: { ...typography.heading, color: colors.text },
+  headerTitle: { ...typography.heading, color: colors.text, flex: 1 },
+  content: { paddingHorizontal: spacing.base, paddingBottom: 140 },
   codexChip: {
     alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     borderWidth: 2,
     borderColor: colors.border,
     backgroundColor: colors.card,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
-  codexText: { fontWeight: '700', color: colors.text, fontSize: 13 },
+  codexText: { ...typography.caption, color: colors.text },
 
+  // minHeight убран: пузырь растёт по тексту и не «прыгает».
   bearRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 16,
-    minHeight: 130,
+    gap: spacing.sm,
+    marginBottom: spacing.base,
   },
   bubbleWrap: {
     flex: 1,
     justifyContent: 'center',
-    paddingTop: 12,
+    paddingTop: spacing.md,
   },
 
   caseCard: {
     backgroundColor: colors.card,
     borderWidth: 3,
     borderColor: colors.border,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: spacing.base,
   },
-  caseText: { fontSize: 15, color: colors.text, lineHeight: 21 },
-  questionTitle: { fontSize: 20, fontWeight: '900', color: colors.text, marginTop: 24 },
-  options: { gap: 12, marginTop: 12 },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.card,
-    borderWidth: 3,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
+  caseText: { ...typography.body, color: colors.text },
+  questionTitle: {
+    ...typography.title,
+    color: colors.text,
+    marginTop: spacing.xl,
   },
-  optionLetter: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: colors.paper,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionLetterText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  optionText: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
+  options: { gap: spacing.xs, marginTop: spacing.md },
 
   hintBtn: {
     alignSelf: 'flex-start',
-    marginTop: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: '#FFF7DE',
+    marginTop: spacing.base,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.goldTint,
     borderWidth: 2,
     borderColor: colors.accent,
   },
-  hintBtnText: { fontWeight: '800', color: colors.text, fontSize: 14 },
+  hintBtnText: { ...typography.caption, color: colors.text },
 
-  explainCard: {
-    marginTop: 20,
-    borderWidth: 3,
-    borderRadius: 16,
-    padding: 14,
+  explainCard: { marginTop: spacing.lg },
+  explainBody: {
+    marginTop: spacing.sm,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    padding: spacing.md + 2,
   },
-  explainTitle: { fontSize: 15, fontWeight: '900', color: colors.text },
-  explainText: { fontSize: 14, color: colors.text, marginTop: 6, lineHeight: 20 },
+  explainText: { ...typography.caption, fontWeight: '600', color: colors.text },
 
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
+    padding: spacing.base,
+    paddingBottom: spacing.xl,
     backgroundColor: colors.background,
     borderTopWidth: 3,
     borderTopColor: colors.border,
   },
-  btn: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.success,
-    borderWidth: 3,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
 });

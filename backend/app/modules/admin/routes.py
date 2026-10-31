@@ -25,6 +25,8 @@ from app.modules.content import content_loader
 from app.modules.content.content_schemas import CaseIn, LessonIn
 from app.modules.content.lexbear_models import LexBearLesson, Question, TheoryCard, Unit
 from app.modules.content.models import Case
+from app.modules.learning import importer as learning_importer
+from app.modules.learning.models import CaseVersion, LearningCase
 
 router = APIRouter(
     prefix="/admin/content",
@@ -48,6 +50,85 @@ async def reload_content(
     """
     report = await content_loader.load_content(session, prune=prune)
     return {"ok": True, "prune": prune, "report": report}
+
+
+# ---------------------------------------------------------------------------
+# Адаптивный банк: импорт кейсов из паков и статус юридической проверки
+# ---------------------------------------------------------------------------
+@router.post("/reload-adaptive")
+async def reload_adaptive(
+    publish: bool = True,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Переносит кейсы ``cases.json`` в адаптивный банк (идемпотентно).
+
+    Дополняет ``/reload`` (legacy-таблицы). После вызова ``GET /learning/next``
+    выбирает из полного набора кейсов, а не из одного стартового.
+
+    :param publish: публиковать ли кейсы. Юридическая проверка не меняется —
+        ``review_status`` остаётся ``imported``.
+    """
+    try:
+        report = await learning_importer.import_cases(session, publish=publish)
+    except learning_importer.ContentImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await session.commit()
+    await bump_content_version()
+    return {"ok": True, "publish": publish, "report": report}
+
+
+@router.get("/adaptive/review")
+async def adaptive_review_queue(
+    review_status: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Список кейсов адаптивного банка со статусом юридической проверки."""
+    query = (
+        select(CaseVersion)
+        .where(CaseVersion.source_slug.is_not(None))
+        .order_by(CaseVersion.review_status, CaseVersion.source_slug)
+    )
+    if review_status:
+        query = query.where(CaseVersion.review_status == review_status)
+    versions = (await session.scalars(query)).all()
+    return [
+        {
+            "slug": v.source_slug,
+            "title": (await session.get(LearningCase, v.case_id)).title,
+            "status": v.status,
+            "review_status": v.review_status,
+            "reviewed_by": v.reviewed_by,
+            "reviewed_at": v.reviewed_at.isoformat() if v.reviewed_at else None,
+        }
+        for v in versions
+    ]
+
+
+@router.post("/adaptive/review/{slug}")
+async def adaptive_set_review(
+    slug: str,
+    review_status: str,
+    reviewed_by: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Меняет статус юридической проверки кейса: ``in_review`` или ``approved``."""
+    try:
+        version = await learning_importer.set_review_status(
+            session, slug, review_status, reviewed_by=reviewed_by
+        )
+    except learning_importer.ContentImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    await session.commit()
+    return {
+        "ok": True,
+        "slug": slug,
+        "review_status": version.review_status,
+        "reviewed_by": version.reviewed_by,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -137,9 +218,7 @@ async def admin_list_units(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """Список юнитов (для выбора при добавлении урока)."""
-    units = (
-        await session.scalars(select(Unit).order_by(Unit.order))
-    ).all()
+    units = (await session.scalars(select(Unit).order_by(Unit.order))).all()
     return [
         {
             "id": u.id,
@@ -159,22 +238,16 @@ async def admin_list_lessons(
     """Список уроков с числом карточек теории и вопросов."""
     lessons = (
         await session.scalars(
-            select(LexBearLesson).order_by(
-                LexBearLesson.unit_id, LexBearLesson.order
-            )
+            select(LexBearLesson).order_by(LexBearLesson.unit_id, LexBearLesson.order)
         )
     ).all()
     out = []
     for lesson in lessons:
         n_cards = await session.scalar(
-            select(func.count(TheoryCard.id)).where(
-                TheoryCard.lesson_id == lesson.id
-            )
+            select(func.count(TheoryCard.id)).where(TheoryCard.lesson_id == lesson.id)
         )
         n_questions = await session.scalar(
-            select(func.count(Question.id)).where(
-                Question.lesson_id == lesson.id
-            )
+            select(func.count(Question.id)).where(Question.lesson_id == lesson.id)
         )
         out.append(
             {
@@ -200,9 +273,7 @@ async def admin_upsert_lesson(
 ) -> dict:
     """Создаёт/обновляет урок (с теорией и вопросами) в юните ``unit_code``."""
     try:
-        lesson = await content_loader.upsert_lesson(
-            session, unit_code, lesson_in
-        )
+        lesson = await content_loader.upsert_lesson(session, unit_code, lesson_in)
     except content_loader.UnitNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
