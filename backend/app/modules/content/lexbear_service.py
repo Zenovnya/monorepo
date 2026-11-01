@@ -356,9 +356,16 @@ async def complete_lesson(
     )
     is_new = progress is None
     if progress is None:
+        # Поля инициализируем явно: python-side `default=` в модели применяется
+        # только при flush, а инкременты ниже читают значения до вставки и
+        # получили бы None (TypeError: unsupported operand for +=).
         progress = LexBearProgress(
             user_id=user_id,
             lesson_id=lesson_id,
+            completed=False,
+            best_score=0,
+            attempts=0,
+            crowns=0,
         )
         session.add(progress)
 

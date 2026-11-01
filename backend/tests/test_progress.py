@@ -138,3 +138,37 @@ async def test_get_reviews_empty(session: FakeSession) -> None:
     user_id = uuid.uuid4()
     reviews = await service.get_reviews_for_user(session, user_id)
     assert reviews == []
+
+async def test_created_progress_has_numeric_defaults(
+    session: FakeSession, lesson: Lesson
+) -> None:
+    """Новая запись прогресса не должна содержать None в счётчиках.
+
+    Регрессия: ``Progress`` создавался без явных нулей, а ``complete_lesson``
+    инкрементирует ``attempts`` до flush. Python-side ``default=`` из модели
+    применяется только при INSERT, поэтому в рантайме падало с
+    ``TypeError: unsupported operand type(s) for +=: 'NoneType' and 'int'``.
+    """
+    progress = await service._get_or_create_progress(session, uuid.uuid4(), lesson.id)
+    assert progress.completed is False
+    assert progress.attempts == 0
+    assert progress.best_score == 0
+    assert progress.crowns == 0
+
+
+async def test_lexbear_progress_has_numeric_defaults(
+    session: FakeSession, lesson: Lesson
+) -> None:
+    """То же для LexBear-прогресса: счётчики заданы до вставки в БД."""
+    from app.modules.progress.models import LexBearProgress
+
+    progress = LexBearProgress(
+        user_id=uuid.uuid4(),
+        lesson_id=1,
+        completed=False,
+        best_score=0,
+        attempts=0,
+        crowns=0,
+    )
+    progress.attempts += 1
+    assert progress.attempts == 1

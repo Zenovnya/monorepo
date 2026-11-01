@@ -86,9 +86,15 @@ async def _get_or_create_progress(
         )
     )
     if progress is None:
+        # Явные нули: python-side `default=` в модели применяется только при
+        # flush, а вызывающий код инкрементирует поля до вставки.
         progress = Progress(
             user_id=user_id,
             lesson_id=lesson_id,
+            completed=False,
+            best_score=0,
+            attempts=0,
+            crowns=0,
         )
         session.add(progress)
     return progress
