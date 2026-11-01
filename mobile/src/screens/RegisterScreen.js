@@ -60,9 +60,23 @@ export default function RegisterScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           setSuccess(true);
         },
-        onError: () => {
-          setErrors({ email: 'Такой пользователь уже существует' });
-          emailRef.current?.shake();
+        onError: (error) => {
+          // 409 — email занят. Остальные ошибки (сеть, CORS, 5xx) нельзя
+          // выдавать за «уже существует»: пользователь не поймёт, что делать.
+          const status = error?.response?.status;
+          const detail = error?.response?.data?.detail;
+          const message =
+            status === 409
+              ? 'Такой пользователь уже существует'
+              : typeof detail === 'string'
+                ? detail
+                : 'Не удалось зарегистрироваться. Проверьте соединение';
+          setErrors(
+            status === 409 || typeof detail !== 'string'
+              ? { email: message }
+              : { form: message }
+          );
+          if (status === 409) emailRef.current?.shake();
           triggerError();
         },
       }
@@ -135,6 +149,8 @@ export default function RegisterScreen() {
         style={styles.submit}
       />
 
+      {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
+
       <Text style={styles.footerText}>
         Уже есть аккаунт?{' '}
         <Text style={authFooterStyles.link} onPress={() => navigation.goBack()}>
@@ -150,6 +166,12 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   submit: { marginTop: spacing.md },
+  formError: {
+    ...typography.caption,
+    color: colors.error,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
   footerText: {
     ...typography.caption,
     color: colors.text,

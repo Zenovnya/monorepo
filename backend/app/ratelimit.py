@@ -45,6 +45,32 @@ def get_client_ip(request) -> str:
 _mem: dict[str, dict[str, deque]] = defaultdict(lambda: defaultdict(deque))
 _mem_calls = 0
 
+# Предохранитель Redis. Если он недоступен, нет смысла платить таймаутом на
+# каждом запросе: после нескольких ошибок подряд перестаём пробовать Redis
+# на _REDIS_RETRY_AFTER секунд и сразу идём в память.
+_REDIS_FAIL_THRESHOLD = 3
+_REDIS_RETRY_AFTER = 30.0
+_redis_failures = 0
+_redis_retry_at = 0.0
+
+
+def _redis_healthy() -> bool:
+    """True, если можно попробовать Redis (иначе работаем в памяти)."""
+    return time.monotonic() >= _redis_retry_at
+
+
+def _record_redis_success() -> None:
+    global _redis_failures, _redis_retry_at
+    _redis_failures = 0
+    _redis_retry_at = 0.0
+
+
+def _record_redis_failure() -> None:
+    global _redis_failures, _redis_retry_at
+    _redis_failures += 1
+    if _redis_failures >= _REDIS_FAIL_THRESHOLD:
+        _redis_retry_at = time.monotonic() + _REDIS_RETRY_AFTER
+
 
 def _mem_check(
     namespace: str,
@@ -90,13 +116,16 @@ async def check_rate_limit(
     воркеров). При любой ошибке Redis — откат на in-memory скользящее окно.
     """
     key = f"rl:{namespace}:{identifier}"
-    try:
-        redis = get_redis()
-        current = await redis.incr(key)
-        if current == 1:
-            # Первый запрос в окне — задаём срок жизни счётчика.
-            await redis.expire(key, window_seconds)
-        return current <= max_requests
-    except Exception:
-        # Redis недоступен — используем локальный fallback.
-        return _mem_check(namespace, identifier, max_requests, window_seconds)
+    if _redis_healthy():
+        try:
+            redis = get_redis()
+            current = await redis.incr(key)
+            if current == 1:
+                # Первый запрос в окне — задаём срок жизни счётчика.
+                await redis.expire(key, window_seconds)
+            _record_redis_success()
+            return current <= max_requests
+        except Exception:
+            # Redis недоступен — используем локальный fallback.
+            _record_redis_failure()
+    return _mem_check(namespace, identifier, max_requests, window_seconds)

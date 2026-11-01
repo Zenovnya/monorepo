@@ -11,6 +11,12 @@ import redis.asyncio as aioredis
 
 _REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
+# Таймауты обязательны: без них недоступный Redis заставляет каждый запрос
+# ждать полного TCP-таймаута (на Windows это ~2 секунды), прежде чем лимитер
+# откатится на память. Лимитер — не критичная зависимость, поэтому ждём мало.
+_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "0.2"))
+_CONNECT_TIMEOUT = float(os.getenv("REDIS_CONNECT_TIMEOUT", "0.2"))
+
 _client: Optional[aioredis.Redis] = None
 
 
@@ -26,6 +32,12 @@ def get_redis() -> aioredis.Redis:
             _REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
+            socket_timeout=_SOCKET_TIMEOUT,
+            socket_connect_timeout=_CONNECT_TIMEOUT,
+            # Не копим запросы в очереди при обрыве и не спамим ретраями:
+            # недоступный Redis должен быстро превращаться в fallback.
+            retry_on_timeout=False,
+            health_check_interval=30,
         )
     return _client
 
