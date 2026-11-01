@@ -25,6 +25,27 @@ class AchievementAlreadyAwardedError(GamificationError):
     """Достижение уже было выдано."""
 
 
+class InsufficientGemsError(GamificationError):
+    """У пользователя недостаточно гемов для покупки."""
+
+
+class UnknownShopItemError(GamificationError):
+    """Товар отсутствует в каталоге магазина."""
+
+
+# Лиги по возрастанию. Порядок важен: следующая лига считается по индексу.
+LEAGUES: tuple[str, ...] = ("Бронза", "Серебро", "Золото", "Мантия", "Фемида")
+
+# Каталог товаров за гемы. Ключ — идентификатор товара из клиента.
+SHOP_ITEMS: dict[str, int] = {
+    "life_refill": 50,
+    "streak_freeze": 200,
+    "outfit_top_hat": 300,
+    "outfit_judge_robe": 800,
+    "chest_xp": 150,
+}
+
+
 def _gamification_cache_key(user_id: uuid.UUID) -> str:
     return f"gamification:{user_id}"
 
@@ -170,3 +191,90 @@ async def get_gamification_state(
 
     await cache_set(cache_key, json.dumps(state), ttl=_GAMIFICATION_CACHE_TTL)
     return state
+
+
+def next_league(current: str) -> str:
+    """Возвращает следующую лигу или текущую, если достигнута последняя."""
+    try:
+        index = LEAGUES.index(current)
+    except ValueError:
+        return LEAGUES[0]
+    return LEAGUES[min(index + 1, len(LEAGUES) - 1)]
+
+
+async def get_leaderboard(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    limit: int = 30,
+) -> dict:
+    """Возвращает реальную таблицу лидеров лиги пользователя.
+
+    Сортировка — по XP внутри лиги. Пользователи с равным XP получают
+    стабильный порядок за счёт сортировки по имени: без этого позиции
+    «прыгали» бы между запросами.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise GamificationError("Пользователь не найден")
+
+    rows = await session.scalars(
+        select(User)
+        .where(
+            User.league == user.league,
+            User.is_active.is_(True),
+        )
+        .order_by(User.xp.desc(), User.name.asc())
+        .limit(limit)
+    )
+    users = list(rows.all())
+
+    entries = [
+        {
+            "position": index + 1,
+            "name": row.name or "Юрист",
+            "level": row.level,
+            "xp": row.xp,
+            "is_me": row.id == user.id,
+        }
+        for index, row in enumerate(users)
+    ]
+
+    my_position = next(
+        (entry["position"] for entry in entries if entry["is_me"]),
+        None,
+    )
+
+    return {
+        "league": user.league,
+        "next_league": next_league(user.league),
+        "entries": entries,
+        "my_position": my_position,
+    }
+
+
+async def purchase_shop_item(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    item: str,
+) -> dict:
+    """Списывает гемы за товар из каталога.
+
+    Проверка баланса и списание выполняются в одной транзакции; при
+    недостатке гемов изменения не коммитятся вызывающим роутом.
+    """
+    price = SHOP_ITEMS.get(item)
+    if price is None:
+        raise UnknownShopItemError(f"Неизвестный товар: {item}")
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise GamificationError("Пользователь не найден")
+
+    if user.gems < price:
+        raise InsufficientGemsError("Недостаточно гемов")
+
+    user.gems -= price
+    await session.flush()
+    await cache_delete(_gamification_cache_key(user.id))
+
+    return {"item": item, "spent": price, "gems": user.gems}

@@ -1,27 +1,28 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
   ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { TopStats } from '../components/TopStats';
-import { colors } from '../theme/colors';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
+/** Цвет и подпись сложности. */
 const diffMap = {
-  easy: { label: 'Лёгкий', color: '#43A35D' },
-  medium: { label: 'Средний', color: '#C9A227' },
-  hard: { label: 'Сложный', color: '#E85D4C' },
+  easy: { label: 'Лёгкий', color: colors.success },
+  medium: { label: 'Средний', color: colors.accent },
+  hard: { label: 'Сложный', color: colors.error },
 };
 
 const filters = ['Все', 'УК', 'КоАП', 'ГК', 'ТК', 'Конституция'];
 
 export default function CasesScreen({ navigation }) {
-  const { data: cases, isLoading, error } = useQuery({
+  const { data: cases, isLoading, error, refetch } = useQuery({
     queryKey: ['lexbear-cases'],
     queryFn: lexbearApi.cases,
   });
@@ -38,6 +39,9 @@ export default function CasesScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>Не удалось загрузить кейсы</Text>
+        <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+          <Text style={styles.retryText}>Повторить</Text>
+        </Pressable>
       </View>
     );
   }
@@ -47,8 +51,7 @@ export default function CasesScreen({ navigation }) {
   const rest = all.filter((c) => c.id !== featured?.id);
 
   // Передаём только id кейса — детали подтягиваются на экране CaseDetail.
-  const openCase = (c) =>
-    navigation.navigate('CaseDetail', { caseId: c.id });
+  const openCase = (c) => navigation.navigate('CaseDetail', { caseId: c.id });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -59,15 +62,21 @@ export default function CasesScreen({ navigation }) {
         <Text style={styles.subtitle}>Живые ситуации. Разберись как юрист.</Text>
       </View>
 
-      {/* Кейс дня */}
       {featured && (
         <View style={styles.featuredCard}>
           <Text style={styles.featuredLabel}>Кейс дня</Text>
           <Text style={styles.featuredTitle}>{featured.title}</Text>
           <Text style={styles.featuredText}>{featured.case_text}</Text>
           <View style={styles.featuredTags}>
-            <View style={[styles.tag, { backgroundColor: diffMap[featured.difficulty]?.color ?? colors.accent }]}>
-              <Text style={styles.tagText}>{diffMap[featured.difficulty]?.label ?? featured.difficulty}</Text>
+            <View
+              style={[
+                styles.tag,
+                { backgroundColor: diffMap[featured.difficulty]?.color ?? colors.accent },
+              ]}
+            >
+              <Text style={[styles.tagText, styles.tagTextInverse]}>
+                {diffMap[featured.difficulty]?.label ?? featured.difficulty}
+              </Text>
             </View>
             <View style={[styles.tag, styles.tagWhite]}>
               <Text style={styles.tagText}>{featured.codex}</Text>
@@ -80,105 +89,171 @@ export default function CasesScreen({ navigation }) {
       )}
 
       {/* Фильтры (декоративные) */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filters}
+        contentContainerStyle={styles.filtersContent}
+      >
         {filters.map((f, i) => (
           <View key={f} style={[styles.filterChip, i === 0 && styles.filterActive]}>
-            <Text style={[styles.filterText, i === 0 && { color: '#fff' }]}>{f}</Text>
+            <Text style={[styles.filterText, i === 0 && styles.filterTextActive]}>{f}</Text>
           </View>
         ))}
       </ScrollView>
 
-      {/* Список */}
-      <View style={styles.list}>
-        {rest.map((c) => (
-          <Pressable key={c.id} style={styles.caseCard} onPress={() => openCase(c)}>
-            <View style={[styles.caseIcon, { backgroundColor: diffMap[c.difficulty]?.color ?? colors.accent }]}>
-              <Text style={styles.caseIconText}>{(c.codex || '').slice(0, 2)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.caseTitle}>{c.title}</Text>
-              <Text style={styles.caseMeta}>
-                {diffMap[c.difficulty]?.label ?? c.difficulty} · {c.codex}
-              </Text>
-            </View>
-            <Text style={styles.caseArrow}>→</Text>
-          </Pressable>
-        ))}
-      </View>
+      {rest.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Пока доступен только кейс дня.</Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {rest.map((c) => (
+            <Pressable
+              key={c.id}
+              style={styles.caseCard}
+              onPress={() => openCase(c)}
+              accessibilityRole="button"
+              accessibilityLabel={`Открыть кейс ${c.title}`}
+            >
+              <View
+                style={[
+                  styles.caseIcon,
+                  { backgroundColor: diffMap[c.difficulty]?.color ?? colors.accent },
+                ]}
+              >
+                <Text style={styles.caseIconText}>{(c.codex || '').slice(0, 2)}</Text>
+              </View>
+              <View style={styles.caseText}>
+                <Text style={styles.caseTitle}>{c.title}</Text>
+                <Text style={styles.caseMeta}>
+                  {diffMap[c.difficulty]?.label ?? c.difficulty} · {c.codex}
+                </Text>
+              </View>
+              <Text style={styles.caseArrow}>→</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: 120 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  errorText: { fontSize: 15, fontWeight: '700', color: colors.error },
-  header: { paddingHorizontal: 16, marginTop: 16 },
-  title: { fontSize: 28, fontWeight: '900', color: colors.text },
-  subtitle: { fontSize: 14, color: colors.subtext, marginTop: 4 },
-  featuredCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: '#FFF7DE',
-    borderWidth: 3,
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { paddingBottom: spacing.xxl * 3 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  errorText: { ...typography.bodyStrong, color: colors.error },
+  retryBtn: {
+    borderRadius: radius.md,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.base,
+  },
+  retryText: { ...typography.bodyStrong, color: colors.text },
+
+  header: { paddingHorizontal: spacing.base, marginTop: spacing.base },
+  title: { ...typography.title, color: colors.text },
+  subtitle: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
+
+  featuredCard: {
+    marginHorizontal: spacing.base,
+    marginTop: spacing.base,
+    backgroundColor: colors.goldTint,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.base,
     overflow: 'hidden',
   },
-  featuredLabel: { fontSize: 12, fontWeight: '900', color: colors.accent, textTransform: 'uppercase' },
-  featuredTitle: { fontSize: 22, fontWeight: '900', color: colors.text, marginTop: 4 },
-  featuredText: { fontSize: 14, color: colors.subtext, marginTop: 8, lineHeight: 20 },
-  featuredTags: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  tag: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12, borderWidth: 2, borderColor: colors.border },
-  tagWhite: { backgroundColor: colors.card },
-  tagText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  featuredLabel: {
+    ...typography.micro,
+    color: colors.accent,
+    textTransform: 'uppercase',
+  },
+  featuredTitle: { ...typography.heading, color: colors.text, marginTop: spacing.xs },
+  featuredText: { ...typography.caption, color: colors.subtext, marginTop: spacing.sm },
+  featuredTags: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  tag: {
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  tagWhite: { backgroundColor: colors.surfaceRaised },
+  tagText: { ...typography.caption, color: colors.text },
+  tagTextInverse: { color: colors.card },
   featuredBtn: {
-    marginTop: 16,
-    height: 48,
-    borderRadius: 14,
+    marginTop: spacing.base,
+    height: 52,
+    borderRadius: radius.md,
     backgroundColor: colors.success,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  featuredBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  filters: { flexGrow: 0, paddingHorizontal: 16, marginTop: 20 },
+  featuredBtnText: { ...typography.bodyStrong, color: colors.card },
+
+  filters: { flexGrow: 0, marginTop: spacing.lg },
+  filtersContent: { paddingHorizontal: spacing.base, gap: spacing.sm },
   filterChip: {
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
     borderWidth: 2,
     borderColor: colors.border,
-    backgroundColor: colors.card,
-    marginRight: 8,
+    backgroundColor: colors.surfaceRaised,
   },
   filterActive: { backgroundColor: colors.border },
-  filterText: { fontWeight: '700', color: colors.text },
-  list: { paddingHorizontal: 16, marginTop: 16, gap: 12 },
+  filterText: { ...typography.caption, color: colors.text },
+  filterTextActive: { color: colors.card },
+
+  list: { paddingHorizontal: spacing.base, marginTop: spacing.base, gap: spacing.md },
   caseCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderWidth: 3,
+    gap: spacing.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: radius.lg,
+    padding: spacing.md,
   },
   caseIcon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.border,
   },
-  caseIconText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  caseTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  caseMeta: { fontSize: 12, color: colors.subtext, marginTop: 4 },
-  caseArrow: { fontSize: 20, color: colors.subtext },
+  caseIconText: { ...typography.bodyStrong, color: colors.card },
+  caseText: { flex: 1 },
+  caseTitle: { ...typography.bodyStrong, color: colors.text },
+  caseMeta: { ...typography.micro, color: colors.subtext, marginTop: spacing.xs },
+  caseArrow: { ...typography.heading, color: colors.subtext },
+
+  emptyCard: {
+    marginHorizontal: spacing.base,
+    marginTop: spacing.base,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    padding: spacing.base,
+    alignItems: 'center',
+  },
+  emptyText: { ...typography.caption, color: colors.subtext },
 });
+

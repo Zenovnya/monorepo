@@ -2,6 +2,7 @@
  * РџРµСЂРµРёСЃРїРѕР»СЊР·СѓРµРјС‹Рµ UI-РєРѕРјРїРѕРЅРµРЅС‚С‹ РїСЂРёР»РѕР¶РµРЅРёСЏ.
  */
 export { AnimatedButton } from './AnimatedButton';
+export { default as AuthLayout } from './AuthLayout';
 export { AnimatedCheckbox } from './AnimatedCheckbox';
 export { AnimatedInput } from './AnimatedInput';
 export { AnimatedMascot } from './AnimatedMascot';
