@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import { AnimatedMascot } from '../components/AnimatedMascot';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { progressApi } from '../api/progress';
-import { colors } from '../theme/colors';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
 /**
  * Экран профиля LexBear.
@@ -55,12 +55,16 @@ export default function ProfileScreen({ navigation }) {
   const prevLevelRef = useRef(level);
   const [levelUpPulse, setLevelUpPulse] = useState(false);
   useEffect(() => {
-    if (prevLevelRef.current != null && level > prevLevelRef.current) {
-      setLevelUpPulse(true);
-      const t = setTimeout(() => setLevelUpPulse(false), 2500);
-      return () => clearTimeout(t);
-    }
+    // Раньше `return` выходил из эффекта до записи в ref, поэтому базовый
+    // уровень не обновлялся и пульс повторялся на каждом ре-рендере.
+    const previous = prevLevelRef.current;
     prevLevelRef.current = level;
+    if (previous != null && level > previous) {
+      setLevelUpPulse(true);
+      const timer = setTimeout(() => setLevelUpPulse(false), 2500);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
   }, [level]);
 
   const metrics = [
@@ -91,10 +95,11 @@ export default function ProfileScreen({ navigation }) {
           {/* На повышении уровня — короткий залп level_up, иначе радостный idle. */}
           <AnimatedMascot size={88} levelUp={levelUpPulse} mood={levelUpPulse ? undefined : 'happy'} />
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={styles.headerText}>
           <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
           <Text style={styles.meta}>
-            Лига: <Text style={{ fontWeight: '800' }}>{user?.league || 'Бронза'}</Text> · Уровень {level}
+            Лига: <Text style={styles.metaStrong}>{user?.league || 'Бронза'}</Text> · Уровень{' '}
+            {level}
           </Text>
           <Pressable
             style={styles.settingsChip}
@@ -141,10 +146,10 @@ export default function ProfileScreen({ navigation }) {
             style={[styles.row, r.gold && styles.rowGold]}
             onPress={() => navigate(r.key)}
           >
-            <View style={[styles.rowIcon, r.gold && { backgroundColor: colors.accent }]}>
+            <View style={[styles.rowIcon, r.gold && styles.rowIconGold]}>
               <Text style={styles.rowIconText}>{r.icon}</Text>
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{r.title}</Text>
               <Text style={styles.rowHint}>{r.hint}</Text>
             </View>
@@ -156,76 +161,103 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 120 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: spacing.base, paddingBottom: spacing.xxl * 3 },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.base },
+  headerText: { flex: 1 },
   avatar: {
     width: 96,
     height: 96,
-    borderRadius: 48,
-    borderWidth: 3,
+    borderRadius: radius.pill,
+    borderWidth: 2,
     borderColor: colors.border,
-    backgroundColor: '#FFF7DE',
+    backgroundColor: colors.goldTint,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { fontSize: 26, fontWeight: '900', color: colors.text },
-  meta: { fontSize: 14, color: colors.subtext, marginTop: 2 },
+  name: { ...typography.title, color: colors.text },
+  meta: { ...typography.caption, color: colors.subtext, marginTop: 2 },
+  metaStrong: { fontWeight: '800' },
   settingsChip: {
     alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs + 1,
+    paddingHorizontal: spacing.md,
     borderWidth: 2,
     borderColor: colors.border,
-    backgroundColor: colors.card,
-    marginTop: 8,
+    backgroundColor: colors.surfaceRaised,
+    marginTop: spacing.sm,
   },
-  settingsChipText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  metricsRow: { flexDirection: 'row', gap: 8, marginTop: 20 },
+  settingsChipText: { ...typography.caption, color: colors.text },
+
+  metricsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   metric: {
     flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: colors.track,
-    padding: 10,
+    borderColor: colors.borderSoft,
+    padding: spacing.sm + 2,
     alignItems: 'center',
   },
   metricIcon: { fontSize: 18 },
-  metricValue: { fontSize: 18, fontWeight: '900', color: colors.text, marginTop: 4 },
-  metricLabel: { fontSize: 10, color: colors.subtext, fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
-  sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.subtext, textTransform: 'uppercase', marginTop: 20, marginBottom: 8 },
-  achList: { gap: 8 },
-  achCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 12 },
-  achTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-  achDesc: { fontSize: 13, color: colors.subtext, marginTop: 4, lineHeight: 18 },
-  rows: { marginTop: 24, gap: 12 },
+  metricValue: { ...typography.heading, color: colors.text, marginTop: spacing.xs },
+  metricLabel: {
+    ...typography.micro,
+    color: colors.subtext,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+
+  sectionTitle: {
+    ...typography.micro,
+    color: colors.subtext,
+    textTransform: 'uppercase',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  achList: { gap: spacing.sm },
+  achCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  achTitle: { ...typography.bodyStrong, color: colors.text },
+  achDesc: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
+
+  rows: { marginTop: spacing.xl, gap: spacing.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderWidth: 3,
+    gap: spacing.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: radius.lg,
+    padding: spacing.md,
   },
-  rowGold: { backgroundColor: '#FFF7DE' },
+  rowGold: { backgroundColor: colors.goldTint },
+  rowText: { flex: 1 },
   rowIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     borderWidth: 2,
     borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowIconGold: { backgroundColor: colors.accent },
   rowIconText: { fontSize: 22 },
-  rowTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  rowHint: { fontSize: 12, color: colors.subtext, marginTop: 2 },
-  rowArrow: { fontSize: 20, color: colors.subtext },
+  rowTitle: { ...typography.bodyStrong, color: colors.text },
+  rowHint: { ...typography.micro, color: colors.subtext, marginTop: 2 },
+  rowArrow: { ...typography.heading, color: colors.subtext },
 });
+

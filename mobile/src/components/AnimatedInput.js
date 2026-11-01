@@ -6,64 +6,77 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  interpolateColor,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../theme/colors';
+import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
 
+/**
+ * Поле ввода с приятной реакцией на фокус.
+ *
+ * Раньше фокус анимировал `scale` всей обёртки. На вебе трансформация
+ * контейнера вместе с внутренним `TextInput` приводила к тому, что браузер
+ * рисовал вокруг текста широкую полосу цвета фокуса — визуально «коричневые
+ * полосы». Теперь анимируется только толщина акцентной рамки самой обёртки:
+ * рамка всегда принадлежит полю, а не тексту.
+ */
 export const AnimatedInput = forwardRef(
   ({ label, error, secure, onFocus, onBlur, ...rest }, ref) => {
     const translateX = useSharedValue(0);
-    const rotate = useSharedValue(0);
-    const scale = useSharedValue(1);
+    const focus = useSharedValue(0); // 0 — покой, 1 — фокус
     const [hidden, setHidden] = useState(!!secure);
 
     useImperativeHandle(ref, () => ({
       shake: () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        // Трясём только сдвигом: поворот и масштаб давали «пляшущий» текст
+        // и артефакты отрисовки на вебе.
         translateX.value = withSequence(
-          withTiming(-10, { duration: 60 }),
-          withTiming(10, { duration: 60 }),
           withTiming(-8, { duration: 60 }),
           withTiming(8, { duration: 60 }),
-          withTiming(0, { duration: 60 })
-        );
-        rotate.value = withSequence(
-          withTiming(-2, { duration: 60 }),
-          withTiming(2, { duration: 60 }),
+          withTiming(-6, { duration: 60 }),
+          withTiming(6, { duration: 60 }),
           withTiming(0, { duration: 60 })
         );
       },
     }));
 
     const animatedStyle = useAnimatedStyle(() => ({
-      transform: [
-        { translateX: translateX.value },
-        { rotate: `${rotate.value}deg` },
-        { scale: scale.value },
-      ],
+      transform: [{ translateX: translateX.value }],
+      borderWidth: 2 + focus.value,
+      borderColor: interpolateColor(
+        focus.value,
+        [0, 1],
+        [colors.border, colors.accent]
+      ),
+      backgroundColor: interpolateColor(
+        focus.value,
+        [0, 1],
+        [colors.surfaceRaised, colors.goldTint]
+      ),
     }));
 
     const handleFocus = (e) => {
-      scale.value = withSpring(1.02, { damping: 8, stiffness: 250 });
+      focus.value = withSpring(1, { damping: 16, stiffness: 180 });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onFocus && onFocus(e);
     };
 
     const handleBlur = (e) => {
-      scale.value = withSpring(1, { damping: 8, stiffness: 250 });
+      focus.value = withSpring(0, { damping: 16, stiffness: 180 });
       onBlur && onBlur(e);
     };
 
     return (
-      <View style={{ marginBottom: 18 }}>
+      <View style={styles.field}>
         <Text style={styles.label}>{label}</Text>
         <Animated.View
-          style={[styles.inputWrapper, animatedStyle, error ? { borderColor: colors.error } : null]}
+          style={[styles.inputWrapper, animatedStyle, error ? styles.inputWrapperError : null]}
         >
           <TextInput
             style={styles.input}
-            placeholderTextColor="#B7AA9A"
+            placeholderTextColor={colors.subtext}
             secureTextEntry={hidden}
             onFocus={handleFocus}
             onBlur={handleBlur}
@@ -92,25 +105,39 @@ export const AnimatedInput = forwardRef(
 );
 
 const styles = StyleSheet.create({
-  label: { fontSize: 14, color: colors.text, marginBottom: 8, fontWeight: '500' },
+  field: { marginBottom: spacing.lg },
+  label: {
+    ...typography.caption,
+    color: colors.subtext,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
+    backgroundColor: colors.surfaceRaised,
     borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 54,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.base,
+    height: sizes.button,
   },
-  input: { flex: 1, fontSize: 16, color: colors.text },
+  inputWrapperError: { borderColor: colors.error },
+  input: {
+    flex: 1,
+    ...typography.body,
+    color: colors.text,
+    // На вебе браузер рисует собственный outline вокруг input — убираем его,
+    // чтобы фокус показывала только рамка поля.
+    outlineStyle: 'none',
+  },
   eyeBtn: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  error: { color: colors.error, fontSize: 12, marginTop: 6 },
+  error: { ...typography.caption, color: colors.error, marginTop: spacing.xs },
 });

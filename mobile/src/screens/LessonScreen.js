@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LegalText } from '../components/LegalText';
 import { useMascotToast } from '../components/MascotToast';
-import { colors } from '../theme/colors';
+import { colors } from '../theme/tokens';
 
 /**
  * Нормализует поле `correct` вопроса к массиву индексов правильных ответов.
@@ -46,7 +46,9 @@ export default function LessonScreen({ route, navigation }) {
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [shake, setShake] = useState(false);
   // id вопроса -> ответ. Уходит на сервер: результат считает он.
-  const [answers, setAnswers] = useState({});
+  // Храним в ref, а не в state: финальный POST должен нести ВСЕ ответы,
+  // включая последний, а значение из state внутри `nextQuestion` ещё не обновлено.
+  const answersRef = useRef({});
 
   const { data: lesson, isLoading, error } = useQuery({
     queryKey: ['lexbear-lesson', lessonId],
@@ -66,6 +68,7 @@ export default function LessonScreen({ route, navigation }) {
       if (typeof data?.correct === 'number') {
         setCorrectCount(data.correct);
       }
+
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
       queryClient.invalidateQueries(['gamification-me']);
@@ -132,7 +135,7 @@ export default function LessonScreen({ route, navigation }) {
 
     // Ответ уходит на сервер как есть: сервер сам сравнит с эталоном.
     const given = isMulti ? [...multi].sort() : selected;
-    setAnswers((prev) => ({ ...prev, [q.id]: given }));
+    answersRef.current = { ...answersRef.current, [q.id]: given };
 
     let isRight;
     if (isMulti) {
@@ -155,14 +158,16 @@ export default function LessonScreen({ route, navigation }) {
   };
 
   const nextQuestion = () => {
+    // Ответ на текущий вопрос уже сохранён в check().
     setChecked(null);
     setSelected(null);
     setMulti([]);
     if (qIdx + 1 < questions.length && lives > 0) {
       setQIdx(qIdx + 1);
     } else {
-      // Завершение урока: отправляем ответы, сервер считает результат.
-      completeMutation.mutate({ answers });
+      // Завершение урока: отправляем только что сформированные ответы.
+      // Берём из ref — там уже есть ответ на текущий вопрос.
+      completeMutation.mutate({ answers: answersRef.current });
       setPhase('done');
     }
   };
@@ -259,7 +264,7 @@ export default function LessonScreen({ route, navigation }) {
         )}
 
         {effectivePhase === 'practice' && checked && (
-          <View style={[styles.feedback, { backgroundColor: checked === 'right' ? '#DFF5E5' : '#FDE0DC' }]}>
+          <View style={[styles.feedback, checked === 'right' ? styles.feedbackOk : styles.feedbackBad]}>
             {/* При потере последней жизни — сильнее грусть (wrong_sad + слёзы). */}
             <AnimatedMascot
               size={60}
@@ -378,13 +383,13 @@ function QuestionView({ q, selected, multi, checked, shake, onSelectSingle, onTo
               onPress={() => (isMulti ? onToggleMulti(i) : onSelectSingle(i))}
               style={[
                 styles.option,
-                isCorrect && { backgroundColor: '#DFF5E5', borderColor: colors.success },
-                isWrongPick && { backgroundColor: '#FDE0DC', borderColor: colors.error },
-                isSel && !checked && { backgroundColor: '#FFF7DE', borderColor: colors.accent },
+                isCorrect && styles.optionCorrect,
+                isWrongPick && styles.optionWrong,
+                isSel && !checked && styles.optionSelected,
               ]}
             >
               <View style={[styles.optionLetter, isSel && { backgroundColor: colors.accent }]}>
-                <Text style={[styles.optionLetterText, isSel && { color: '#fff' }]}>
+                <Text style={[styles.optionLetterText, isSel && styles.optionLetterTextSelected]}>
                   {isMulti ? (isSel ? '✓' : '') : String.fromCharCode(65 + i)}
                 </Text>
               </View>
@@ -424,7 +429,7 @@ const styles = StyleSheet.create({
   closeText: { fontSize: 16, fontWeight: '900', color: colors.text },
   progressTrack: { flex: 1, height: 16, backgroundColor: colors.track, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: colors.border },
   progressFill: { height: '100%', backgroundColor: colors.success },
-  livesChip: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: '#FDE3DF', borderWidth: 2, borderColor: colors.border },
+  livesChip: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: colors.errorTint, borderWidth: 2, borderColor: colors.border },
   livesText: { fontSize: 13, fontWeight: '800', color: colors.text },
   content: { padding: 20, paddingBottom: 140 },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: colors.background, borderTopWidth: 3, borderTopColor: colors.border },
@@ -439,7 +444,7 @@ const styles = StyleSheet.create({
   },
   btnGreen: { backgroundColor: colors.success },
   btnRed: { backgroundColor: colors.error },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
+  btnText: { color: colors.card, fontWeight: '800', fontSize: 17 },
   theory: { gap: 16 },
   theoryMeta: { fontSize: 12, fontWeight: '700', color: colors.subtext },
   theoryTitle: { fontSize: 26, fontWeight: '900', color: colors.text },
@@ -450,7 +455,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
   },
-  practicalCard: { backgroundColor: '#FFF7DE' },
+  practicalCard: { backgroundColor: colors.goldTint },
   practicalLabel: { fontSize: 11, fontWeight: '900', color: colors.subtext, marginBottom: 6 },
   cardText: { fontSize: 15, color: colors.text, lineHeight: 21 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -476,8 +481,14 @@ const styles = StyleSheet.create({
   },
   optionLetter: { width: 24, height: 24, borderRadius: 6, backgroundColor: colors.paper, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   optionLetterText: { fontSize: 13, fontWeight: '700', color: colors.text },
+  optionLetterTextSelected: { color: colors.card },
+  optionCorrect: { backgroundColor: colors.successTint, borderColor: colors.success },
+  optionWrong: { backgroundColor: colors.errorTint, borderColor: colors.error },
+  optionSelected: { backgroundColor: colors.goldTint, borderColor: colors.accent },
   optionText: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
   feedback: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderRadius: 16, padding: 16, borderWidth: 3, borderColor: colors.border },
+  feedbackOk: { backgroundColor: colors.successTint },
+  feedbackBad: { backgroundColor: colors.errorTint },
   feedbackTitle: { fontSize: 18, fontWeight: '900', color: colors.text },
   feedbackText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
   shake: { transform: [{ translateX: -6 }] },

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,8 +50,29 @@ async def assessment_answer(data: AttemptCreate, uid: uuid.UUID = Depends(user_i
 
 
 @router.get("/next", response_model=CaseRead | None)
-async def learning_next(uid: uuid.UUID = Depends(user_id), session: AsyncSession = Depends(get_session)):
-    return await service.next_case(session, uid)
+async def learning_next(
+    exclude: str | None = Query(
+        default=None,
+        description=(
+            "Кейсы, которые клиент уже прошёл в текущей сессии: "
+            "UUID через запятую. Без исключений ранжирование детерминировано "
+            "и всегда возвращает один и тот же кейс."
+        ),
+    ),
+    uid: uuid.UUID = Depends(user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    seen: set[uuid.UUID] = set()
+    for chunk in (exclude or "").split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            seen.add(uuid.UUID(chunk))
+        except ValueError:
+            # Мусор в query-параметре не должен ронять выдачу: пропускаем.
+            continue
+    return await service.next_case(session, uid, exclude=seen)
 
 
 @router.post("/attempts", response_model=AttemptResult)

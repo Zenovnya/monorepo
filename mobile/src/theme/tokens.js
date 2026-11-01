@@ -25,6 +25,18 @@ export const colors = {
   errorTint: '#FFF0F0', // фон ошибки
   overlay: 'rgba(31, 42, 68, 0.35)', // затемнение модалок
 
+  // --- Медали таблицы лидеров ---
+  gold: '#C9A227',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+
+  // --- Дополнительные поверхности, которые раньше хардкодились ---
+  goldSoft: '#E6C75A',
+  skyTint: '#DFF1FB', // чип с гемами
+  streakTint: '#FFF4D1', // чип со стриком
+  roomFloor: '#EFE3C8', // пол комнаты мишки
+  roomWood: '#5A3620', // деревянный плинтус комнаты
+
   // --- Границы ---
   border: palette.border,
   borderSoft: '#E4D9C8', // мягкая граница карточек и «подошва» кнопок
@@ -70,28 +82,23 @@ export const radius = {
 /**
  * Глубина в стиле Duolingo: не размытая тень, а плотная «подошва» снизу.
  * Используется кнопками и нажимаемыми карточками.
+ *
+ * В RN 0.81+ пропсы `shadow*` объявлены устаревшими и пишут предупреждение
+ * в консоль. Используем CSS-подобный `boxShadow` — он работает и на вебе.
+ * Ключ `elevation` оставлен для Android API < 28, где `boxShadow` игнорируется.
  */
 export const elevation = {
   none: {},
   press: (color) => ({
-    shadowColor: color,
-    shadowOpacity: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 0,
+    boxShadow: `0px 4px 0px ${color}`,
     elevation: 4,
   }),
   card: {
-    shadowColor: colors.shadow,
-    shadowOpacity: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
+    boxShadow: `0px 2px 8px ${colors.shadow}`,
     elevation: 2,
   },
   floating: {
-    shadowColor: colors.shadow,
-    shadowOpacity: 1,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
+    boxShadow: `0px 8px 20px ${colors.shadow}`,
     elevation: 8,
   },
 };
