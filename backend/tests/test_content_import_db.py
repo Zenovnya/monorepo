@@ -63,9 +63,16 @@ def _probe_database() -> bool:
         return True
 
     try:
-        return asyncio.run(_run())
+        ok = asyncio.run(_run())
     except Exception:  # noqa: BLE001 — любая ошибка подключения = БД недоступна
         return False
+    finally:
+        # asyncio.run() закрывает свой event loop, но пул engine остаётся
+        # привязан к нему: asyncpg-соединения из пула потом падают с
+        # "Event loop is closed" и "NoneType has no attribute 'send'",
+        # когда тесты запускаются в новом loop (Windows Proactor).
+        engine.sync_engine.pool.dispose()
+    return ok
 
 
 if not _probe_database():  # pragma: no cover - зависит от окружения
