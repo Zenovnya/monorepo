@@ -218,7 +218,7 @@ async def load_content(
         unit.color = unit_in.color
         unit.locked = unit_in.locked
         unit.why_practical = unit_in.why_practical
-        unit.is_active = True
+        unit.is_active = unit_in.is_active
         await session.flush()
         seen_unit_codes.add(unit_in.code)
 

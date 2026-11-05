@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { NativeModules, Platform } from 'react-native';
 
-import { authApi } from './auth';
 import { useAuthStore } from '../store';
 
 /** Порт, на котором локально слушает FastAPI (uvicorn --port 8000). */
@@ -81,6 +80,19 @@ const apiClient = axios.create({
 });
 
 /**
+ * Обновляет пару токенов по refresh-токену.
+ *
+ * Живёт здесь, а не в `api/auth.js`, чтобы не создавать цикл модулей
+ * `client -> auth -> client`: при инициализации `authApi` был ещё `undefined`,
+ * и первый же 401 ронял интерцептор.
+ */
+function refreshTokens(refreshToken) {
+  return apiClient
+    .post('/auth/refresh', { refresh_token: refreshToken })
+    .then((r) => r.data);
+}
+
+/**
  * Флаг, предотвращающий одновременный запуск нескольких refresh-запросов.
  * Если несколько запросов получают 401 параллельно, все они будут ждать
  * завершения одного общего обновления токенов.
@@ -148,7 +160,7 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const data = await authApi.refresh(refreshToken);
+      const data = await refreshTokens(refreshToken);
       await useAuthStore.getState().setAuth({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,

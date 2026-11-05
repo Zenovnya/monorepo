@@ -1,149 +1,236 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { colors } from '../theme/colors';
+import { gamificationApi } from '../api/gamification';
+import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
 
-const leagues = ['Бронза', 'Серебро', 'Золото', 'Мантия', 'Фемида'];
+/** Порядок лиг по возрастанию — держим в синхроне с backend `LEAGUES`. */
+const LEAGUES = ['Бронза', 'Серебро', 'Золото', 'Мантия', 'Фемида'];
 
-const fake = [
-  { name: 'Артём К.', xp: 340 },
-  { name: 'Мария С.', xp: 315 },
-  { name: 'Ты', xp: 0, me: true },
-  { name: 'Игорь Д.', xp: 260 },
-  { name: 'Полина В.', xp: 245 },
-  { name: 'Никита М.', xp: 220 },
-  { name: 'Алина Ф.', xp: 200 },
-  { name: 'Сергей Т.', xp: 190 },
-  { name: 'Кристина О.', xp: 170 },
-  { name: 'Роман Б.', xp: 155 },
-];
+/** Цвет медали для первых трёх мест. */
+const MEDAL_COLORS = [colors.gold, colors.silver, colors.bronze];
 
 export default function LeagueScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
-  const board = fake
-    .map((f) => (f.me ? { ...f, xp: user?.xp ?? 0, name: user?.name || 'Ты' } : f))
-    .sort((a, b) => b.xp - a.xp);
-  const league = user?.league || 'Бронза';
-  const nextIdx = Math.min(leagues.length - 1, leagues.indexOf(league) + 1);
+
+  // Реальная таблица лидеров: раньше экран рисовал выдуманный список.
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['gamification-leaderboard'],
+    queryFn: () => gamificationApi.leaderboard(),
+  });
+
+  const league = data?.league ?? user?.league ?? LEAGUES[0];
+  const nextLeague = data?.next_league ?? LEAGUES[0];
+  const entries = data?.entries ?? [];
+
+  const header = (
+    <View style={styles.header}>
+      <Pressable
+        onPress={() => navigation.goBack()}
+        style={styles.backBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Назад"
+        hitSlop={8}
+      >
+        <Text style={styles.backText}>←</Text>
+      </Pressable>
+      <Text style={styles.title}>Лига</Text>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        {header}
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        {header}
+        <View style={styles.center}>
+          <Text style={styles.errorText}>Не удалось загрузить таблицу лидеров</Text>
+          <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryText}>Повторить</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </Pressable>
-        <Text style={styles.title}>Лига</Text>
-      </View>
+      {header}
 
       <View style={styles.hero}>
         <AnimatedMascot size={64} emotion="cheer" />
-        <View style={{ flex: 1 }}>
+        <View style={styles.heroText}>
           <Text style={styles.heroTitle}>{league}</Text>
-          <Text style={styles.heroSubtitle}>Топ 5 идут в {leagues[nextIdx]}</Text>
+          <Text style={styles.heroSubtitle}>
+            {nextLeague === league ? 'Это высшая лига' : `Топ 5 идут в ${nextLeague}`}
+          </Text>
         </View>
       </View>
 
       <View style={styles.leagueChips}>
-        {leagues.map((l) => (
-          <View
-            key={l}
-            style={[styles.leagueChip, l === league && styles.leagueChipActive]}
-          >
-            <Text style={[styles.leagueChipText, l === league && { color: '#fff' }]}>{l}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.list}>
-        {board.map((r, i) => (
-          <View
-            key={r.name + i}
-            style={[styles.row, r.me && styles.rowMe]}
-          >
-            <View
-              style={[
-                styles.rank,
-                {
-                  backgroundColor:
-                    i === 0 ? '#C9A227' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : colors.card,
-                },
-              ]}
-            >
-              <Text style={[styles.rankText, { color: i < 3 ? '#fff' : colors.text }]}>
-                {i + 1}
+        {LEAGUES.map((item) => {
+          const active = item === league;
+          return (
+            <View key={item} style={[styles.leagueChip, active && styles.leagueChipActive]}>
+              <Text style={[styles.leagueChipText, active && styles.leagueChipTextActive]}>
+                {item}
               </Text>
             </View>
-            <Text style={[styles.rowName, r.me && { fontWeight: '900' }]}>{r.name}</Text>
-            <Text style={styles.rowXp}>{r.xp} XP</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
+
+      {entries.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>
+            В этой лиге пока никого нет. Наберите XP, чтобы попасть в таблицу.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {entries.map((entry) => (
+            <View key={entry.position} style={[styles.row, entry.is_me && styles.rowMe]}>
+              <View
+                style={[
+                  styles.rank,
+                  entry.position <= 3 && {
+                    backgroundColor: MEDAL_COLORS[entry.position - 1],
+                  },
+                ]}
+              >
+                <Text style={[styles.rankText, entry.position <= 3 && styles.rankTextTop]}>
+                  {entry.position}
+                </Text>
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowName, entry.is_me && styles.rowNameMe]} numberOfLines={1}>
+                  {entry.name}
+                </Text>
+                <Text style={styles.rowLevel}>Уровень {entry.level}</Text>
+              </View>
+              <Text style={styles.rowXp}>{entry.xp} XP</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: spacing.base, paddingBottom: spacing.xxl },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.card,
+    width: sizes.minTouchTarget,
+    height: sizes.minTouchTarget,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { fontSize: 18, fontWeight: '900', color: colors.text },
-  title: { fontSize: 26, fontWeight: '900', color: colors.text },
+  backText: { ...typography.heading, color: colors.text },
+  title: { ...typography.title, color: colors.text },
+
   hero: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#FFF7DE',
-    borderWidth: 3,
+    gap: spacing.md,
+    backgroundColor: colors.goldTint,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 18,
-    padding: 14,
-    marginTop: 16,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.base,
   },
-  heroTitle: { fontSize: 20, fontWeight: '900', color: colors.text },
-  heroSubtitle: { fontSize: 14, color: colors.subtext, marginTop: 2 },
-  leagueChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
-  leagueChip: { borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.card },
+  heroText: { flex: 1 },
+  heroTitle: { ...typography.heading, color: colors.text },
+  heroSubtitle: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
+
+  leagueChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.base,
+  },
+  leagueChip: {
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
   leagueChipActive: { backgroundColor: colors.accent },
-  leagueChipText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  list: { marginTop: 16, gap: 8 },
+  leagueChipText: { ...typography.caption, color: colors.text },
+  leagueChipTextActive: { color: colors.card },
+
+  list: { marginTop: spacing.base, gap: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
+    gap: spacing.md,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 2,
-    borderColor: colors.track,
-    borderRadius: 14,
-    padding: 12,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
-  rowMe: { backgroundColor: '#E8F6EE', borderColor: colors.success },
+  rowMe: { backgroundColor: colors.successTint, borderColor: colors.success },
   rank: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankText: { fontSize: 15, fontWeight: '900' },
-  rowName: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
-  rowXp: { fontSize: 14, fontWeight: '700', color: colors.subtext },
+  rankText: { ...typography.bodyStrong, color: colors.text },
+  rankTextTop: { color: colors.card },
+  rowBody: { flex: 1 },
+  rowName: { ...typography.bodyStrong, color: colors.text },
+  rowNameMe: { fontWeight: '900' },
+  rowLevel: { ...typography.caption, color: colors.subtext },
+  rowXp: { ...typography.bodyStrong, color: colors.subtext },
+
+  emptyCard: {
+    marginTop: spacing.base,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    padding: spacing.base,
+    alignItems: 'center',
+  },
+  emptyText: { ...typography.caption, color: colors.subtext, textAlign: 'center' },
+
+  errorText: { ...typography.bodyStrong, color: colors.error, textAlign: 'center' },
+  retryBtn: {
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.base,
+  },
+  retryText: { ...typography.bodyStrong, color: colors.text },
 });
+

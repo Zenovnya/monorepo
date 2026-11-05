@@ -1,97 +1,145 @@
-# LexBear
+# Лапа Закона (LexBear)
 
-Мобильный тренажёр английского языка: FastAPI + PostgreSQL (`backend/`),
-React Native / Expo (`mobile/`).
+Мобильный EdTech-продукт по праву: короткие уроки, интерактивные кейсы и
+мишка-юрист, который объясняет разбор.
 
-## Локальный запуск (Windows)
+| Часть | Стек | Где лежит |
+|-------|------|-----------|
+| `backend` | FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL | [`backend/`](backend) |
+| `mobile` | Expo 54, React Native 0.81, React Navigation, TanStack Query, Zustand, Reanimated | [`mobile/`](mobile) |
+| `admin` | Веб-админка контента (`/admin/ui`) | [`admin/`](admin) |
+| `infra` | Docker Compose, Railway, Supabase | [`infra/`](infra) |
 
-Требуется: PostgreSQL 16 в `C:\Program Files\PostgreSQL\16\bin`, Python 3.12,
-Node.js 20+. Пароль администратора PostgreSQL не нужен — dev-скрипт поднимает
-отдельный кластер на порту 5433 с данными в `.local/pgdata`.
+Документация: [`docs/product.md`](docs/product.md), [`docs/architecture.md`](docs/architecture.md),
+[`docs/api.md`](docs/api.md), [`docs/mvp-plan.md`](docs/mvp-plan.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-### Один раз
+---
 
-```powershell
-# 1. В отдельном PowerShell ОТ АДМИНИСТРАТОРА — открыть порты для телефона
-powershell -ExecutionPolicy Bypass -File scripts\open-firewall.ps1
+## Быстрый старт (backend)
 
-# 2. Зависимости backend (из корня репозитория)
+```bash
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.venv\Scripts\activate          # Windows;  source .venv/bin/activate — macOS/Linux
 pip install -r requirements.txt
-# создайте .env — см. ниже (файл в .gitignore)
+cp .env.example .env            # подставьте DATABASE_URL / JWT_SECRET_KEY
+```
 
-# 3. Зависимости мобильного приложения
-cd ..\mobile
+### Вариант A — PostgreSQL через Docker Compose
+
+```bash
+cd infra/docker
+cp .env.example .env            # POSTGRES_PASSWORD, JWT_SECRET_KEY (>=32 символов), ADMIN_TOKEN
+docker compose up -d --build    # backend сам выполнит alembic upgrade head
+curl http://localhost:8000/health
+```
+
+Разово загрузить контент из JSON-паков:
+
+```bash
+curl -X POST http://localhost:8000/lexbear/seed -H "X-Admin-Token: <ADMIN_TOKEN>"
+# полная перезагрузка + импорт кейсов в адаптивный банк:
+curl -X POST "http://localhost:8000/admin/content/reload?prune=true" -H "X-Admin-Token: <ADMIN_TOKEN>"
+curl -X POST "http://localhost:8000/admin/content/reload-adaptive" -H "X-Admin-Token: <ADMIN_TOKEN>"
+```
+
+### Вариант B — локальный backend против своего Postgres
+
+```bash
+cd backend
+alembic upgrade head
+python -m app.seed              # стартовый кейс + импорт кейсов из паков
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+Тесты и линт:
+
+```bash
+cd backend
+python -m pytest                # DB-тесты пропускаются, если DATABASE_URL недоступен
+python -m ruff check app tests
+```
+
+> `JWT_SECRET_KEY` обязателен: при `DEBUG=false` приложение не стартует, если
+> секрет короче 32 символов.
+
+---
+
+## Быстрый старт (mobile)
+
+```bash
+cd mobile
 npm install
+cp .env.example .env            # EXPO_PUBLIC_API_URL -> ваш backend
+npm start                       # "a" — Android, "i" — iOS, "w" — web
+npm run lint
 ```
 
-`backend/.env` для локальной работы:
+Адрес API по умолчанию вычисляется автоматически (`src/api/client.js`): на
+устройстве берётся хост Metro-сервера с портом `8000`. Android-эмулятор:
+`http://10.0.2.2:8000`, iOS-симулятор: `http://localhost:8000`.
 
-```ini
-DATABASE_URL=postgresql+asyncpg://lexbear:lexbear_dev_pass@127.0.0.1:5433/lexbear
-DEBUG=true
-JWT_SECRET_KEY=<любая строка от 32 символов>
-ADMIN_TOKEN=lexbear-admin-dev-token
-CORS_ORIGINS=http://localhost:8081,http://localhost:19006,http://127.0.0.1:8081
-RATE_LIMIT_MAX=1000
-```
+Сборка через EAS: [`mobile/EAS_DEPLOY.md`](mobile/EAS_DEPLOY.md), профили — `mobile/eas.json`.
 
-`mobile/.env` создаётся автоматически скриптом (`EXPO_PUBLIC_API_URL`); при
-запуске через Expo Go на телефоне он не обязателен — адрес API берётся из
-хоста Metro.
+### Вариант C — весь стек на Windows одним скриптом
 
-### Каждый запуск
+`scripts/dev-*.ps1` поднимают отдельный кластер PostgreSQL на `:5433` (пароль
+администратора не нужен, данные в `.local/pgdata`), применяют миграции,
+запускают API и сидят контент.
 
 ```powershell
-# БД (:5433) + миграции + API (:8000) + сид контента
+# один раз, из PowerShell от имени администратора — порты для телефона
+powershell -ExecutionPolicy Bypass -File scripts\open-firewall.ps1
+
+# каждый запуск: БД + миграции + API (:8000) + сид
 powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1
 
-# Во втором терминале — Metro / Expo в локальной сети
+# во втором терминале — Metro/Expo в локальной сети (QR для Expo Go)
 powershell -ExecutionPolicy Bypass -File scripts\dev-mobile.ps1
 ```
 
-На iPhone откройте Expo Go и введите `exp://<ip-компьютера>:8081`
-(IP печатает `dev-start.ps1`) либо отсканируйте QR из терминала Metro.
-Телефон и компьютер — в одной сети, сеть — профиль «Частная».
+Перезалить контент: `POST /lexbear/seed?force=true` с заголовком
+`X-Admin-Token`. Логи: `.local\backend.err.log`, `.local\pg.log`.
 
-> Скрипты `scripts/*.ps1` сохранены в **UTF-8 с BOM**: PowerShell 5.1 без BOM
-> читает `.ps1` как ANSI (cp1251), и русские комментарии ломают парсер
-> (`В строке отсутствует завершающий символ`). При правке скриптов в редакторе
-> сохраняйте кодировку «UTF-8 with BOM».
+> Скрипты сохранены в **UTF-8 с BOM**: PowerShell 5.1 без BOM читает `.ps1`
+> как ANSI (cp1251) и падает на русских комментариях
+> (`В строке отсутствует завершающий символ`). При правке сохраняйте
+> «UTF-8 with BOM».
 
-### Проверка
+---
 
-- `http://localhost:8000/health` → `{"status":"ok","database":"ok"}`
-- `http://localhost:8000/docs` → Swagger
-- Логи: `.local/backend.out.log`, `.local/backend.err.log`, `.local/pg.log`
+## Контент как данные
 
-### Остановка
+Контент описан JSON-паками в `backend/app/content_packs/`:
 
-```powershell
-Get-NetTCPConnection -LocalPort 8000,8081 -State Listen |
-    Select-Object -ExpandProperty OwningProcess -Unique |
-    ForEach-Object { Stop-Process -Id $_ -Force }
-& 'C:\Program Files\PostgreSQL\16\bin\pg_ctl.exe' -D (Join-Path $PWD '.local\pgdata') stop
+- `curriculum.json` — юниты, уроки, теория, вопросы;
+- `cases.json` — кейсы с вариантами и разбором;
+- `articles.json` — справочные статьи кодексов.
+
+`content_loader.py` делает идемпотентный upsert в legacy-таблицы (`units`,
+`lexbear_lessons`, `cases`). `learning/importer.py` переносит те же кейсы в
+адаптивный банк (`learning_cases`, `learning_case_versions`, ...), из которого
+работает `GET /learning/next`. Импорт не означает юридическую проверку:
+`review_status` остаётся `imported` до `approved` в админке.
+
+---
+
+## Структура
+
+```
+backend/            FastAPI-приложение (app/modules/* — доменные модули)
+  app/content_packs JSON-паки контента
+  migrations/       Alembic (0001-0017)
+  tests/            pytest
+mobile/             Expo-приложение (src/screens, src/components, src/theme)
+admin/              веб-админка
+docs/               продукт, архитектура, API, план MVP
+infra/              docker / railway / supabase
+.github/workflows/  CI
 ```
 
-### Сид контента
+## Статус
 
-Выполняется в `dev-start.ps1`. Перезалить контент из JSON-паков
-(`backend/app/content_packs/`):
-
-```powershell
-Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lexbear/seed?force=true' `
-    -Headers @{ 'X-Admin-Token' = 'lexbear-admin-dev-token' }
-```
-
-## Документация
-
-- `docs/architecture.md` — архитектура
-- `docs/api.md` — API
-- `docs/database.md` — схема БД
-- `docs/product.md` — продукт
-- `docs/decisions/` — ADR
+Актуальный статус и приоритеты до запуска MVP — [`docs/mvp-plan.md`](docs/mvp-plan.md).
 
 

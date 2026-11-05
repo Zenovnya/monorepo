@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
-import { colors } from '../theme/colors';
+import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
 
 /**
  * Экран «Кабинет мишки» LexBear.
@@ -113,7 +113,7 @@ export default function BearScreen() {
             style={[styles.tab, tab === k && styles.tabActive]}
             onPress={() => setTab(k)}
           >
-            <Text style={[styles.tabText, tab === k && { color: '#fff' }]}>{l}</Text>
+            <Text style={[styles.tabText, tab === k && styles.tabTextActive]}>{l}</Text>
           </Pressable>
         ))}
       </View>
@@ -124,7 +124,7 @@ export default function BearScreen() {
           <Text style={styles.infoText}>
             Занимайся каждый день — мишка бодр и в форме.
           </Text>
-          <Text style={[styles.infoText, { marginTop: 8 }]}>
+          <Text style={[styles.infoText, styles.infoTextSpaced]}>
             Поглаживаний: <Text style={{ fontWeight: '900' }}>{petCount}</Text>
           </Text>
         </View>
@@ -164,71 +164,152 @@ function StatBar({ label, value, color }) {
   );
 }
 
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 120 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: spacing.base, paddingBottom: spacing.xxl * 3 },
+
   header: { flexDirection: 'row', alignItems: 'center' },
-  headerMeta: { fontSize: 12, fontWeight: '800', color: colors.subtext, textTransform: 'uppercase' },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: colors.text },
-  streakChip: { borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 2, borderColor: colors.border, backgroundColor: '#FFF4D1' },
-  streakText: { fontSize: 14, fontWeight: '800', color: colors.text },
-  room: {
-    marginTop: 12,
-    height: 360,
-    borderRadius: 24,
-    borderWidth: 3,
+  headerText: { flex: 1 },
+  headerMeta: {
+    ...typography.micro,
+    color: colors.subtext,
+    textTransform: 'uppercase',
+  },
+  headerTitle: { ...typography.title, color: colors.text },
+  streakChip: {
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    borderWidth: 2,
     borderColor: colors.border,
-    backgroundColor: '#EFE3C8',
+    backgroundColor: colors.streakTint,
+  },
+  streakText: { ...typography.caption, color: colors.text },
+
+  room: {
+    marginTop: spacing.md,
+    height: 360,
+    borderRadius: radius.xl,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.roomFloor,
     alignItems: 'center',
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
-  roomFloor: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: '#5A3620', borderTopWidth: 3, borderTopColor: colors.border },
+  roomFloor: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    backgroundColor: colors.roomWood,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
+  },
   bearWrap: { marginBottom: 40, alignItems: 'center' },
   speechBubble: {
     position: 'absolute',
-    top: 10,
-    backgroundColor: colors.card,
-    borderWidth: 3,
+    top: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     maxWidth: 280,
   },
-  speechText: { fontSize: 13, fontWeight: '600', color: colors.text, textAlign: 'center' },
-  statsRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  statBar: { flex: 1, backgroundColor: colors.card, borderWidth: 2, borderColor: colors.track, borderRadius: 12, padding: 8 },
-  statLabel: { fontSize: 11, fontWeight: '800', color: colors.subtext, textTransform: 'uppercase', marginBottom: 6 },
-  statTrack: { height: 10, backgroundColor: colors.track, borderRadius: 5, overflow: 'hidden' },
-  statFill: { height: '100%', borderRadius: 5 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  speechText: { ...typography.caption, color: colors.text, textAlign: 'center' },
+
+  statsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.base },
+  statBar: {
+    flex: 1,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+  },
+  statLabel: {
+    ...typography.micro,
+    color: colors.subtext,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs + 2,
+  },
+  statTrack: {
+    height: 10,
+    backgroundColor: colors.track,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  statFill: { height: '100%', borderRadius: radius.pill },
+
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.base },
   actionBtn: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 3,
+    height: sizes.minTouchTarget,
+    borderRadius: radius.md,
+    borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   btnGreen: { backgroundColor: colors.success },
-  btnWhite: { backgroundColor: colors.card },
-  actionBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  actionBtnDarkText: { color: colors.text, fontWeight: '800', fontSize: 14 },
-  tabs: { flexDirection: 'row', gap: 8, marginTop: 20 },
-  tab: { borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.card },
+  btnWhite: { backgroundColor: colors.surfaceRaised },
+  actionBtnText: { ...typography.caption, color: colors.card },
+  actionBtnDarkText: { ...typography.caption, color: colors.text },
+
+  tabs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  tab: {
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
   tabActive: { backgroundColor: colors.border },
-  tabText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  infoCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 18, padding: 16, marginTop: 12 },
-  infoTitle: { fontSize: 16, fontWeight: '900', color: colors.text, marginBottom: 4 },
-  infoText: { fontSize: 14, color: colors.subtext, lineHeight: 20 },
-  wearGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
-  wearItem: { width: '22%', aspectRatio: 1, backgroundColor: colors.card, borderWidth: 2, borderColor: colors.track, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  tabText: { ...typography.caption, color: colors.text },
+  tabTextActive: { color: colors.card },
+
+  infoCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.base,
+    marginTop: spacing.md,
+  },
+  infoTitle: { ...typography.bodyStrong, color: colors.text, marginBottom: spacing.xs },
+  infoText: { ...typography.caption, color: colors.subtext },
+  infoTextSpaced: { marginTop: spacing.sm },
+
+  wearGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  wearItem: {
+    width: '22%',
+    aspectRatio: 1,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   wearIcon: { fontSize: 28 },
-  lock: { position: 'absolute', top: 4, right: 6, fontSize: 12 },
-  roomGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
-  roomItem: { width: '30%', backgroundColor: colors.card, borderWidth: 2, borderColor: colors.track, borderRadius: 14, padding: 12, alignItems: 'center' },
+  lock: { position: 'absolute', top: spacing.xs, right: spacing.xs, fontSize: 12 },
+
+  roomGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  roomItem: {
+    width: '30%',
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
   roomIcon: { fontSize: 26 },
-  roomLabel: { fontSize: 11, fontWeight: '700', color: colors.text, marginTop: 4 },
+  roomLabel: { ...typography.micro, color: colors.text, marginTop: spacing.xs },
 });
+

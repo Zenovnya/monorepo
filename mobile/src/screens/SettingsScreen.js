@@ -1,9 +1,9 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { notificationsApi } from '../api/notifications';
-import { colors } from '../theme/colors';
+import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
 
 export default function SettingsScreen({ navigation }) {
   const { isAuthenticated, logout, user } = useAuthStore();
@@ -79,42 +79,81 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: spacing.base, paddingBottom: spacing.xxl },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.card,
+    width: sizes.minTouchTarget,
+    height: sizes.minTouchTarget,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { fontSize: 18, fontWeight: '900', color: colors.text },
-  title: { fontSize: 26, fontWeight: '900', color: colors.text },
-  list: { marginTop: 16, gap: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 14 },
-  rowTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-  rowValue: { fontSize: 13, color: colors.subtext, maxWidth: '60%', textAlign: 'right' },
-  sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.subtext, textTransform: 'uppercase', marginTop: 20, marginBottom: 8 },
-  emptyCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 16, alignItems: 'center' },
-  emptyText: { fontSize: 14, color: colors.subtext },
-  notifList: { gap: 8 },
-  notifCard: { backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 14 },
+  backText: { ...typography.heading, color: colors.text },
+  title: { ...typography.title, color: colors.text },
+
+  list: { marginTop: spacing.base, gap: spacing.sm + 2 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  rowTitle: { ...typography.bodyStrong, color: colors.text },
+  rowValue: {
+    ...typography.caption,
+    color: colors.subtext,
+    maxWidth: '60%',
+    textAlign: 'right',
+  },
+
+  sectionTitle: {
+    ...typography.micro,
+    color: colors.subtext,
+    textTransform: 'uppercase',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  emptyCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.md,
+    padding: spacing.base,
+    alignItems: 'center',
+  },
+  emptyText: { ...typography.caption, color: colors.subtext },
+  notifList: { gap: spacing.sm },
+  notifCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
   notifRead: { opacity: 0.6 },
-  notifTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-  notifBody: { fontSize: 13, color: colors.subtext, marginTop: 4, lineHeight: 18 },
+  notifTitle: { ...typography.bodyStrong, color: colors.text },
+  notifBody: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
+
   logoutBtn: {
-    marginTop: 24,
-    height: 56,
-    borderRadius: 16,
+    marginTop: spacing.xl,
+    height: sizes.button,
+    borderRadius: radius.md,
     backgroundColor: colors.error,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutText: { color: '#fff', fontWeight: '900', fontSize: 17 },
+  logoutText: { ...typography.heading, color: colors.card },
 });
+

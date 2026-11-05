@@ -36,3 +36,36 @@ class XpAddOut(BaseModel):
     level: int
     streak: int
     leveled_up: bool
+
+
+class LeaderboardEntry(BaseModel):
+    """Строка таблицы лидеров."""
+
+    position: int
+    name: str
+    level: int
+    xp: int
+    is_me: bool
+
+
+class LeaderboardRead(BaseModel):
+    """Таблица лидеров по выбранной лиге."""
+
+    league: str
+    next_league: str
+    entries: list[LeaderboardEntry]
+    my_position: int | None
+
+
+class ShopPurchaseIn(BaseModel):
+    """Покупка товара за гемы."""
+
+    item: str = Field(min_length=1, max_length=64)
+
+
+class ShopPurchaseOut(BaseModel):
+    """Результат покупки за гемы."""
+
+    item: str
+    spent: int
+    gems: int

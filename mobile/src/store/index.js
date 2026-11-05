@@ -1,7 +1,43 @@
 import { create } from 'zustand';
-import { authApi } from '../api/auth';
-import { syncPushToken } from '../utils/notifications';
+import { Platform } from 'react-native';
+
 import tokenStorage from '../utils/tokenStorage';
+
+/**
+ * Обновляет пару токенов по refresh-токену.
+ *
+ * Отдельный HTTP-вызов без `apiClient` и без модуля `api/auth`: иначе
+ * получается цикл `client -> store -> client`, из-за которого окно
+ * авторизации получало неинициализированные значения.
+ */
+async function refreshSession(refreshToken) {
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL
+    || (Platform.OS === 'web' ? '' : 'http://localhost:8000');
+  const response = await fetch(`${baseUrl}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!response.ok) {
+    throw new Error(`Refresh failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Возвращает данные текущего пользователя по access-токену.
+ */
+async function fetchMe(accessToken) {
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL
+    || (Platform.OS === 'web' ? '' : 'http://localhost:8000');
+  const response = await fetch(`${baseUrl}/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Profile failed: ${response.status}`);
+  }
+  return response.json();
+}
 
 /**
  * Глобальное хранилище UI-состояния приложения (Zustand).
@@ -83,13 +119,13 @@ export const useAuthStore = create((set, get) => ({
 
     // Подгружаем актуальные данные пользователя по access-токену.
     try {
-      const user = await authApi.me(accessToken);
+      const user = await fetchMe(accessToken);
       set({ user });
     } catch {
       // Не удалось получить пользователя — токен мог истечь. Пробуем refresh.
       try {
-        const refreshed = await authApi.refresh(refreshToken);
-        const user = await authApi.me(refreshed.access_token);
+        const refreshed = await refreshSession(refreshToken);
+        const user = await fetchMe(refreshed.access_token);
 
         set({
           user,
@@ -108,7 +144,13 @@ export const useAuthStore = create((set, get) => ({
     }
 
     // Если сессия есть — синхронизируем push-токен устройства.
-    syncPushToken();
+    // Модуль грузим лениво: `notifications` зависит от `api/client`, который
+    // сам импортирует этот стор, и статический импорт замыкал цикл модулей.
+    if (Platform.OS !== 'web') {
+      import('../utils/notifications')
+        .then((mod) => mod.syncPushToken())
+        .catch(() => {});
+    }
   },
 }));
 

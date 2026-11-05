@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -11,6 +11,9 @@ from app.modules.auth.models import User
 from app.modules.gamification import service
 from app.modules.gamification.schemas import (
     GamificationRead,
+    LeaderboardRead,
+    ShopPurchaseIn,
+    ShopPurchaseOut,
     XpAddIn,
     XpAddOut,
 )
@@ -83,3 +86,50 @@ async def gamification_achievements(
             for a in achievements
         ]
     }
+
+
+@router.get("/leaderboard", response_model=LeaderboardRead)
+async def gamification_leaderboard(
+    limit: int = Query(default=30, ge=1, le=100),
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Таблица лидеров лиги текущего пользователя (по реальным XP)."""
+    user_id = _get_current_user_id(authorization)
+    try:
+        return await service.get_leaderboard(session, user_id, limit=limit)
+    except service.GamificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/shop/purchase", response_model=ShopPurchaseOut)
+async def gamification_shop_purchase(
+    data: ShopPurchaseIn,
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Покупает товар за гемы и возвращает остаток баланса."""
+    user_id = _get_current_user_id(authorization)
+    try:
+        result = await service.purchase_shop_item(session, user_id, data.item)
+    except service.UnknownShopItemError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except service.InsufficientGemsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except service.GamificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    await session.commit()
+    return result

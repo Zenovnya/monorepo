@@ -19,6 +19,7 @@ os.environ.setdefault(
 import pytest
 from fastapi.testclient import TestClient
 
+from app.database import engine
 from app.main import app
 
 
@@ -27,3 +28,19 @@ def client() -> TestClient:
     """Возвращает синхронный HTTP-клиент для проверки эндпоинтов."""
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _reset_db_pool() -> None:
+    """Сбрасывает пул соединений между тестами.
+
+    ``asyncio_mode = auto`` даёт каждому async-тесту собственный event loop.
+    ``AsyncAdaptedQueuePool`` держит asyncpg-соединения, привязанные к loop,
+    на котором они были созданы: переиспользование в следующем тесте падает
+    с ``Event loop is closed`` / ``NoneType has no attribute 'send'``.
+    ``dispose()`` возвращает пул в исходное состояние, не обращаясь к
+    закрытому loop (в отличие от ``disconnect()``).
+    """
+    engine.sync_engine.pool.dispose()
+    yield
+    engine.sync_engine.pool.dispose()

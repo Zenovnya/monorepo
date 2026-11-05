@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { usePremium } from '../hooks/usePremium';
-import { colors } from '../theme/colors';
+import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
 
 const PLANS = [
   { key: 'monthly', title: '1 месяц', price: '399 ₽/мес', note: 'Экономия 0%' },
@@ -102,70 +102,80 @@ export default function PremiumScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: spacing.base, paddingBottom: spacing.xxl },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.card,
+    width: sizes.minTouchTarget,
+    height: sizes.minTouchTarget,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { fontSize: 18, fontWeight: '900', color: colors.text },
-  title: { fontSize: 26, fontWeight: '900', color: colors.text },
+  backText: { ...typography.heading, color: colors.text },
+  title: { ...typography.title, color: colors.text },
+
   hero: {
-    marginTop: 16,
-    backgroundColor: '#FFF7DE',
-    borderWidth: 3,
-    borderColor: colors.border,
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  heroLabel: { fontSize: 12, fontWeight: '900', color: colors.accent, textTransform: 'uppercase' },
-  heroTitle: { fontSize: 24, fontWeight: '900', color: colors.text, marginTop: 4 },
-  price: { fontSize: 30, fontWeight: '900', color: colors.text, marginTop: 8 },
-  priceNote: { fontSize: 14, color: colors.subtext, marginTop: 2 },
-  plans: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  plan: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 20,
+    marginTop: spacing.base,
+    backgroundColor: colors.goldTint,
     borderWidth: 2,
     borderColor: colors.border,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     alignItems: 'center',
   },
-  planSelected: { borderColor: colors.accent, backgroundColor: '#FFF7DE' },
-  popularBadge: { fontSize: 11, fontWeight: '800', color: colors.accent, marginBottom: 6 },
-  planTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  planPrice: { fontSize: 20, fontWeight: '800', color: colors.text, marginTop: 8 },
-  planNote: { fontSize: 12, color: colors.subtext, marginTop: 4 },
-  perkList: { marginTop: 16, gap: 10 },
-  perk: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 16, padding: 14 },
+  heroLabel: { ...typography.micro, color: colors.accent, textTransform: 'uppercase' },
+  heroTitle: { ...typography.title, color: colors.text, marginTop: spacing.xs },
+  price: { ...typography.display, color: colors.text, marginTop: spacing.sm },
+  priceNote: { ...typography.caption, color: colors.subtext, marginTop: 2 },
+
+  plans: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.base },
+  plan: {
+    flex: 1,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.base,
+    alignItems: 'center',
+  },
+  planSelected: { borderColor: colors.accent, backgroundColor: colors.goldTint },
+  popularBadge: { ...typography.micro, color: colors.accent, marginBottom: spacing.xs + 2 },
+  planTitle: { ...typography.body, color: colors.text },
+  planPrice: { ...typography.heading, color: colors.text, marginTop: spacing.sm },
+  planNote: { ...typography.micro, color: colors.subtext, marginTop: spacing.xs },
+
+  perkList: { marginTop: spacing.base, gap: spacing.sm + 2 },
+  perk: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
   perkIcon: { fontSize: 24 },
-  perkText: { flex: 1, fontSize: 15, fontWeight: '800', color: colors.text },
-  perkCheck: { fontSize: 16, color: colors.success, fontWeight: '900' },
+  perkText: { ...typography.bodyStrong, color: colors.text, flex: 1 },
+  perkCheck: { ...typography.bodyStrong, color: colors.success },
+
   activeBanner: {
-    marginTop: 16,
-    backgroundColor: '#DFF5E5',
-    borderWidth: 3,
+    marginTop: spacing.base,
+    backgroundColor: colors.successTint,
+    borderWidth: 2,
     borderColor: colors.success,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
     alignItems: 'center',
   },
-  activeText: { fontSize: 15, fontWeight: '900', color: colors.text },
-  paymentHint: {
-    textAlign: 'center',
-    marginTop: 16,
-    fontSize: 13,
-    color: colors.subtext,
-  },
-  terms: { textAlign: 'center', fontSize: 12, color: colors.subtext, marginTop: 12 },
+  activeText: { ...typography.bodyStrong, color: colors.text },
+  paymentHint: { ...typography.caption, color: colors.subtext, textAlign: 'center', marginTop: spacing.base },
+  terms: { ...typography.micro, color: colors.subtext, textAlign: 'center', marginTop: spacing.md },
 });
+

@@ -28,7 +28,7 @@
  * translate back" паттерн — RN по умолчанию поворачивает вокруг центра View,
  * пре- и пост-сдвиги переносят pivot в центр на время поворота.
  */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -302,6 +302,7 @@ export default function BearRig({
   }, []);
 
   // ---------- Idle-цикл look-around (принудительный) ----------
+  // pupilX — стабильный shared value: эффект не должен пересоздаваться.
   useEffect(() => {
     if (!stateCfg.lookAround) return;
     pupilX.value = withRepeat(
@@ -313,6 +314,7 @@ export default function BearRig({
       2,
       false
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateCfg.lookAround]);
 
   // ---------- One-shot реакции на смену state ----------
@@ -429,6 +431,7 @@ export default function BearRig({
       cancelAnimation(tearY);
       tearY.value = 0;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showTear]);
 
   useEffect(() => {
@@ -440,10 +443,12 @@ export default function BearRig({
     } else {
       sparklesOpacity.value = withTiming(0, { duration: 200 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSparkles]);
 
   useEffect(() => {
     questionOpacity.value = withTiming(showQuestion ? 1 : 0, { duration: 250 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showQuestion]);
 
   useEffect(() => {
@@ -460,6 +465,7 @@ export default function BearRig({
       cancelAnimation(zzzOpacity);
       zzzOpacity.value = withTiming(0, { duration: 200 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showZzz]);
 
   useEffect(() => {
@@ -471,14 +477,17 @@ export default function BearRig({
     } else {
       heartsOpacity.value = withTiming(0, { duration: 200 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showHearts]);
 
   useEffect(() => {
     blushOpacity.value = withTiming(blushLevel, { duration: 300 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blushLevel]);
 
   useEffect(() => {
     starEyesOpacity.value = withTiming(showStarEyes ? 1 : 0, { duration: 220 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showStarEyes]);
 
   // ---------- Talking mouth (циклическая смена кадров) ----------
@@ -680,6 +689,7 @@ function SparkleParticle({ opacity, dx, dy, size, delay }) {
       )
     );
     return () => cancelAnimation(scaleV);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delay, size]);
 
   const style = useAnimatedStyle(() => ({

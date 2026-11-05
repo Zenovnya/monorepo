@@ -4,15 +4,20 @@ import apiClient from '../api/client';
 
 /**
  * Настройка обработчика уведомлений.
+ *
+ * Только для нативных платформ: на вебе expo-notifications не поддерживает
+ * слушателей токенов и пишет об этом предупреждение в консоль.
  */
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 /**
  * Запрашивает разрешение и регистрирует push-токен устройства.
@@ -75,6 +80,7 @@ export async function syncPushToken() {
  * Показывает локальное уведомление.
  */
 export async function showLocalNotification(title, body) {
+  if (Platform.OS === 'web') return;
   await Notifications.scheduleNotificationAsync({
     content: { title, body },
     trigger: null, // показать сразу

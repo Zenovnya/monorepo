@@ -13,4 +13,12 @@ export const gamificationApi = {
 
   // Список достижений
   achievements: () => apiClient.get('/gamification/achievements').then((r) => r.data),
+
+  // Таблица лидеров лиги текущего пользователя
+  leaderboard: (limit = 30) =>
+    apiClient.get('/gamification/leaderboard', { params: { limit } }).then((r) => r.data),
+
+  // Покупка товара за гемы
+  purchaseShopItem: (item) =>
+    apiClient.post('/gamification/shop/purchase', { item }).then((r) => r.data),
 };

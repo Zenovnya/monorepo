@@ -17,11 +17,20 @@ export const lexbearApi = {
   getLesson: (lessonId) =>
     apiClient.get(`/lexbear/lessons/${lessonId}`).then((r) => r.data),
 
-  // Завершение урока (XP, короны, стрик, разблокировка статей)
-  completeLesson: (lessonId, { correct, total }) =>
-    apiClient
-      .post(`/lexbear/lessons/${lessonId}/complete`, { correct, total })
-      .then((r) => r.data),
+  // Завершение урока (XP, короны, стрик, разблокировка статей).
+  // Сервер сам считает результат по ответам — счёт с клиента не принимается.
+  // Ответы уходят как строковые ключи (`id вопроса -> ответ`): ровно этот
+  // формат ожидает `LessonCompleteIn.answers` (`dict[str, Any]`).
+  completeLesson: (lessonId, { answers } = {}) => {
+    const payload = {};
+    for (const [questionId, value] of Object.entries(answers ?? {})) {
+      if (value === null || value === undefined) continue;
+      payload[String(questionId)] = value;
+    }
+    return apiClient
+      .post(`/lexbear/lessons/${lessonId}/complete`, { answers: payload })
+      .then((r) => r.data);
+  },
 
   // Статьи со статусом изучения
   articles: () => apiClient.get('/lexbear/articles').then((r) => r.data),
