@@ -39,4 +39,9 @@ Thumbs.db
 pgdata/
 *.log
 
+# --- Локальный dev-стек (scripts/dev-*.ps1) ---
+.local/
+backend/.env
+mobile/.env
+
 

@@ -71,7 +71,15 @@ function MainTabs() {
 
 function AuthStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Плавный cross-fade вместо резкого «слайда»: переход между
+        // входом и регистрацией не должен выглядеть как смена экрана целиком.
+        animation: 'fade',
+        animationDuration: 260,
+      }}
+    >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
     </Stack.Navigator>

@@ -3,6 +3,29 @@ import { NativeModules, Platform } from 'react-native';
 
 import { useAuthStore } from '../store';
 
+/** Порт, на котором локально слушает FastAPI (uvicorn --port 8000). */
+const API_PORT = 8000;
+
+/**
+ * Возвращает хост dev-машины по данным Expo Go / Metro.
+ *
+ * В Expo Go для физического устройства `scriptURL` — это адрес Metro
+ * (`http://192.168.1.10:8081/node_modules/...`). Берём его хост, чтобы запросы
+ * уходили на компьютер, а не на сам телефон (localhost).
+ */
+export function getDevHost() {
+  try {
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match) return match[1];
+    }
+  } catch {
+    // SourceCode может отсутствовать (веб/нестандартный runtime).
+  }
+  return null;
+}
+
 /**
  * Определяет базовый URL API.
  *
@@ -13,8 +36,9 @@ import { useAuthStore } from '../store';
  *    запросы шли на dev-машину, а не на само устройство (localhost).
  */
 function resolveBaseUrl() {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  const explicit = process.env.EXPO_PUBLIC_API_URL;
+  if (explicit) {
+    return explicit.replace(/\/+$/, '');
   }
 
   // Веб: используем тот же origin (проксирование настроено на сервере).
@@ -22,21 +46,26 @@ function resolveBaseUrl() {
     return '';
   }
 
-  // Нативный клиент: извлекаем хост из scriptURL Metro/dev-сервера.
-  // Пример: "http://192.168.1.10:8081/index.bundle" → host "192.168.1.10".
-  try {
-    const scriptURL = NativeModules.SourceCode?.scriptURL;
-    if (scriptURL) {
-      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
-      if (match) {
-        return `http://${match[1]}:8000`;
-      }
-    }
-  } catch {
-    // Игнорируем — fallback на localhost.
+  const host = getDevHost();
+  if (host) {
+    return `http://${host}:${API_PORT}`;
   }
 
-  return 'http://localhost:8000';
+  return `http://localhost:${API_PORT}`;
+}
+
+/**
+ * Человекочитаемое описание сетевой ошибки (для форм логина/регистрации).
+ * Отдельно ловим недоступный backend — самая частая проблема при запуске
+ * на телефоне (неверный IP, firewall, сервер не запущен).
+ */
+export function describeNetworkError(error) {
+  if (error?.response) return null;
+  if (error?.code === 'ECONNABORTED') {
+    return 'Сервер не ответил вовремя. Проверьте, что backend запущен.';
+  }
+  return `Не удалось подключиться к серверу (${apiClient.defaults.baseURL}). ` +
+    'Проверьте Wi-Fi и что backend слушает 0.0.0.0:8000.';
 }
 
 /**

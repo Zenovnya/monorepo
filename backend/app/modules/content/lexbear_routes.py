@@ -56,16 +56,20 @@ def _get_current_user_id(
 
 @router.post("/seed", dependencies=[Depends(require_admin)])
 async def seed(
+    force: bool = False,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Запускает сид контента LexBear (идемпотентно).
 
     Защищён admin-токеном (заголовок ``X-Admin-Token``): служебный эндпоинт,
     недоступный обычным клиентам.
+
+    :param force: перезагрузить контент из JSON-паков, даже если он уже есть.
     """
     from app.modules.content import lexbear_seed
 
-    result = await lexbear_seed.run_lexbear_seed(session)
+    result = await lexbear_seed.run_lexbear_seed(session, force=force)
+    await session.commit()
     return result
 
 

@@ -9,6 +9,7 @@ import { AnimatedInput } from '../components/AnimatedInput';
 import { AnimatedCheckbox } from '../components/AnimatedCheckbox';
 import { SocialButton } from '../components/SocialButton';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import { describeNetworkError } from '../api/client';
 import { useLogin } from '../hooks/useAuth';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,8 +59,12 @@ export default function LoginScreen() {
           // Навигация на MainTabs произойдёт автоматически через RootNavigator,
           // т.к. isAuthenticated станет true в сторе.
         },
-        onError: () => {
-          setErrors({ password: 'Неверный email или пароль' });
+        onError: (error) => {
+          // Нет сети/бэкенд недоступен — показываем адрес, к которому стучимся,
+          // иначе пользователь видит ложное «неверный пароль».
+          setErrors({
+            password: describeNetworkError(error) ?? 'Неверный email или пароль',
+          });
           passwordRef.current?.shake();
           triggerError();
         },

@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -17,6 +18,23 @@ from app.modules import api_router
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def _force_utf8_stdout() -> None:
+    """Force UTF-8 stdio so logging never dies on non-ASCII text.
+
+    On Windows the console defaults to cp1251/cp866, and ``echo=True`` SQL
+    logging emits Russian content (questions, cases). Without this, any such
+    log line raised ``UnicodeEncodeError`` inside the logging handler, which
+    aborted requests with a 500 mid-transaction.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
+_force_utf8_stdout()
 
 
 def is_allowed_origin(origin: str | None) -> bool:

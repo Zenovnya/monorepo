@@ -6,9 +6,18 @@ import AuthLayout, { authFooterStyles } from '../components/AuthLayout';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
 import { colors, spacing, typography } from '../theme/tokens';
+import { describeNetworkError } from '../api/client';
 import { useRegister } from '../hooks/useAuth';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Достаём текст ошибки из ответа FastAPI (``detail`` бывает строкой или массивом). */
+function apiErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  return fallback;
+}
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
@@ -60,8 +69,21 @@ export default function RegisterScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           setSuccess(true);
         },
-        onError: () => {
-          setErrors({ email: 'Такой пользователь уже существует' });
+        onError: (error) => {
+          // Сетевая ошибка ≠ занятый email: иначе пользователь меняет данные зря.
+          const networkError = describeNetworkError(error);
+          const status = error?.response?.status;
+
+          if (networkError) {
+            setErrors({ email: networkError });
+          } else if (status === 409 || status === 400) {
+            setErrors({
+              email: apiErrorMessage(error, 'Такой пользователь уже существует'),
+            });
+          } else {
+            setErrors({ email: apiErrorMessage(error, 'Не удалось зарегистрироваться') });
+          }
+
           emailRef.current?.shake();
           triggerError();
         },

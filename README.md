@@ -81,6 +81,31 @@ npm run lint
 
 Сборка через EAS: [`mobile/EAS_DEPLOY.md`](mobile/EAS_DEPLOY.md), профили — `mobile/eas.json`.
 
+### Вариант C — весь стек на Windows одним скриптом
+
+`scripts/dev-*.ps1` поднимают отдельный кластер PostgreSQL на `:5433` (пароль
+администратора не нужен, данные в `.local/pgdata`), применяют миграции,
+запускают API и сидят контент.
+
+```powershell
+# один раз, из PowerShell от имени администратора — порты для телефона
+powershell -ExecutionPolicy Bypass -File scripts\open-firewall.ps1
+
+# каждый запуск: БД + миграции + API (:8000) + сид
+powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1
+
+# во втором терминале — Metro/Expo в локальной сети (QR для Expo Go)
+powershell -ExecutionPolicy Bypass -File scripts\dev-mobile.ps1
+```
+
+Перезалить контент: `POST /lexbear/seed?force=true` с заголовком
+`X-Admin-Token`. Логи: `.local\backend.err.log`, `.local\pg.log`.
+
+> Скрипты сохранены в **UTF-8 с BOM**: PowerShell 5.1 без BOM читает `.ps1`
+> как ANSI (cp1251) и падает на русских комментариях
+> (`В строке отсутствует завершающий символ`). При правке сохраняйте
+> «UTF-8 with BOM».
+
 ---
 
 ## Контент как данные
