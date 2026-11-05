@@ -56,6 +56,11 @@ powershell -ExecutionPolicy Bypass -File scripts\dev-mobile.ps1
 (IP печатает `dev-start.ps1`) либо отсканируйте QR из терминала Metro.
 Телефон и компьютер — в одной сети, сеть — профиль «Частная».
 
+> Скрипты `scripts/*.ps1` сохранены в **UTF-8 с BOM**: PowerShell 5.1 без BOM
+> читает `.ps1` как ANSI (cp1251), и русские комментарии ломают парсер
+> (`В строке отсутствует завершающий символ`). При правке скриптов в редакторе
+> сохраняйте кодировку «UTF-8 with BOM».
+
 ### Проверка
 
 - `http://localhost:8000/health` → `{"status":"ok","database":"ok"}`

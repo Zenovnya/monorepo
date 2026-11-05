@@ -1,6 +1,7 @@
-# Запуск API в отдельном фоне (переживает закрытие терминала).
+﻿# Запуск API в отдельном фоне (переживает закрытие терминала).
 # Использование: powershell -ExecutionPolicy Bypass -File scripts\dev-api.ps1
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $root = Split-Path $PSScriptRoot -Parent
 $backend = Join-Path $root 'backend'

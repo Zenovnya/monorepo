@@ -1,6 +1,7 @@
-# Поднимает весь локальный dev-стек: БД → миграции → сид → API.
+﻿# Поднимает весь локальный dev-стек: БД → миграции → сид → API.
 # Использование: powershell -ExecutionPolicy Bypass -File scripts\dev-start.ps1
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $root = Split-Path $PSScriptRoot -Parent
 
@@ -28,10 +29,25 @@ try {
     Write-Host "Сид не выполнен: $($_.Exception.Message)"
 }
 
-$ips = Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
-    Select-Object -ExpandProperty IPAddress
+# Только реальные LAN-адреса: без loopback, link-local, WSL/Hyper-V/VirtualBox,
+# VPN и виртуальных адаптеров — телефон по ним не достучится.
+$candidates = Get-NetIPAddress -AddressFamily IPv4 |
+    Where-Object {
+        $_.IPAddress -notlike '127.*' -and
+        $_.IPAddress -notlike '169.254.*' -and
+        $_.PrefixOrigin -ne 'WellKnown' -and
+        $_.InterfaceAlias -notmatch 'Loopback|vEthernet|VirtualBox|VMware|WSL|Docker|Teredo|tun|tap|VPN|Bluetooth'
+    } |
+    Select-Object IPAddress, InterfaceAlias, PrefixOrigin
+
+# Первыми — Wi-Fi/Ethernet с DHCP (так выдаёт роутер), затем остальные.
+$ips = @(
+    ($candidates | Where-Object { $_.PrefixOrigin -eq 'Dhcp' } | Select-Object -ExpandProperty IPAddress -Unique)
+    ($candidates | Select-Object -ExpandProperty IPAddress -Unique)
+) | Select-Object -Unique
+
 Write-Host ''
 Write-Host 'API:      http://localhost:8000/docs'
 foreach ($ip in $ips) { Write-Host "С телефона: http://${ip}:8000" }
+if (-not $ips) { Write-Host 'LAN-адрес не найден — проверьте подключение к Wi-Fi.' }
 Write-Host 'Мобильное приложение: cd mobile; npx expo start --lan (телефон в той же Wi-Fi)'

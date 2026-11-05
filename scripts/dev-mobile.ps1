@@ -1,6 +1,7 @@
-# Ставит зависимости (если нужно) и запускает Metro/Expo в LAN-режиме.
+﻿# Ставит зависимости (если нужно) и запускает Metro/Expo в LAN-режиме.
 # Использование: powershell -ExecutionPolicy Bypass -File scripts\dev-mobile.ps1
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $root = Split-Path $PSScriptRoot -Parent
 $mobile = Join-Path $root 'mobile'
