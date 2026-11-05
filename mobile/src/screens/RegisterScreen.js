@@ -6,7 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Animated, { SlideInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -14,9 +14,25 @@ import { AnimatedMascot } from '../components/AnimatedMascot';
 import { Confetti } from '../components/Confetti';
 import { colors } from '../theme/colors';
 import { useRegister } from '../hooks/useAuth';
+import { describeNetworkError } from '../api/client';
 import { useNavigation } from '@react-navigation/native';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Мягкое появление блока: плавное всплытие + fade без «пружинного» подскока.
+ * Так экран не «выпрыгивает» целиком, а собирается по частям.
+ */
+const fadeUp = (delay = 0) =>
+  FadeInDown.delay(delay).duration(420).easing(Easing.out(Easing.cubic));
+
+/** Достаём текст ошибки из ответа FastAPI (``detail`` бывает строкой или массивом). */
+function apiErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  return fallback;
+}
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
@@ -68,8 +84,22 @@ export default function RegisterScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setSuccess(true);
         },
-        onError: () => {
-          setErrors({ email: 'Такой пользователь уже существует' });
+        onError: (error) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          // Сетевая ошибка ≠ занятый email: иначе пользователь меняет данные зря.
+          const networkError = describeNetworkError(error);
+          const status = error?.response?.status;
+
+          if (networkError) {
+            setErrors({ email: networkError });
+          } else if (status === 409 || status === 400) {
+            setErrors({
+              email: apiErrorMessage(error, 'Такой пользователь уже существует'),
+            });
+          } else {
+            setErrors({ email: apiErrorMessage(error, 'Не удалось зарегистрироваться') });
+          }
+
           emailRef.current?.shake();
           triggerError();
         },
@@ -85,29 +115,21 @@ export default function RegisterScreen() {
       <Confetti active={success} />
 
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Animated.View entering={ZoomIn.duration(500).springify().damping(8)}>
+        <Animated.View entering={FadeInDown.duration(520).easing(Easing.out(Easing.cubic))}>
           <AnimatedMascot celebrate={success} error={hasError} />
         </Animated.View>
 
-        <Animated.Text
-          entering={SlideInUp.delay(200).springify().damping(9).mass(0.6)}
-          style={styles.title}
-        >
+        <Animated.Text entering={fadeUp(120)} style={styles.title}>
           Создать аккаунт
         </Animated.Text>
-        <Animated.Text
-          entering={SlideInUp.delay(280).springify().damping(9).mass(0.6)}
-          style={styles.subtitle}
-        >
+        <Animated.Text entering={fadeUp(180)} style={styles.subtitle}>
           Заполните данные для регистрации
         </Animated.Text>
 
-        <Animated.View
-          entering={SlideInUp.delay(350).springify().damping(11).mass(0.8)}
-          style={styles.card}
-        >
+        <Animated.View entering={fadeUp(240)} style={styles.card}>
           <AnimatedInput
             ref={usernameRef}
+            style={fadeUp(320)}
             label="Имя"
             placeholder="Иван Иванов"
             value={username}
@@ -120,6 +142,7 @@ export default function RegisterScreen() {
 
           <AnimatedInput
             ref={emailRef}
+            style={fadeUp(380)}
             label="Электронная почта"
             placeholder="name@example.com"
             keyboardType="email-address"
@@ -134,6 +157,7 @@ export default function RegisterScreen() {
 
           <AnimatedInput
             ref={passwordRef}
+            style={fadeUp(440)}
             label="Пароль"
             placeholder="Не меньше 8 символов"
             secure
@@ -147,6 +171,7 @@ export default function RegisterScreen() {
 
           <AnimatedInput
             ref={confirmRef}
+            style={fadeUp(500)}
             label="Повторите пароль"
             placeholder="Повторите пароль"
             secure
@@ -166,7 +191,7 @@ export default function RegisterScreen() {
           />
         </Animated.View>
 
-        <Animated.View entering={SlideInUp.delay(600).springify().damping(11)}>
+        <Animated.View entering={fadeUp(620)}>
           <Text style={styles.footerText}>
             Уже есть аккаунт?{' '}
             <Text style={styles.link} onPress={() => navigation.goBack()}>

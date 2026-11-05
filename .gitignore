@@ -1,1 +1,15 @@
+# Локальные артефакты dev-запуска (см. scripts/dev-*.ps1)
+.local/
+backend/.env
+mobile/.env
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+.expo/
+dist/

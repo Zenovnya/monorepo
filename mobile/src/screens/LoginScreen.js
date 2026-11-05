@@ -7,7 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Animated, { SlideInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -18,9 +18,17 @@ import { Confetti } from '../components/Confetti';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { useLogin } from '../hooks/useAuth';
+import { describeNetworkError } from '../api/client';
 import { useNavigation } from '@react-navigation/native';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Мягкое появление блока: плавное всплытие + fade без «пружинного» подскока.
+ * Так экран не «выпрыгивает» целиком, а собирается по частям.
+ */
+const fadeUp = (delay = 0) =>
+  FadeInDown.delay(delay).duration(420).easing(Easing.out(Easing.cubic));
 
 export default function LoginScreen() {
   const navigation = useNavigation();
@@ -67,8 +75,14 @@ export default function LoginScreen() {
           // Навигация на MainTabs произойдёт автоматически через RootNavigator,
           // т.к. isAuthenticated станет true в сторе
         },
-        onError: () => {
-          setErrors({ password: 'Неверный email или пароль' });
+        onError: (error) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          // Нет сети/бэкенд недоступен — показываем адрес, к которому стучимся,
+          // иначе пользователь видит ложное «неверный пароль».
+          const networkError = describeNetworkError(error);
+          setErrors({
+            password: networkError ?? 'Неверный email или пароль',
+          });
           passwordRef.current?.shake();
           triggerError();
         },
@@ -84,29 +98,21 @@ export default function LoginScreen() {
       <Confetti active={loginSuccess} />
 
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Animated.View entering={ZoomIn.duration(600).springify().damping(8)}>
+        <Animated.View entering={FadeInDown.duration(520).easing(Easing.out(Easing.cubic))}>
           <AnimatedMascot celebrate={loginSuccess} error={hasError} />
         </Animated.View>
 
-        <Animated.Text
-          entering={SlideInUp.delay(200).springify().damping(9).mass(0.6)}
-          style={styles.title}
-        >
+        <Animated.Text entering={fadeUp(120)} style={styles.title}>
           Здравствуйте
         </Animated.Text>
-        <Animated.Text
-          entering={SlideInUp.delay(280).springify().damping(9).mass(0.6)}
-          style={styles.subtitle}
-        >
+        <Animated.Text entering={fadeUp(180)} style={styles.subtitle}>
           Войдите, чтобы продолжить работу
         </Animated.Text>
 
-        <Animated.View
-          entering={SlideInUp.delay(350).springify().damping(11).mass(0.8)}
-          style={styles.card}
-        >
+        <Animated.View entering={fadeUp(240)} style={styles.card}>
           <AnimatedInput
             ref={emailRef}
+            style={fadeUp(320)}
             label="Электронная почта"
             placeholder="name@example.com"
             keyboardType="email-address"
@@ -121,6 +127,7 @@ export default function LoginScreen() {
 
           <AnimatedInput
             ref={passwordRef}
+            style={fadeUp(380)}
             label="Пароль"
             placeholder="Не меньше 8 символов"
             secure
@@ -145,17 +152,14 @@ export default function LoginScreen() {
           />
         </Animated.View>
 
-        <Animated.View
-          entering={SlideInUp.delay(500).springify().damping(11)}
-          style={styles.dividerRow}
-        >
+        <Animated.View entering={fadeUp(460)} style={styles.dividerRow}>
           <View style={styles.divider} />
           <Text style={styles.dividerText}>или войти через</Text>
           <View style={styles.divider} />
         </Animated.View>
 
         <View style={styles.socialRow}>
-          <Animated.View entering={ZoomIn.delay(600).springify().damping(8)} style={{ flex: 1 }}>
+          <Animated.View entering={fadeUp(520)} style={{ flex: 1 }}>
             <SocialButton
               label="Sber ID"
               icon={<Ionicons name="checkmark-circle" size={20} color="#21A038" />}
@@ -164,7 +168,7 @@ export default function LoginScreen() {
               }}
             />
           </Animated.View>
-          <Animated.View entering={ZoomIn.delay(680).springify().damping(8)} style={{ flex: 1 }}>
+          <Animated.View entering={fadeUp(580)} style={{ flex: 1 }}>
             <SocialButton
               label="Яндекс"
               icon={
@@ -179,7 +183,7 @@ export default function LoginScreen() {
           </Animated.View>
         </View>
 
-        <Animated.View entering={SlideInUp.delay(780).springify().damping(11)}>
+        <Animated.View entering={fadeUp(640)}>
           <Text style={styles.footerText}>
             Ещё нет аккаунта?{' '}
             <Text style={styles.link} onPress={() => navigation.navigate('Register')}>

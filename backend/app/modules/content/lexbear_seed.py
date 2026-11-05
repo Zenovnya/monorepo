@@ -9,18 +9,30 @@
 ``POST /admin/content/reload``), а не этот сид.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.content.content_loader import load_content
-from app.modules.content.lexbear_models import Unit
+from app.modules.content.lexbear_models import LexBearLesson, Unit
 
 
-async def run_lexbear_seed(session: AsyncSession) -> dict:
-    """Заполняет контент из JSON-паков, если юнитов ещё нет (идемпотентно)."""
-    existing = await session.scalar(select(Unit.id).limit(1))
-    if existing is not None:
-        return {"skipped": True}
+async def run_lexbear_seed(session: AsyncSession, *, force: bool = False) -> dict:
+    """Заполняет контент из JSON-паков (идемпотентно).
+
+    Сид считается выполненным, когда есть и юниты, и уроки. Раньше проверялся
+    только первый юнит: если предыдущий запуск упал между вставкой юнитов и
+    уроков, повторный сид молча возвращал ``skipped``, и приложение оставалось
+    с пустой картой обучения.
+
+    :param force: перезаписать контент из паков, даже если он уже есть.
+    """
+    if not force:
+        units = await session.scalar(select(func.count()).select_from(Unit)) or 0
+        lessons = (
+            await session.scalar(select(func.count()).select_from(LexBearLesson)) or 0
+        )
+        if units > 0 and lessons > 0:
+            return {"skipped": True}
 
     report = await load_content(session, prune=False)
     return {"skipped": False, **report}

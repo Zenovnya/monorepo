@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
-import { TextInput, View, Text, StyleSheet, Pressable } from 'react-native';
+import { TextInput, Text, StyleSheet, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
 
 export const AnimatedInput = forwardRef(
-  ({ label, error, secure, onFocus, onBlur, ...rest }, ref) => {
+  ({ label, error, secure, onFocus, onBlur, style, ...rest }, ref) => {
     const translateX = useSharedValue(0);
     const rotate = useSharedValue(0);
     const scale = useSharedValue(1);
@@ -56,7 +56,9 @@ export const AnimatedInput = forwardRef(
     };
 
     return (
-      <View style={{ marginBottom: 18 }}>
+      // Animated.View вместо View: экран может передать `entering`, чтобы поле
+      // появлялось каскадом, а не все сразу.
+      <Animated.View style={[{ marginBottom: 18 }, style]}>
         <Text style={styles.label}>{label}</Text>
         <Animated.View
           style={[styles.inputWrapper, animatedStyle, error ? { borderColor: colors.error } : null]}
@@ -86,7 +88,7 @@ export const AnimatedInput = forwardRef(
           )}
         </Animated.View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+      </Animated.View>
     );
   }
 );
