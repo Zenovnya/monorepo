@@ -70,30 +70,118 @@ if (-not ($lines -match '^host\s+all\s+all\s+0\.0\.0\.0/0\s+trust')) {
 }
 
 # Код возврата pg_isready: 0 — принимает подключения (сообщение локализовано).
-& "$pgBin\pg_isready.exe" -h 127.0.0.1 -p $Port *> $null
-if ($LASTEXITCODE -ne 0) {
-    # stderr от pg_ctl перехватываем, иначе PowerShell 5.1 превращает его
-    # в исключение из-за $ErrorActionPreference='Stop'.
-    & "$pgBin\pg_ctl.exe" -D $dataDir -l $logFile -o "-p $Port -c listen_addresses=*" start *>&1 | Out-Null
-    for ($i = 0; $i -lt 20; $i++) {
+function Test-PgReady {
+    param([int]$p)
+    # -t 10: при аварийном восстановлении кластер отвечает не сразу;
+    # короткий таймаут давал ложное «не отвечает» и мешал определить готовность.
+    & "$pgBin\pg_isready.exe" -h 127.0.0.1 -p $p -t 10 *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# ВАЖНО (исправление зависания). Раньше здесь вызывался `pg_ctl start` всякий раз,
+# когда pg_isready не отвечал «0». Но pg_ctl при живом (или полу-живом) кластере
+# задаёт ИНТЕРАКТИВНЫЙ вопрос:
+#     «возможно, уже работает другой сервер; всё же пробуем запустить этот сервер»
+#     «Другой экземпляр postmaster ... работает с каталогом данных ...? (Y/N)»
+# В консоли пользователя stdin — это терминал, поэтому uvicorn/скрипт «висел вечно»
+# ровно на этих строках сразу после «PostgreSQL bin: ...».
+#
+# Решение из двух частей:
+#   1) сначала определяем состояние через `pg_ctl status` (не задаёт вопросов);
+#   2) запускаем строго с `-w` (ждать готовности) и с stdin, взятым из $null,
+#      чтобы любой возможный запрос получил EOF, а не блокировал консоль.
+$statusProbe = & "$pgBin\pg_ctl.exe" status -D $dataDir *>&1 | Out-String
+$isRunning = ($LASTEXITCODE -eq 0)
+
+# Если кластер НЕ числится запущенным, но в каталоге остался postmaster.pid —
+# это «мусор» от прошлого аварийного завершения. Именно он заставляет pg_ctl
+# при старте задавать вопрос «…всё же пробуем? (Y/N)». Сносим его заранее.
+$pidFile = Join-Path $dataDir 'postmaster.pid'
+if ((-not $isRunning) -and (Test-Path $pidFile)) {
+    Write-Host 'Найден устаревший postmaster.pid — удаляю (остался после аварии).'
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+}
+
+if (-not (Test-PgReady -p $Port)) {
+    # Даём кластеру шанс: после нештатного завершения он может ещё
+    # восстанавливаться по WAL и временно не принимать подключения.
+    for ($i = 0; $i -lt 10; $i++) {
         Start-Sleep -Milliseconds 500
-        & "$pgBin\pg_isready.exe" -h 127.0.0.1 -p $Port *> $null
-        if ($LASTEXITCODE -eq 0) { break }
+        if (Test-PgReady -p $Port) { break }
     }
-    if ($LASTEXITCODE -ne 0) {
+}
+
+if (-not (Test-PgReady -p $Port)) {
+    if ($isRunning) {
+        # Кластер жив, но не принимает подключения на нужном порту: почти всегда
+        # он поднят на другом порту. Не пытаемся «стартовать поверх» — сообщаем.
+        Write-Host "Кластер уже запущен, но не отвечает на порту $Port."
+        Write-Host "Проверьте его состояние:"
+        Write-Host "  `"$pgBin\pg_ctl.exe`" status -D `"$dataDir`""
+        Write-Host 'Остановите его и запустите снова:'
+        Write-Host "  `"$pgBin\pg_ctl.exe`" -D `"$dataDir`" stop"
+        exit 1
+    }
+
+    # ЗАПУСК. Критично: `pg_ctl start` при «подозрении», что уже работает
+    # другой postmaster (оставшийся postmaster.pid, зомби-процесс), задаёт
+    # вопрос «всё же пробуем запустить? (Y/N)» и ЖДЁТ ВВОДА. Флаг -w этот
+    # вопрос НЕ отключает, поэтому запуск через конвейер PowerShell всё равно
+    # «висел вечно». Запускаем через Start-Process с stdin из пустого файла и
+    # жёстким таймаутом: вопрос получает EOF (то есть «нет»), а зависание
+    # невозможно.
+    $startArgs = @(
+        '-D', "`"$dataDir`"",
+        '-l', "`"$logFile`"",
+        '-o', "`"-p $Port -c listen_addresses=*`"",
+        '-w', '-t', '30', 'start'
+    )
+    # Пустой файл вместо stdin: любой вопрос pg_ctl получает EOF.
+    # (Start-Process НЕ принимает 'NUL' в -RedirectStandardInput — ему нужен
+    #  реальный путь к файлу, иначе падает с FileNotFoundException.)
+    $emptyStdin = Join-Path $root '.local\empty-stdin.txt'
+    Set-Content $emptyStdin -Value '' -NoNewline -Encoding ASCII
+    $ctlOut = Join-Path $root '.local\pgctl.out.log'
+    $ctlErr = Join-Path $root '.local\pgctl.err.log'
+
+    $proc = Start-Process -FilePath "$pgBin\pg_ctl.exe" -ArgumentList $startArgs `
+        -NoNewWindow -PassThru -RedirectStandardInput $emptyStdin `
+        -RedirectStandardOutput $ctlOut -RedirectStandardError $ctlErr
+    if (-not $proc.WaitForExit(45000)) {
+        $proc.Kill()
+        Write-Host 'pg_ctl start не завершился за 45 с — смотрите .local\pgctl.err.log'
+        Get-Content $ctlErr -Tail 20 -ErrorAction SilentlyContinue
+        exit 1
+    }
+
+    for ($i = 0; $i -lt 30; $i++) {
+        if (Test-PgReady -p $Port) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not (Test-PgReady -p $Port)) {
         Write-Host "PostgreSQL не запустился, лог ${logFile}:"
         Get-Content $logFile -Tail 20 -ErrorAction SilentlyContinue
+        Write-Host 'Вывод pg_ctl:'
+        Get-Content $ctlErr -Tail 10 -ErrorAction SilentlyContinue
         exit 1
     }
 }
 
-$roleExists = (& "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='lexbear'").Trim()
-if ($roleExists -ne '1') {
-    & "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -c "CREATE ROLE lexbear LOGIN PASSWORD 'lexbear_dev_pass' CREATEDB" | Out-Null
+function Invoke-Psql {
+    param([string]$Sql)
+    $out = & "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -tAc $Sql 2>&1 | Out-String
+    return $out.Trim()
 }
-$dbExists = (& "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='lexbear'").Trim()
-if ($dbExists -ne '1') {
-    & "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -c "CREATE DATABASE lexbear OWNER lexbear" | Out-Null
+
+# Роль и БД: каждый запрос ограничен по времени, чтобы скрипт не «висел»
+# на неожиданном запросе пароля или занятой БД.
+if ((Invoke-Psql "SELECT 1 FROM pg_roles WHERE rolname='lexbear'") -ne '1') {
+    $null | & "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -w `
+        -c "CREATE ROLE lexbear LOGIN PASSWORD 'lexbear_dev_pass' CREATEDB" | Out-Null
+}
+if ((Invoke-Psql "SELECT 1 FROM pg_database WHERE datname='lexbear'") -ne '1') {
+    $null | & "$pgBin\psql.exe" -U postgres -h 127.0.0.1 -p $Port -d postgres -w `
+        -c "CREATE DATABASE lexbear OWNER lexbear" | Out-Null
 }
 
 Write-Host "DB ready on port $Port (pgdata: $dataDir)"
