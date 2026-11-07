@@ -51,11 +51,25 @@ async def next_case(session: AsyncSession, user_id: uuid.UUID, exclude: set[uuid
         return None
     states = (await session.execute(select(UserCompetencyState).where(UserCompetencyState.user_id == user_id))).scalars().all()
     state_map = {s.competency_id: s for s in states}
+
+    # Связи «версия → компетенция» тянем ОДНИМ запросом. Раньше они выбирались
+    # в цикле по каждой версии, и на 100 опубликованных кейсов это давало 100
+    # отдельных SELECT-ов на каждый вызов /learning/next (классический N+1),
+    # из-за чего экран «Учёба» заметно тормозил при загрузке.
+    candidates = [v for v in versions if v.id not in exclude]
+    links_by_version: dict[uuid.UUID, list[CaseCompetency]] = {}
+    if candidates:
+        link_rows = (await session.execute(
+            select(CaseCompetency).where(
+                CaseCompetency.case_version_id.in_([v.id for v in candidates])
+            )
+        )).scalars().all()
+        for link in link_rows:
+            links_by_version.setdefault(link.case_version_id, []).append(link)
+
     scored = []
-    for version in versions:
-        if version.id in exclude:
-            continue
-        links = (await session.execute(select(CaseCompetency).where(CaseCompetency.case_version_id == version.id))).scalars().all()
+    for version in candidates:
+        links = links_by_version.get(version.id, [])
         weakness = sum((1 - (state_map[link.competency_id].mastery if link.competency_id in state_map else 0.0)) * link.weight for link in links)
         score = adaptive_score(weakness, version.difficulty)
         scored.append((score, version))

@@ -1,80 +1,80 @@
-# Маскот-медведь (векторный риг)
+# Маскот-медведь «Мишка-Юрист» (векторный риг)
 
-Слоёная 2D-модель медведя на `react-native-svg` + `react-native-reanimated`.
-Заменяет одиночную PNG-картинку — теперь части (голова, уши, глаза, брови, рот,
-руки, оверлеи) двигаются независимо через shared values.
+Скелетная 2D-модель медведя на `react-native-svg` + `react-native-reanimated`.
+Один самодостаточный компонент без внешних ассетов — все части (голова, уши,
+глаза со зрачками и веками, брови, мордочка, рот, румянец, слеза, две лапы)
+двигаются независимо через shared values.
+
+Растровая заглушка `bear.png` в медальоне удалена: `AnimatedMascot` и
+`MascotSprite` теперь просто адаптеры над этим ригом.
 
 ## Использование
 
 ```jsx
-import { BearRig } from '@/components';
+import { BearLawyerMascot } from '@/components';
 
-<BearRig
-  size={220}                  // ширина в px; высота считается по пропорции 400×520
-  state="correct_small"       // текущее состояние (см. STATES ниже)
-  mood="happy"                // модификатор поверх idle (happy | neutral | concerned | excited | sleepy)
-  isTalking={false}           // если true — рот циклически сменяется (talk_loop)
-  onAnimationEnd={() => {}}   // колбек по завершении one-shot анимации
+<BearLawyerMascot
+  emotion="joyful"          // neutral | joyful | thoughtful | sad | strict
+  size={220}                // ширина в px; высота = size * 1.13 (канвас 600×680)
+  isTalking={false}         // циклическая артикуляция рта поверх эмоции
+  onPressMascot={() => {}}  // тап по мишке (для «погладить»)
 />
 ```
 
-Старый `<AnimatedMascot celebrate={} error={} emotion={} />` продолжает работать —
-он теперь тонкий compat-адаптер над `BearRig`.
+Семантический адаптер для экранов (обратно совместимый API):
 
-## Список состояний (`state`)
+```jsx
+import { AnimatedMascot } from '@/components';
 
-| Категория | Состояние | Что делает |
-|-----------|-----------|-----------|
-| Idle | `idle` | Дефолт: моргает, дышит, изредка смотрит по сторонам |
-|      | `idle_bored` | Если пользователь долго бездействует |
-|      | `idle_look_around` | Принудительный look-around |
-| Ответы | `correct_small` | Улыбка + короткий кивок |
-|         | `correct_big` | Прыжок + широкая улыбка + звёздочки-партиклы |
-|         | `wrong_soft` | Наклон головы влево + грустная брежь |
-|         | `wrong_sad` | Опускание + слеза |
-|         | `perfect_lesson` | Звёзды в глазах + celebration + румянец |
-| Речь | `talking` | Мимика при рассказе (совмещать с `isTalking`) |
-| Системные | `onboarding_wave` | Приветственный wave рукой |
-|            | `streak_celebrate` | Прыжок + сердечки |
-|            | `streak_broken` | Грусть + слеза |
-|            | `achievement_unlock` | Кивок + звёздочки |
-|            | `level_up` | Celebration + звёздочки |
-|            | `loading` | Ждёт с «o»-ртом |
-|            | `error_network` | Знак «?» над головой + нахмуренные брови |
-|            | `notification_reminder` | Улыбка (для «не забудь позаниматься») |
-|            | `goodbye` | Прощальный wave |
+<AnimatedMascot size={180} wave talking />
+<AnimatedMascot celebrate={isRight} error={isWrong} />
+<AnimatedMascot size={96} levelUp={levelUpPulse} />
+```
 
-## Как редактировать/добавлять состояния
+## Эмоции (`emotion`)
 
-Всё в одном файле `BearRig.js`:
+| Эмоция       | Что делает | Где уместна |
+|--------------|-----------|-------------|
+| `neutral`    | Дыхание, наклон головы, приветственный взмах лапой | Главный экран, старт урока |
+| `joyful`     | Подпрыгивание, обе лапы машут, сильный прищур и румянец | Верный ответ, успешный кейс |
+| `thoughtful` | Лапа у подбородка, глаза сканируют строки кодекса | Разбор ситуации, загрузка |
+| `sad`        | Вздох, брови «домиком», опущенные ушки, слеза | Ошибка в кейсе, сопереживание |
+| `strict`     | Ровная стойка, адвокатский жест, сведённые брови | Цитирование кодексов, предупреждения |
 
-1. **Добавить новое состояние.** В константу `STATES` дописать запись:
-   ```js
-   my_state: { mouth: 'smile_big', brow: 'up', blush: 1, sparkles: true, oneShot: 'jump' }
-   ```
-   Ключи: `mouth` (см. `MOUTHS`), `brow` (`neutral`|`up`|`down`), `blush` (0..1),
-   `tear`, `sparkles`, `starEyes`, `questionMark`, `zzz`, `hearts` — булевы,
-   `oneShot` — имя анимации головы/тела (`nod`|`jump`|`head_tilt_left`|`slump`|
-   `celebrate`|`wave`).
+## Маппинг семантических пропсов `AnimatedMascot`
 
-2. **Добавить новую one-shot анимацию.** В `useEffect ... [state]` в `switch` добавить
-   `case 'my_animation':` со своими `withSequence` на `headRotation` / `bodyTranslateY` /
-   `armLRotation` / `armRRotation`.
+| Пропс | Эмоция рига |
+|-------|-------------|
+| `perfect` / `levelUp` / `achievement` / `celebrate` / `wave` | `joyful` |
+| `streak="celebrate"` | `joyful` |
+| `streak="broken"` / `error` / `emotion="sad"` | `sad` |
+| `networkError` | `strict` |
+| `emotion="cheer" / "happy"` | `joyful` |
+| `emotion="think"` | `thoughtful` |
+| `mood="concerned"` | `thoughtful` |
+| по умолчанию | `neutral` |
 
-3. **Добавить новую часть медведя.** В `parts.js` добавить компонент, экспортировать
-   его — и вставить `<Layer>` в нужное место z-order'а в `BearRig.js`.
+## Как редактировать
 
-## SVG-источники
+Всё в одном файле `BearLawyerMascot.js`:
 
-Каждая часть также лежит как сырой `.svg` в `mobile/assets/mascot/`. Их можно
-открыть в Illustrator/Inkscape, отредактировать и вручную синхронизировать с JSX
-в `parts.js`. Плагин `react-native-svg-transformer` не подключён — сделано
-намеренно, чтобы не трогать конфигурацию Metro; при желании подключить, можно
-импортировать `.svg` напрямую как компоненты и упростить `parts.js`.
+1. **Новая эмоция** — добавить `case 'my_emotion':` в `switch (emotion)` внутри
+   `useEffect` и выставить значения shared values (позы лап, брови, глаза,
+   румянец, слеза).
+2. **Новая часть тела** — дорисовать `<Path>` в нужный z-слой SVG (лапы →
+   торс → голова) и, если часть должна двигаться, обернуть в свой
+   `<AnimatedG animatedProps={...}>`.
+3. **Новый анимационный проп** — добавить `useSharedValue` в блок 1 и
+   `useAnimatedProps` в блок 4, привязать к соответствующему `<AnimatedG>`.
 
-## Ограничения (vs Rive)
+## Ограничения
 
 - Только жёсткие трансформы (rotate/translate/scale/opacity) — без mesh-деформаций.
 - Точный lip-sync не поддерживается: `isTalking` циклически меняет рот, не
-  синхронизируясь с речью (как в Duolingo).
-- Редактирование анимаций — через код (без визуального timeline).
+  синхронизируясь с речью.
+- Вращение вокруг pivot реализовано паттерном `translate → rotate → translate back`.
+
+## Историческая справка
+
+Старая реализация `BearRig.js` + `parts.js` (сборка из ~20 независимых SVG-слоёв)
+оставлена в репозитории как справка, но экранами больше не используется.
