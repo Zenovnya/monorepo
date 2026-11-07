@@ -1,28 +1,33 @@
 import React, { useMemo } from 'react';
 
-import BearRig from './mascot/BearRig';
-import MascotImage from './MascotImage';
+import { BearLawyerMascot } from './mascot/BearLawyerMascot';
 
 /**
  * AnimatedMascot — единый API маскота для экранов.
  *
- * Мапит удобные семантические пропсы («идеальный урок», «wave», «level up»)
- * на состояния низкоуровневого <BearRig>, поэтому экраны не думают про
- * названия состояний, а просто описывают событие.
+ * Раньше под капотом была растровая заглушка (bear.png в круглом медальоне).
+ * Теперь это векторный «Мишка-Юрист» (<BearLawyerMascot>) с полноценной
+ * мимикой: череп, уши, глаза со зрачками и веками, брови, мордочка, рот,
+ * румянец, слеза и две лапы с машущим жестом.
+ *
+ * Экраны продолжают пользоваться семантическими пропсами («верный ответ»,
+ * «wave», «level up») — компонент сам мапит их на 5 эмоций рига:
+ *   neutral | joyful | thoughtful | sad | strict
  *
  * Приоритет пропсов (по убыванию — верхний бьёт нижние):
- *   perfect      → идеальный урок (звёзды в глазах + celebration)
+ *   perfect      → идеальный урок (радость + максимальный румянец)
  *   levelUp      → повышение уровня
- *   achievement  → разблокировка достижения (звёздочки + кивок)
+ *   achievement  → разблокировка достижения (кивок + румянец)
  *   streak='celebrate' | 'broken' → продлил / прервал streak
- *   networkError → ошибка сети (знак «?»)
+ *   networkError → ошибка сети (строгая сосредоточенность)
  *   wave         → приветственный махание лапой
- *   celebrate    → правильный ответ (correct_big)
- *   error        → ошибка (wrong_soft)
+ *   celebrate    → правильный ответ
+ *   error        → ошибка (сочувствие без упрёков)
  *   emotion      → 'cheer' | 'happy' | 'sad' | 'think' | 'idle'
  *
- * ``talking`` включает циклический рот (talk_loop) поверх любого состояния.
- * ``mood`` — модификатор поверх idle (happy / concerned / excited / sleepy).
+ * ``talking`` включает циклическую артикуляцию рта (jawOpen) поверх любой
+ * эмоции. ``mood`` — модификатор поверх idle (happy / concerned / excited).
+ * ``vector`` оставлен для обратной совместимости и больше ни на что не влияет.
  */
 export const AnimatedMascot = ({
   celebrate,
@@ -36,46 +41,38 @@ export const AnimatedMascot = ({
   networkError,
   talking,
   mood: moodProp,
-  vector = false,
   size = 160,
+  onPressMascot,
 }) => {
-  // Лёгкая реакция для растрового маскота (по умолчанию).
-  const reaction = useMemo(() => {
-    if (perfect || levelUp || achievement || celebrate || wave || streak === 'celebrate') {
-      return 'celebrate';
-    }
-    if (error || networkError || streak === 'broken' || emotion === 'sad') {
-      return 'sad';
-    }
-    if (emotion === 'cheer') return 'celebrate';
-    return 'idle';
-  }, [perfect, levelUp, achievement, celebrate, wave, streak, error, networkError, emotion]);
-
-  const { state, mood, isTalking } = useMemo(() => {
-    const t = !!talking;
-    // Специализированные состояния — идут первыми, важнее generic.
-    if (perfect) return { state: 'perfect_lesson', mood: 'happy', isTalking: t };
-    if (levelUp) return { state: 'level_up', mood: 'excited', isTalking: t };
-    if (achievement) return { state: 'achievement_unlock', mood: 'happy', isTalking: t };
-    if (streak === 'celebrate') return { state: 'streak_celebrate', mood: 'happy', isTalking: t };
-    if (streak === 'broken') return { state: 'streak_broken', mood: 'concerned', isTalking: t };
-    if (networkError) return { state: 'error_network', mood: 'concerned', isTalking: t };
-    if (wave) return { state: 'onboarding_wave', mood: 'happy', isTalking: t };
-    if (celebrate) return { state: 'correct_big', mood: moodProp || 'happy', isTalking: t };
-    if (error) return { state: 'wrong_soft', mood: moodProp || 'concerned', isTalking: t };
+  const mappedEmotion = useMemo(() => {
+    // Специализированные события — важнее generic-эмоции.
+    if (perfect || levelUp || achievement || celebrate || wave) return 'joyful';
+    if (streak === 'celebrate') return 'joyful';
+    if (streak === 'broken' || error || emotion === 'sad') return 'sad';
+    if (networkError) return 'strict';
 
     switch (emotion) {
       case 'cheer':
-        return { state: 'correct_big', mood: moodProp || 'happy', isTalking: t };
       case 'happy':
-        return { state: 'idle', mood: moodProp || 'happy', isTalking: t };
-      case 'sad':
-        return { state: 'wrong_sad', mood: moodProp || 'concerned', isTalking: t };
+      case 'wave':
+        return 'joyful';
       case 'think':
-        return { state: 'idle', mood: moodProp || 'concerned', isTalking: t };
+        return 'thoughtful';
+      case 'sad':
+        return 'sad';
       case 'idle':
       default:
-        return { state: 'idle', mood: moodProp || 'neutral', isTalking: t };
+        break;
+    }
+
+    switch (moodProp) {
+      case 'happy':
+      case 'excited':
+        return 'joyful';
+      case 'concerned':
+        return 'thoughtful';
+      default:
+        return 'neutral';
     }
   }, [
     celebrate,
@@ -87,16 +84,17 @@ export const AnimatedMascot = ({
     streak,
     achievement,
     networkError,
-    talking,
     moodProp,
   ]);
 
-  // По умолчанию — лёгкий растровый маскот (плавно на любом устройстве).
-  // Векторный риг доступен по флагу vector для экранов, где он оправдан.
-  if (vector) {
-    return <BearRig size={size} state={state} mood={mood} isTalking={isTalking} />;
-  }
-  return <MascotImage size={size} reaction={reaction} />;
+  return (
+    <BearLawyerMascot
+      emotion={mappedEmotion}
+      size={size}
+      isTalking={!!talking}
+      onPressMascot={onPressMascot}
+    />
+  );
 };
 
 export default AnimatedMascot;
