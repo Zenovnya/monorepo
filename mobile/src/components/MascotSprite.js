@@ -7,7 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { BearLawyerMascot } from './mascot/BearLawyerMascot';
+import { BearLawyerMascot, MASCOT_ASPECT } from './mascot/BearLawyerMascot';
 
 /**
  * MascotSprite — рендер векторного маскота Lex с crossfade между эмоциями.
@@ -47,7 +47,7 @@ export const MascotSprite = ({ emotion = 'idle', size = 120 }) => {
   const rigEmotion = EMOTION_TO_RIG[currentEmotion] || 'neutral';
 
   return (
-    <Animated.View style={[{ width: size, height: size * 1.13 }, style]}>
+    <Animated.View style={[{ width: size, height: size * MASCOT_ASPECT }, style]}>
       <View style={{ width: '100%', height: '100%' }}>
         <BearLawyerMascot
           emotion={rigEmotion}

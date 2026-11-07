@@ -9,8 +9,9 @@
 //   • 'sad'        — Грустная / Сочувствующая (ошибка в кейсе, сопереживание)
 //   • 'strict'     — Строгая / Серьезная (цитирование кодексов, предупреждения)
 //
-// Компонент самодостаточен (без внешних ассетов) и рассчитан на канвас
-// 600×680, который масштабируется под проп ``size`` по ширине.
+// Компонент самодостаточен (без внешних ассетов) и рассчитан на канвас,
+// плотно обведённый вокруг рисунка (viewBox 356×522), который масштабируется
+// под проп ``size`` по ширине. Высота = size * MASCOT_ASPECT.
 // ============================================================================
 
 import React, { useEffect } from 'react';
@@ -31,12 +32,23 @@ import Animated, {
 
 const AnimatedG = Animated.createAnimatedComponent(G);
 
+/**
+ * Отношение высоты канваса маскота к ширине.
+ *
+ * Совпадает с viewBox (`356 × 522`) и с плотной обводкой рисунка: если держать
+ * эти два числа разными, SVG центрирует фигуру в «письме» и медведь выглядит
+ * мелким и обрезанным.
+ */
+const MASCOT_ASPECT = 522 / 356;
+
+export { MASCOT_ASPECT };
+
 /** @typedef {'neutral' | 'joyful' | 'thoughtful' | 'sad' | 'strict'} MascotEmotion */
 
 /**
  * @param {Object} props
  * @param {MascotEmotion} [props.emotion]
- * @param {number} [props.size]         ширина в px (высота = size * 1.13)
+ * @param {number} [props.size]         ширина в px (высота = size * MASCOT_ASPECT)
  * @param {boolean} [props.isTalking]   циклическая артикуляция рта
  * @param {boolean} [props.showGlasses] зарезервировано под очки (пока не рисуются)
  * @param {() => void} [props.onPressMascot]
@@ -425,6 +437,19 @@ export const BearLawyerMascot = ({
     ],
   }));
 
+  const legsAnimatedProps = useAnimatedProps(() => ({
+    // Ноги масштабируются дыханием от той же точки, что и торс, чтобы
+    // линия пояса не «разъезжалась» при вдохе/выдохе.
+    transform: [
+      { translateX: 306 },
+      { translateY: 405 },
+      { scaleX: breathScale.value },
+      { scaleY: breathScale.value },
+      { translateX: -306 },
+      { translateY: -405 },
+    ],
+  }));
+
   const headAnimatedProps = useAnimatedProps(() => ({
     transform: [
       { translateX: 305 },
@@ -481,13 +506,25 @@ export const BearLawyerMascot = ({
     ],
   }));
 
-  const eyelidLeftAnimatedProps = useAnimatedProps(() => ({
-    height: Math.max(0, eyelidBlink.value * 34),
-  }));
+  // Веки закрываются, «съезжая» вниз от верхнего края глаза. Анимируем
+  // translateY и непрозрачность (валидные для SVG <G>), а не height: у <G>
+  // нет атрибута height, поэтому прежняя версия оставляла веко раскрытым
+  // НАВСЕГДА и полностью закрашивала глаз.
+  const eyelidLeftAnimatedProps = useAnimatedProps(() => {
+    const t = Math.max(0, Math.min(1, eyelidBlink.value));
+    return {
+      transform: [{ translateY: -26 * (1 - t) }],
+      opacity: t,
+    };
+  });
 
-  const eyelidRightAnimatedProps = useAnimatedProps(() => ({
-    height: Math.max(0, eyelidBlink.value * 34),
-  }));
+  const eyelidRightAnimatedProps = useAnimatedProps(() => {
+    const t = Math.max(0, Math.min(1, eyelidBlink.value));
+    return {
+      transform: [{ translateY: -26 * (1 - t) }],
+      opacity: t,
+    };
+  });
 
   const squintAnimatedProps = useAnimatedProps(() => ({
     opacity: happySquint.value,
@@ -557,11 +594,11 @@ export const BearLawyerMascot = ({
   return (
     <Pressable
       onPress={onPressMascot}
-      style={{ width: size, height: size * 1.13 }}
+      style={{ width: size, height: size * MASCOT_ASPECT }}
       accessibilityRole={onPressMascot ? 'button' : 'image'}
     >
       <Animated.View style={[styles.container, rootAnimatedStyle]}>
-        <Svg viewBox="0 0 600 680" width="100%" height="100%">
+        <Svg viewBox="128 74 356 522" width="100%" height="100%">
           {/* LEFT ARM — опущена вдоль корпуса, инерционное покачивание */}
           <AnimatedG animatedProps={leftArmAnimatedProps}>
             <Path
@@ -594,6 +631,42 @@ export const BearLawyerMascot = ({
                 strokeWidth="4.2"
               />
             </AnimatedG>
+          </AnimatedG>
+
+          {/* LEGS — нижняя половина тела: две лапы-ноги с ботинками.
+              Рисуются ПОД торсом (перед ним в потоке), поэтому костюм их
+              «перекрывает» сверху и они читаются как выходящие из-под пальто.
+              Анимируются тем же дыханием, что и торс, чтобы не рассинхрониться. */}
+          <AnimatedG animatedProps={legsAnimatedProps}>
+            {/* Левая нога */}
+            <Path
+              d="M 262 448 C 256 492, 252 528, 254 556 L 292 556 C 292 526, 290 488, 288 448 Z"
+              fill="#352316"
+              stroke="#221107"
+              strokeWidth="4.2"
+            />
+            {/* Левая стопа (ботинок) */}
+            <Path
+              d="M 248 548 C 244 566, 246 578, 258 582 C 274 586, 296 584, 300 574 C 302 566, 296 558, 292 552 Z"
+              fill="#221107"
+              stroke="#221107"
+              strokeWidth="4"
+            />
+
+            {/* Правая нога */}
+            <Path
+              d="M 326 448 C 328 488, 328 526, 330 556 L 368 556 C 366 528, 362 492, 356 448 Z"
+              fill="#352316"
+              stroke="#221107"
+              strokeWidth="4.2"
+            />
+            {/* Правая стопа (ботинок) */}
+            <Path
+              d="M 324 552 C 320 558, 314 566, 316 574 C 320 584, 342 586, 358 582 C 370 578, 372 566, 368 548 Z"
+              fill="#221107"
+              stroke="#221107"
+              strokeWidth="4"
+            />
           </AnimatedG>
 
           {/* TORSO — костюм-тройка (дышит через breathScale) */}
@@ -722,16 +795,17 @@ export const BearLawyerMascot = ({
               />
             </AnimatedG>
 
-            {/* Веки (моргание) */}
+            {/* Веки (моргание). Опускаются сверху и накрывают глаз полностью
+                лишь в момент моргания; в покое невидимы (opacity 0). */}
             <AnimatedG animatedProps={eyelidLeftAnimatedProps}>
               <Path
-                d="M 252 196 C 266 178, 296 178, 308 196 L 308 216 L 252 216 Z"
+                d="M 252 196 C 266 178, 296 178, 308 196 L 308 218 L 252 218 Z"
                 fill="#864319"
               />
             </AnimatedG>
             <AnimatedG animatedProps={eyelidRightAnimatedProps}>
               <Path
-                d="M 302 196 C 314 178, 344 178, 358 196 L 358 216 L 302 216 Z"
+                d="M 302 196 C 314 178, 344 178, 358 196 L 358 218 L 302 218 Z"
                 fill="#864319"
               />
             </AnimatedG>
