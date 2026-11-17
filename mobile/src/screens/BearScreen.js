@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,23 +11,33 @@ import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
-import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
+import {
+  brand,
+  serifFamily,
+  KhokhlomaGarland,
+  KhokhlomaCorners,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 
 /**
- * Экран «Кабинет мишки» LexBear.
+ * Экран «Кабинет мишки» (BearScreen):
+ * тёплый кабинет юриста на сливочной бумаге (#F7EFDF) с точечным красно-золотым
+ * карнизом хохломы, живым скелетным мишкой на Reanimated и лаково-красной
+ * главной кнопкой «ПОГЛАДИТЬ» (#C9362B).
  */
 export default function BearScreen() {
   const user = useAuthStore((s) => s.user);
 
-  const [pose, setPose] = useState(user?.streak >= 7 ? 'cheer' : user?.streak >= 3 ? 'wave' : 'think');
+  const [pose, setPose] = useState(
+    user?.streak >= 3 ? 'neutral' : 'thinking'
+  );
   const [tab, setTab] = useState('pet');
   const [busy, setBusy] = useState(false);
   const [speech, setSpeech] = useState(null);
 
-  // Геймификация: счётчик поглаживаний и фразы маскота через API.
   const { pet, petCount, react, isLoadingPet } = useMascot();
 
-  // Актуальная геймификация пользователя (XP, уровень, стрик).
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
@@ -38,16 +48,15 @@ export default function BearScreen() {
     setPose('cheer');
     try {
       await pet();
-      // Реакция маскота после поглаживания.
       const phrase = await react('pet');
       if (phrase?.phrase) setSpeech(phrase.phrase);
     } catch {
       // Игнорируем — мишка всё равно рад.
     } finally {
       setTimeout(() => {
-        setPose('wave');
+        setPose('neutral');
         setBusy(false);
-      }, 900);
+      }, 1800);
     }
   };
 
@@ -57,259 +66,638 @@ export default function BearScreen() {
   const streak = gamification?.streak ?? user?.streak ?? 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <PaperGrain />
+
+      {/* Шапка кабинета с золотой наградой стрика */}
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerMeta}>Кабинет</Text>
-          <Text style={styles.headerTitle}>Мишка · Уровень {bearLevel}</Text>
+        <View style={styles.headerBody}>
+          <Text style={styles.headerMeta}>§ КАБИНЕТ МИШКИ</Text>
+          <Text style={styles.headerTitle}>Уровень {bearLevel}</Text>
         </View>
         <View style={styles.streakChip}>
-          <Text style={styles.streakText}>🔥 {streak}</Text>
+          <Text style={styles.streakFire}>🔥</Text>
+          <Text style={styles.streakText}>{streak}</Text>
         </View>
       </View>
 
-      {/* Комната */}
+      {/* Сцена кабинета юриста: лаково-золотой карниз хохломы, сливочный ореол и дубовый пол */}
       <View style={styles.room}>
-        <View style={styles.roomFloor} />
-        <View style={styles.bearWrap}>
-          <AnimatedMascot size={240} emotion={pose} />
-          {speech && (
+        <View style={styles.corniceBar}>
+          <KhokhlomaGarland variant="onRed" count={6} />
+        </View>
+
+        <View style={styles.roomHalo} />
+        <View style={styles.roomHaloInner} />
+
+        <View style={styles.roomBaseboard} />
+        <View style={styles.roomFloor}>
+          <View style={styles.roomRug}>
+            <View style={styles.roomRugInner} />
+          </View>
+        </View>
+
+        {speech ? (
+          <View style={styles.speechWrap}>
             <View style={styles.speechBubble}>
               <Text style={styles.speechText}>{speech}</Text>
             </View>
-          )}
+            <View style={styles.speechTail} />
+          </View>
+        ) : (
+          <View style={styles.nameplatePill}>
+            <Text style={styles.nameplateSign}>§</Text>
+            <Text style={styles.nameplateText}>СТРЯПЧИЙ LEXBEAR</Text>
+          </View>
+        )}
+
+        <View style={styles.bearWrap}>
+          <AnimatedMascot
+            size={222}
+            emotion={pose}
+            wave={pose === 'neutral' || pose === 'wave'}
+          />
         </View>
       </View>
 
-      {/* Статистика */}
+      {/* 3 чистые карточки показателей: хвойный · золотой · приглушённый синий */}
       <View style={styles.statsRow}>
-        <StatBar label="Настрой" value={mood} color={colors.success} />
-        <StatBar label="Знания" value={hunger} color={colors.accent} />
-        <StatBar label="Уровень" value={(bearLevel % 10) * 10} color={colors.skyDark} />
+        <StatBar
+          label="Настрой"
+          value={mood}
+          barColor={brand.pine}
+          textColor={brand.pine}
+        />
+        <StatBar
+          label="Знания"
+          value={hunger}
+          barColor={brand.gold}
+          textColor={brand.goldInk}
+        />
+        <StatBar
+          label="Опыт"
+          value={(bearLevel % 10) * 10}
+          barColor={brand.info}
+          textColor={brand.infoInk}
+        />
       </View>
 
-      {/* Действия */}
-      <View style={styles.actions}>
-        <Pressable
-          style={[styles.actionBtn, styles.btnGreen, busy && { opacity: 0.6 }]}
-          disabled={busy || isLoadingPet}
-          onPress={handlePet}
-        >
-          <Text style={styles.actionBtnText}>👋 Погладить</Text>
-        </Pressable>
-        <Pressable style={[styles.actionBtn, styles.btnWhite]} onPress={() => setTab('wear')}>
-          <Text style={styles.actionBtnDarkText}>👔 Надеть</Text>
-        </Pressable>
-        <Pressable style={[styles.actionBtn, styles.btnWhite]} onPress={() => setTab('room')}>
-          <Text style={styles.actionBtnDarkText}>🏠 Комната</Text>
-        </Pressable>
-      </View>
+      {/* Главная кнопка действия — Лаковый красный (#C9362B) */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.petBtn,
+          (busy || isLoadingPet) && styles.btnBusy,
+          pressed && !busy && !isLoadingPet && styles.btnPressed,
+        ]}
+        disabled={busy || isLoadingPet}
+        onPress={handlePet}
+      >
+        <Text style={styles.petBtnText}>👋 Погладить</Text>
+        <View style={styles.petBadge}>
+          <Text style={styles.petBadgeText}>{petCount}</Text>
+        </View>
+      </Pressable>
 
-      {/* Табы */}
+      {/* Чистые вкладки кабинета */}
       <View style={styles.tabs}>
-        {[['pet', 'О мишке'], ['wear', 'Костюм'], ['room', 'Комната']].map(([k, l]) => (
-          <Pressable
-            key={k}
-            style={[styles.tab, tab === k && styles.tabActive]}
-            onPress={() => setTab(k)}
-          >
-            <Text style={[styles.tabText, tab === k && styles.tabTextActive]}>{l}</Text>
-          </Pressable>
-        ))}
+        {[
+          ['pet', 'О мишке'],
+          ['wear', 'Гардероб'],
+          ['room', 'Кабинет'],
+        ].map(([k, l]) => {
+          const active = tab === k;
+          return (
+            <Pressable
+              key={k}
+              style={({ pressed }) => [
+                styles.tab,
+                active && styles.tabActive,
+                pressed && styles.tabPressed,
+              ]}
+              onPress={() => setTab(k)}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {l}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {tab === 'pet' && (
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Настроение зависит от стрика</Text>
-          <Text style={styles.infoText}>
-            Занимайся каждый день — мишка бодр и в форме.
-          </Text>
-          <Text style={[styles.infoText, styles.infoTextSpaced]}>
-            Поглаживаний: <Text style={{ fontWeight: '900' }}>{petCount}</Text>
-          </Text>
+          <View style={styles.infoBadge}>
+            <Text style={styles.infoBadgeText}>🔥</Text>
+          </View>
+          <View style={styles.infoBody}>
+            <Text style={styles.infoTitle}>Настроение зависит от стрика</Text>
+            <Text style={styles.infoText}>
+              Занимайтесь каждый день — мишка бодр, собран и готов к новым делам.
+            </Text>
+            <View style={styles.petStatPill}>
+              <Text style={styles.petStatText}>
+                Поглаживаний: {petCount}
+              </Text>
+            </View>
+          </View>
         </View>
       )}
+
       {tab === 'wear' && (
         <View style={styles.wearGrid}>
-          {['🎀', '👓', '🔨', '📕', '🎩', '🧣', '🏅', '⚖️'].map((icon, i) => (
-            <View key={i} style={[styles.wearItem, i > 2 && { opacity: 0.5 }]}>
-              <Text style={styles.wearIcon}>{icon}</Text>
-              {i > 2 && <Text style={styles.lock}>🔒</Text>}
-            </View>
-          ))}
+          {['🎀', '👓', '🔨', '📕', '🎩', '🧣', '🏅', '⚖️'].map((icon, i) => {
+            const locked = i > 2;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.wearItem,
+                  locked ? styles.tileLocked : styles.tileUnlocked,
+                ]}
+              >
+                {!locked ? (
+                  <KhokhlomaCorners variant="light" size="sm" inset={4} />
+                ) : null}
+                <Text style={styles.wearIcon}>{icon}</Text>
+                {locked && <Text style={styles.lock}>🔒</Text>}
+              </View>
+            );
+          })}
         </View>
       )}
+
       {tab === 'room' && (
         <View style={styles.roomGrid}>
-          {['Кабинет', 'Библиотека', 'Суд', 'Дача', 'Кремль', 'Космос'].map((n, i) => (
-            <View key={n} style={[styles.roomItem, i > 0 && { opacity: 0.5 }]}>
-              <Text style={styles.roomIcon}>🏛️</Text>
-              <Text style={styles.roomLabel}>{n}</Text>
-            </View>
-          ))}
+          {['Кабинет', 'Библиотека', 'Суд', 'Усадьба', 'Сенат', 'Архив'].map(
+            (n, i) => {
+              const locked = i > 0;
+              return (
+                <View
+                  key={n}
+                  style={[
+                    styles.roomItem,
+                    locked ? styles.tileLocked : styles.roomItemActive,
+                  ]}
+                >
+                  {!locked ? (
+                    <KhokhlomaCorners variant="light" size="sm" inset={5} />
+                  ) : null}
+                  <Text style={styles.roomIcon}>🏛️</Text>
+                  <Text style={styles.roomLabel} numberOfLines={1}>
+                    {n}
+                  </Text>
+                  {locked && <Text style={styles.lock}>🔒</Text>}
+                </View>
+              );
+            }
+          )}
         </View>
       )}
     </ScrollView>
   );
 }
 
-function StatBar({ label, value, color }) {
+function StatBar({ label, value, barColor, textColor }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
   return (
-    <View style={styles.statBar}>
+    <View style={styles.statCard}>
       <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statVal, { color: textColor }]}>{pct}%</Text>
       <View style={styles.statTrack}>
-        <View style={[styles.statFill, { width: `${Math.max(6, Math.min(100, value))}%`, backgroundColor: color }]} />
+        <View
+          style={[
+            styles.statFill,
+            { width: `${Math.max(pct, 8)}%`, backgroundColor: barColor },
+          ]}
+        />
       </View>
     </View>
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.base, paddingBottom: spacing.xxl * 3 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 112,
+    gap: 13,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center' },
-  headerText: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerBody: {
+    gap: 2,
+  },
   headerMeta: {
-    ...typography.micro,
-    color: colors.subtext,
-    textTransform: 'uppercase',
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: brand.muted,
   },
-  headerTitle: { ...typography.title, color: colors.text },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
   streakChip: {
-    borderRadius: radius.pill,
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.streakTint,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.gold,
   },
-  streakText: { ...typography.caption, color: colors.text },
+  streakFire: {
+    fontSize: 16,
+  },
+  streakText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.goldInk,
+  },
 
+  /* Сцена кабинета */
   room: {
-    marginTop: spacing.md,
-    height: 360,
-    borderRadius: radius.xl,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.roomFloor,
+    position: 'relative',
+    height: 294,
+    borderRadius: 24,
+    backgroundColor: '#F3E8D2',
+    borderWidth: 1.8,
+    borderBottomWidth: 4,
+    borderColor: brand.goldBorder,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    overflow: 'hidden',
+  },
+  corniceBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 14,
+    paddingTop: 7,
+    paddingBottom: 3,
+    backgroundColor: brand.red,
+    borderBottomWidth: 2,
+    borderBottomColor: brand.gold,
+    zIndex: 3,
+  },
+  roomHalo: {
+    position: 'absolute',
+    top: 46,
+    width: 214,
+    height: 214,
+    borderRadius: 107,
+    backgroundColor: colors.card,
+    opacity: 0.72,
+  },
+  roomHaloInner: {
+    position: 'absolute',
+    top: 66,
+    width: 174,
+    height: 174,
+    borderRadius: 87,
+    borderWidth: 1,
+    borderColor: brand.goldBorder,
+    opacity: 0.65,
+  },
+  roomBaseboard: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 58,
+    height: 3,
+    backgroundColor: brand.gold,
   },
   roomFloor: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    height: 80,
-    backgroundColor: colors.roomWood,
-    borderTopWidth: 2,
-    borderTopColor: colors.border,
+    bottom: 0,
+    height: 58,
+    backgroundColor: '#563D2B',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  bearWrap: { marginBottom: 40, alignItems: 'center' },
-  speechBubble: {
-    position: 'absolute',
-    top: spacing.sm,
-    backgroundColor: colors.surfaceRaised,
+  roomRug: {
+    width: 196,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: brand.red,
     borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    maxWidth: 280,
+    borderColor: brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
   },
-  speechText: { ...typography.caption, color: colors.text, textAlign: 'center' },
+  roomRugInner: {
+    width: 178,
+    height: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(241, 217, 153, 0.55)',
+  },
 
-  statsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.base },
-  statBar: {
+  nameplatePill: {
+    position: 'absolute',
+    top: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 13,
+    paddingVertical: 4.5,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1.2,
+    borderColor: brand.gold,
+    zIndex: 4,
+  },
+  nameplateSign: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: serifFamily,
+    color: brand.red,
+  },
+  nameplateText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: brand.ink,
+  },
+  speechWrap: {
+    position: 'absolute',
+    top: 31,
+    alignItems: 'center',
+    maxWidth: '84%',
+    zIndex: 5,
+  },
+  speechBubble: {
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.gold,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+  },
+  speechText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  speechTail: {
+    width: 8,
+    height: 8,
+    backgroundColor: colors.card,
+    borderRightWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: brand.gold,
+    transform: [{ rotate: '45deg' }],
+    marginTop: -4,
+  },
+  bearWrap: {
+    marginBottom: 14,
+    zIndex: 4,
+  },
+
+  /* Шкалы характеристик */
+  statsRow: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  statCard: {
     flex: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
+    padding: 11,
+    gap: 4,
   },
   statLabel: {
-    ...typography.micro,
-    color: colors.subtext,
+    fontSize: 10,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    marginBottom: spacing.xs + 2,
+    letterSpacing: 0.6,
+    color: brand.muted,
+  },
+  statVal: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   statTrack: {
-    height: 10,
-    backgroundColor: colors.track,
-    borderRadius: radius.pill,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: brand.paper,
     overflow: 'hidden',
+    marginTop: 2,
   },
-  statFill: { height: '100%', borderRadius: radius.pill },
+  statFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
 
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.base },
-  actionBtn: {
+  /* Главная кнопка действия — Лаковый красный */
+  petBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: brand.red,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.redDark,
+  },
+  btnBusy: {
+    opacity: 0.88,
+  },
+  btnPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
+  },
+  petBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.creamText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  petBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(48, 40, 32, 0.25)',
+  },
+  petBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: brand.goldLight,
+  },
+
+  /* Табы */
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tab: {
     flex: 1,
-    height: sizes.minTouchTarget,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnGreen: { backgroundColor: colors.success },
-  btnWhite: { backgroundColor: colors.surfaceRaised },
-  actionBtnText: { ...typography.caption, color: colors.card },
-  actionBtnDarkText: { ...typography.caption, color: colors.text },
-
-  tabs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
-  tab: {
-    borderRadius: radius.pill,
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
+  tabActive: {
+    backgroundColor: brand.goldSoft,
+    borderColor: brand.gold,
   },
-  tabActive: { backgroundColor: colors.border },
-  tabText: { ...typography.caption, color: colors.text },
-  tabTextActive: { color: colors.card },
+  tabPressed: {
+    transform: [{ translateY: 1.5 }],
+  },
+  tabText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.subtext,
+  },
+  tabTextActive: {
+    color: brand.ink,
+    fontWeight: '800',
+  },
 
   infoCard: {
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.base,
-    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
+    padding: 15,
   },
-  infoTitle: { ...typography.bodyStrong, color: colors.text, marginBottom: spacing.xs },
-  infoText: { ...typography.caption, color: colors.subtext },
-  infoTextSpaced: { marginTop: spacing.sm },
-
-  wearGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  wearItem: {
-    width: '22%',
-    aspectRatio: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
+  infoBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1,
+    borderColor: brand.goldBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  wearIcon: { fontSize: 28 },
-  lock: { position: 'absolute', top: spacing.xs, right: spacing.xs, fontSize: 12 },
-
-  roomGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  roomItem: {
-    width: '30%',
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: 'center',
+  infoBadgeText: {
+    fontSize: 19,
   },
-  roomIcon: { fontSize: 26 },
-  roomLabel: { ...typography.micro, color: colors.text, marginTop: spacing.xs },
-});
+  infoBody: {
+    flex: 1,
+    gap: 5,
+  },
+  infoTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  infoText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.subtext,
+    lineHeight: 18.5,
+  },
+  petStatPill: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: brand.infoSoft,
+  },
+  petStatText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: brand.infoInk,
+  },
 
+  wearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  wearItem: {
+    position: 'relative',
+    width: '22.5%',
+    aspectRatio: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileUnlocked: {
+    backgroundColor: colors.card,
+    borderColor: brand.gold,
+  },
+  tileLocked: {
+    backgroundColor: colors.paper,
+    borderColor: brand.rule,
+    opacity: 0.72,
+  },
+  wearIcon: {
+    fontSize: 24,
+  },
+  lock: {
+    position: 'absolute',
+    top: 5,
+    right: 6,
+    fontSize: 11,
+  },
+
+  roomGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  roomItem: {
+    position: 'relative',
+    width: '31%',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 5,
+  },
+  roomItemActive: {
+    backgroundColor: colors.card,
+    borderColor: brand.gold,
+  },
+  roomIcon: {
+    fontSize: 22,
+  },
+  roomLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+});

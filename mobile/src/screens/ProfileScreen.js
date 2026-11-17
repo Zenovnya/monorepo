@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,33 +12,48 @@ import { AnimatedMascot } from '../components/AnimatedMascot';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { progressApi } from '../api/progress';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import {
+  brand,
+  KhokhlomaCorners,
+  KhokhlomaGarland,
+  KhokhlomaMedallion,
+  WaxSeal,
+  DocumentSectionHeader,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
+
+const ROW_SEAL = {
+  bear: { label: '§', tone: 'red' },
+  league: { label: 'I', tone: 'gold' },
+  articles: { label: 'ст', tone: 'red' },
+  shop: { label: '✦', tone: 'gold' },
+};
 
 /**
- * Экран профиля LexBear.
+ * Экран профиля LexBear:
+ * чистые карточки обзора и разделов на сливочной бумаге (#F7EFDF),
+ * точечные красно-золотые рамки хохломы вокруг достижений и парадной карточки LexBear Plus,
+ * заголовки разделов и сургучные печати в духе старинных документов.
  */
 export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
 
-  // Статьи со статусом изучения.
   const { data: articles } = useQuery({
     queryKey: ['lexbear-articles'],
     queryFn: lexbearApi.articles,
   });
 
-  // Состояние геймификации (XP, уровень, стрик, достижения).
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
   });
 
-  // Сводка прогресса по урокам (короны).
   const { data: progress } = useQuery({
     queryKey: ['progress-overview'],
     queryFn: progressApi.overview,
   });
 
-  // Достижения пользователя.
   const { data: achData } = useQuery({
     queryKey: ['gamification-achievements'],
     queryFn: gamificationApi.achievements,
@@ -49,215 +64,497 @@ export default function ProfileScreen({ navigation }) {
   const totalCrowns = progress?.total_crowns ?? 0;
   const level = gamification?.level ?? user?.level ?? 1;
 
-  // Ловим повышение уровня: сравниваем текущий level с предыдущим значением.
-  // При изменении вверх — включаем маскота в состоянии level_up на 2.5 сек
-  // (короткий «выброс» реакции, потом возврат в обычный idle).
   const prevLevelRef = useRef(level);
   const [levelUpPulse, setLevelUpPulse] = useState(false);
   useEffect(() => {
-    // Раньше `return` выходил из эффекта до записи в ref, поэтому базовый
-    // уровень не обновлялся и пульс повторялся на каждом ре-рендере.
-    const previous = prevLevelRef.current;
-    prevLevelRef.current = level;
-    if (previous != null && level > previous) {
+    if (prevLevelRef.current != null && level > prevLevelRef.current) {
       setLevelUpPulse(true);
-      const timer = setTimeout(() => setLevelUpPulse(false), 2500);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => setLevelUpPulse(false), 2500);
+      return () => clearTimeout(t);
     }
-    return undefined;
+    prevLevelRef.current = level;
   }, [level]);
 
   const metrics = [
-    { icon: '🔥', value: gamification?.streak ?? user?.streak ?? 0, label: 'Стрик' },
-    { icon: '⭐', value: gamification?.xp ?? user?.xp ?? 0, label: 'XP' },
-    { icon: '👑', value: totalCrowns, label: 'Короны' },
-    { icon: '📖', value: learnedCount, label: 'Статьи' },
+    {
+      icon: '🔥',
+      value: gamification?.streak ?? user?.streak ?? 0,
+      label: 'Стрик',
+      accent: brand.red,
+    },
+    {
+      icon: '✦',
+      value: gamification?.xp ?? user?.xp ?? 0,
+      label: 'XP',
+      accent: brand.goldInk,
+    },
+    {
+      icon: '👑',
+      value: totalCrowns,
+      label: 'Короны',
+      accent: brand.goldInk,
+    },
+    {
+      icon: '📖',
+      value: learnedCount,
+      label: 'Статьи',
+      accent: brand.pine,
+    },
   ];
 
   const rows = [
-    { key: 'bear', icon: '🐻', title: 'Оформление мишки', hint: 'Костюмы, галстуки, комнаты' },
-    { key: 'league', icon: '🏆', title: 'Лига', hint: 'Топ 30 недели' },
-    { key: 'articles', icon: '📚', title: 'Мои статьи', hint: `${learnedCount} выучено` },
-    { key: 'shop', icon: '🛍️', title: 'Магазин', hint: 'Гемы, жизни, костюмы' },
-    { key: 'premium', icon: '💎', title: 'LexBear Plus', hint: 'Без лимита жизней', gold: true },
+    {
+      key: 'bear',
+      title: 'Оформление мишки',
+      hint: 'Костюмы, галстуки, кабинет',
+    },
+    {
+      key: 'league',
+      title: 'Лига',
+      hint: 'Рейтинг и награды недели',
+    },
+    {
+      key: 'articles',
+      title: 'Мои статьи',
+      hint: `Изучено статей: ${learnedCount}`,
+    },
+    {
+      key: 'shop',
+      title: 'Лавка наград',
+      hint: 'Кристаллы, жизни, атрибуты',
+    },
+    {
+      key: 'premium',
+      title: 'LexBear Plus',
+      hint: 'Без лимита жизней и полный архив',
+      gold: true,
+    },
   ];
 
   const navigate = (key) => {
-    const map = { bear: 'Bear', league: 'League', articles: 'Articles', shop: 'Shop', premium: 'Premium' };
+    const map = {
+      bear: 'Bear',
+      league: 'League',
+      articles: 'Articles',
+      shop: 'Shop',
+      premium: 'Premium',
+    };
     navigation.navigate(map[key]);
   };
 
+  const regularRows = rows.filter((r) => !r.gold);
+  const premiumRow = rows.find((r) => r.gold);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Шапка */}
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          {/* На повышении уровня — короткий залп level_up, иначе радостный idle. */}
-          <AnimatedMascot size={88} levelUp={levelUpPulse} mood={levelUpPulse ? undefined : 'happy'} />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
-          <Text style={styles.meta}>
-            Лига: <Text style={styles.metaStrong}>{user?.league || 'Бронза'}</Text> · Уровень{' '}
-            {level}
-          </Text>
-          <Pressable
-            style={styles.settingsChip}
-            onPress={() => navigation.navigate('Settings')}
-          >
-            <Text style={styles.settingsChipText}>⚙️ Настройки</Text>
-          </Pressable>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <PaperGrain />
+
+      {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}
+      <View style={styles.coverBanner}>
+        <Pressable
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Настройки"
+          style={({ pressed }) => [
+            styles.settingsBtn,
+            pressed && styles.smallPressed,
+          ]}
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
+        </Pressable>
+
+        <KhokhlomaMedallion size={146}>
+          <AnimatedMascot
+            size={120}
+            levelUp={levelUpPulse}
+            mood={levelUpPulse ? undefined : 'neutral'}
+            wave={!levelUpPulse}
+          />
+        </KhokhlomaMedallion>
+
+        <KhokhlomaGarland
+          variant="light"
+          count={5}
+          style={styles.coverGarland}
+        />
+      </View>
+
+      {/* Имя, золотой чин лиги и информационная плашка уровня (#7298BC) */}
+      <View style={styles.identitySection}>
+        <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+        <View style={styles.pillsRow}>
+          <View style={styles.leaguePill}>
+            <Text style={styles.leaguePillText}>
+              🏆 {user?.league || 'Бронза'}
+            </Text>
+          </View>
+          <View style={styles.levelPill}>
+            <Text style={styles.levelPillText}>Уровень {level}</Text>
+          </View>
         </View>
       </View>
 
-      {/* Метрики */}
-      <View style={styles.metricsRow}>
+      {/* Парадная лаковая карточка LexBear Plus (чернильный лак + золото и красный хохломы) */}
+      {premiumRow && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.superCard,
+            pressed && styles.superPressed,
+          ]}
+          onPress={() => navigate(premiumRow.key)}
+        >
+          <KhokhlomaCorners variant="onDark" size="sm" inset={7} />
+          <WaxSeal label="+" tone="red" size={44} />
+          <View style={styles.superBody}>
+            <Text style={styles.superBadgeText}>ОСОБАЯ ГРАМОТА</Text>
+            <Text style={styles.superTitle}>{premiumRow.title}</Text>
+            <Text style={styles.superHint}>{premiumRow.hint}</Text>
+          </View>
+          <View style={styles.superCtaCircle}>
+            <Text style={styles.superCtaArrow}>→</Text>
+          </View>
+        </Pressable>
+      )}
+
+      {/* Чистая сетка «Обзор» 2×2 */}
+      <DocumentSectionHeader title="Обзор" style={styles.sectionHeader} />
+      <View style={styles.metricsGrid}>
         {metrics.map((m) => (
-          <View key={m.label} style={styles.metric}>
-            <Text style={styles.metricIcon}>{m.icon}</Text>
-            <Text style={styles.metricValue}>{m.value}</Text>
-            <Text style={styles.metricLabel}>{m.label}</Text>
+          <View key={m.label} style={styles.metricCard}>
+            <Text style={[styles.metricIcon, { color: brand.gold }]}>
+              {m.icon}
+            </Text>
+            <View style={styles.metricBody}>
+              <Text style={[styles.metricValue, { color: m.accent }]}>
+                {m.value}
+              </Text>
+              <Text style={styles.metricLabel}>{m.label}</Text>
+            </View>
           </View>
         ))}
       </View>
 
-      {/* Достижения */}
+      {/* Рамки достижений — точечные красно-золотые уголки хохломы и сургучные медали */}
       {achievements.length > 0 && (
-        <View style={styles.achSection}>
-          <Text style={styles.sectionTitle}>Достижения</Text>
+        <View>
+          <DocumentSectionHeader
+            title="Достижения"
+            meta={`${achievements.length} наград`}
+            style={styles.sectionHeader}
+          />
           <View style={styles.achList}>
-            {achievements.map((a) => (
-              <View key={a.code} style={styles.achCard}>
-                <Text style={styles.achTitle}>🏅 {a.title}</Text>
-                {a.description ? (
-                  <Text style={styles.achDesc}>{a.description}</Text>
-                ) : null}
+            {achievements.map((a, idx) => (
+              <View key={a.code} style={styles.achFrame}>
+                <KhokhlomaCorners variant="light" size="sm" inset={6} />
+                <WaxSeal
+                  label="★"
+                  size={44}
+                  tone={idx % 2 === 0 ? 'gold' : 'red'}
+                />
+                <View style={styles.achBody}>
+                  <Text style={styles.achTitle}>{a.title}</Text>
+                  {a.description ? (
+                    <Text style={styles.achDesc}>{a.description}</Text>
+                  ) : null}
+                </View>
               </View>
             ))}
           </View>
         </View>
       )}
 
-      {/* Ссылки */}
-      <View style={styles.rows}>
-        {rows.map((r) => (
-          <Pressable
-            key={r.key}
-            style={[styles.row, r.gold && styles.rowGold]}
-            onPress={() => navigate(r.key)}
-          >
-            <View style={[styles.rowIcon, r.gold && styles.rowIconGold]}>
-              <Text style={styles.rowIconText}>{r.icon}</Text>
-            </View>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>{r.title}</Text>
-              <Text style={styles.rowHint}>{r.hint}</Text>
-            </View>
-            <Text style={styles.rowArrow}>→</Text>
-          </Pressable>
-        ))}
+      {/* Чистые карточки разделов (без лишнего орнамента) */}
+      <DocumentSectionHeader title="Разделы" style={styles.sectionHeader} />
+      <View style={styles.groupCard}>
+        {regularRows.map((r, idx) => {
+          const seal = ROW_SEAL[r.key] || ROW_SEAL.bear;
+          return (
+            <Pressable
+              key={r.key}
+              onPress={() => navigate(r.key)}
+              style={({ pressed }) => [
+                styles.navRow,
+                idx < regularRows.length - 1 && styles.rowDivider,
+                pressed && styles.navRowPressed,
+              ]}
+            >
+              <WaxSeal label={seal.label} tone={seal.tone} size={38} />
+              <View style={styles.navBody}>
+                <Text style={styles.navTitle}>{r.title}</Text>
+                <Text style={styles.navHint}>{r.hint}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          );
+        })}
       </View>
     </ScrollView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.base, paddingBottom: spacing.xxl * 3 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 112,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.base },
-  headerText: { flex: 1 },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.goldTint,
-    overflow: 'hidden',
+  coverBanner: {
+    position: 'relative',
+    backgroundColor: colors.paper,
+    paddingTop: 18,
+    paddingBottom: 10,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    borderBottomWidth: 1.5,
+    borderBottomColor: brand.rule,
+  },
+  settingsBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 4,
   },
-  name: { ...typography.title, color: colors.text },
-  meta: { ...typography.caption, color: colors.subtext, marginTop: 2 },
-  metaStrong: { fontWeight: '800' },
-  settingsChip: {
-    alignSelf: 'flex-start',
-    borderRadius: radius.pill,
-    paddingVertical: spacing.xs + 1,
-    paddingHorizontal: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-    marginTop: spacing.sm,
+  smallPressed: {
+    transform: [{ translateY: 1.5 }],
   },
-  settingsChipText: { ...typography.caption, color: colors.text },
-
-  metricsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
-  metric: {
-    flex: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    padding: spacing.sm + 2,
-    alignItems: 'center',
+  settingsIcon: {
+    fontSize: 17,
   },
-  metricIcon: { fontSize: 18 },
-  metricValue: { ...typography.heading, color: colors.text, marginTop: spacing.xs },
-  metricLabel: {
-    ...typography.micro,
-    color: colors.subtext,
-    textTransform: 'uppercase',
-    marginTop: 2,
+  coverGarland: {
+    marginTop: 12,
   },
 
-  sectionTitle: {
-    ...typography.micro,
-    color: colors.subtext,
-    textTransform: 'uppercase',
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+  identitySection: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 8,
   },
-  achList: { gap: spacing.sm },
-  achCard: {
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  name: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
   },
-  achTitle: { ...typography.bodyStrong, color: colors.text },
-  achDesc: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
-
-  rows: { marginTop: spacing.xl, gap: spacing.md },
-  row: {
+  pillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  rowGold: { backgroundColor: colors.goldTint },
-  rowText: { flex: 1 },
-  rowIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
+  leaguePill: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1.2,
+    borderColor: brand.gold,
+  },
+  leaguePillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: brand.goldInk,
+  },
+  levelPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: brand.infoSoft,
+    borderWidth: 1.2,
+    borderColor: brand.infoBorder,
+  },
+  levelPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: brand.infoInk,
+  },
+
+  /* Парадная лаковая шкатулка LexBear Plus */
+  superCard: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 18,
+    marginTop: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: brand.ink,
+    borderWidth: 1.8,
+    borderBottomWidth: 4,
+    borderColor: brand.gold,
+  },
+  superPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
+  },
+  superBody: {
+    flex: 1,
+    gap: 2,
+  },
+  superBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: brand.gold,
+  },
+  superTitle: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    color: brand.creamText,
+  },
+  superHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(252, 248, 240, 0.78)',
+  },
+  superCtaCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: brand.gold,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowIconGold: { backgroundColor: colors.accent },
-  rowIconText: { fontSize: 22 },
-  rowTitle: { ...typography.bodyStrong, color: colors.text },
-  rowHint: { ...typography.micro, color: colors.subtext, marginTop: 2 },
-  rowArrow: { ...typography.heading, color: colors.subtext },
-});
+  superCtaArrow: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: brand.ink,
+  },
 
+  sectionHeader: {
+    marginHorizontal: 18,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 18,
+    gap: 10,
+  },
+  metricCard: {
+    width: '48%',
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  metricIcon: {
+    fontSize: 20,
+  },
+  metricBody: {
+    gap: 1,
+  },
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  metricLabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+
+  /* Рамки достижений с хохломой */
+  achList: {
+    paddingHorizontal: 18,
+    gap: 10,
+  },
+  achFrame: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.6,
+    borderBottomWidth: 3.5,
+    borderColor: brand.gold,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+  },
+  achBody: {
+    flex: 1,
+    gap: 2,
+  },
+  achTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  achDesc: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: colors.subtext,
+    lineHeight: 17.5,
+  },
+
+  /* Разделы */
+  groupCard: {
+    marginHorizontal: 18,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    overflow: 'hidden',
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  navRowPressed: {
+    backgroundColor: colors.background,
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: brand.rule,
+  },
+  navBody: {
+    flex: 1,
+    gap: 2,
+  },
+  navTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  navHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.subtext,
+  },
+  chevron: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: brand.muted,
+  },
+});

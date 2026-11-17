@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,51 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
-import { learningApi } from '../api/learning';
 import { TopStats } from '../components/TopStats';
-import { colors, radius, spacing, typography, sizes } from '../theme/tokens';
+import { AnimatedMascot } from '../components/AnimatedMascot';
+import {
+  brand,
+  serifFamily,
+  KhokhlomaGarland,
+  KhokhlomaSprig,
+  KhokhlomaDivider,
+  RibbonBookmark,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
+
+// Классическая пара фонов хохломы для заголовков глав:
+// Лаковый красный (#C9362B) и благородный Чернильный лак (#302820) с золотом (#D9A849).
+// Синий не используется в главах, чтобы не спорить с красно-золотым фирменным стилем.
+const CHAPTER_THEMES = [
+  {
+    bg: brand.red,
+    lip: brand.redDark,
+    garland: 'onRed',
+    eyebrow: brand.goldLight,
+    crownBg: 'rgba(48, 40, 32, 0.24)',
+    trackBg: 'rgba(48, 40, 32, 0.26)',
+    ribbon: brand.gold,
+  },
+  {
+    bg: brand.ink,
+    lip: brand.inkDeep,
+    garland: 'onDark',
+    eyebrow: brand.gold,
+    crownBg: 'rgba(217, 168, 73, 0.16)',
+    trackBg: 'rgba(252, 248, 240, 0.14)',
+    ribbon: brand.red,
+  },
+];
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+const SNAKE_OFFSETS = [0, -46, -24, 34, 46, 12];
 
 /**
- * Экран «Учёба».
- *
- * Порядок блоков повторяет то, как пользователь принимает решение:
- * 1. «Продолжить» — следующий незакрытый урок (или ближайший кейс, если
- *    уроков не осталось). Один тап — сразу в дело.
- * 2. «Рекомендуем сейчас» — кейс адаптивного банка, выбранный сервером по
- *    слабым компетенциям (GET /learning/next).
- * 3. Разделы — юниты целиком, без обрезки списка уроков.
- * 4. «Пройдено» — свёрнутый список закрытых уроков: они не занимают первый
- *    экран, но остаются доступными для повтора.
+ * Экран «Учёба» LexBear:
+ * современная карта уроков на сливочной бумаге (#F7EFDF),
+ * точечная хохлома в заголовках глав, лаково-красные главные действия (#C9362B)
+ * и золотые награды/XP (#D9A849).
  */
 export default function LearnScreen({ navigation }) {
   const { data, isLoading, error, refetch } = useQuery({
@@ -31,29 +61,12 @@ export default function LearnScreen({ navigation }) {
     queryFn: lexbearApi.learnPath,
   });
 
-  // Рекомендация не должна ронять экран: если банк пуст или сервис недоступен,
-  // блок просто не показывается.
-  const recommendation = useQuery({
-    queryKey: ['learning-next-preview'],
-    queryFn: () => learningApi.next(),
-    retry: false,
-    staleTime: 60_000,
-  });
-
-  const units = useMemo(() => data?.units ?? data ?? [], [data]);
-
-  const { nextLesson, completedLessons, totalLessons } = useMemo(() => {
-    const all = units.flatMap((unit) => unit.lessons ?? []);
-    const done = all.filter((lesson) => lesson.completed);
-    // Первый непройденный по порядку программы — это и есть «продолжить».
-    const next = all.find((lesson) => !lesson.completed) ?? null;
-    return { nextLesson: next, completedLessons: done, totalLessons: all.length };
-  }, [units]);
-
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <AnimatedMascot size={112} emotion="thinking" />
+        <ActivityIndicator size="small" color={brand.red} />
+        <Text style={styles.stateHint}>Открываем свод уроков…</Text>
       </View>
     );
   }
@@ -61,15 +74,33 @@ export default function LearnScreen({ navigation }) {
   if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>Не удалось загрузить программу</Text>
-        <Pressable style={styles.retryBtn} onPress={() => refetch()}>
-          <Text style={styles.retryText}>Повторить</Text>
-        </Pressable>
+        <View style={styles.stateCard}>
+          <AnimatedMascot size={104} emotion="sad" error />
+          <Text style={styles.errorText}>Не удалось загрузить программу</Text>
+          {error.message ? (
+            <Text style={styles.errorDetail}>{error.message}</Text>
+          ) : null}
+          <Pressable
+            onPress={() => refetch()}
+            style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
+          >
+            <Text style={styles.retryBtnText}>Повторить</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
-  const lessonDone = totalLessons > 0 ? completedLessons.length / totalLessons : 0;
+  // API currently returns a plain array; tolerate legacy/object envelopes too.
+  const units = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.units)
+    ? data.units
+    : Array.isArray(data?.data)
+    ? data.data
+    : [];
+
+  let globalSeenIncomplete = false;
 
   return (
     <ScrollView
@@ -77,351 +108,822 @@ export default function LearnScreen({ navigation }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <PaperGrain />
       <TopStats />
 
+      {/* Чистая шапка с приветственным мишкой и двумя карточками быстрой практики */}
       <View style={styles.header}>
-        <Text style={styles.title}>Учёба</Text>
-        <Text style={styles.subtitle}>
-          {totalLessons > 0
-            ? `Пройдено ${completedLessons.length} из ${totalLessons} уроков`
-            : 'Короткие уроки · живые кейсы · мишка-юрист'}
-        </Text>
-        {totalLessons > 0 ? (
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(lessonDone * 100)}%` }]} />
+        <View style={styles.titleRow}>
+          <View style={styles.titleBody}>
+            <Text style={styles.docKicker}>§ СВОД ЗНАНИЙ · LEXBEAR</Text>
+            <View style={styles.titleLine}>
+              <Text style={styles.title}>Учёба</Text>
+              <KhokhlomaSprig compact style={styles.titleSprig} />
+            </View>
+            <Text style={styles.subtitle}>
+              Короткие уроки, живые кейсы и право на каждый день
+            </Text>
           </View>
-        ) : null}
+          <AnimatedMascot size={76} emotion="neutral" wave />
+        </View>
+
+        <View style={styles.questRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.questCard,
+              styles.questCardPrimary,
+              pressed && styles.questPressed,
+            ]}
+            onPress={() => navigation.navigate('Cases')}
+          >
+            <View style={styles.questTopRow}>
+              <View style={styles.sealMiniRed}>
+                <Text style={styles.sealMiniText}>§</Text>
+              </View>
+              <View style={styles.goldTag}>
+                <Text style={styles.goldTagText}>ДЛЯ ВАС</Text>
+              </View>
+            </View>
+            <Text style={styles.questTitle}>Рекомендации</Text>
+            <Text style={styles.questDesc} numberOfLines={2}>
+              Подборка дел по вашим слабым темам и ошибкам
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.questCard,
+              pressed && styles.questPressed,
+            ]}
+            onPress={() => navigation.navigate('Cases')}
+          >
+            <View style={styles.questTopRow}>
+              <View style={styles.sealMiniGold}>
+                <Text style={styles.sealMiniDarkText}>№</Text>
+              </View>
+              <View style={styles.infoTag}>
+                <Text style={styles.infoTagText}>50 ДЕЛ</Text>
+              </View>
+            </View>
+            <Text style={styles.questTitle}>Архив кейсов</Text>
+            <Text style={styles.questDesc} numberOfLines={2}>
+              Полное собрание из 50 жизненных ситуаций
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      <ContinueCard
-        lesson={nextLesson}
-        onPress={() =>
-          nextLesson
-            ? navigation.navigate('Lesson', {
-                lessonId: nextLesson.id,
-                title: nextLesson.title,
-              })
-            : navigation.navigate('AdaptiveLearning')
-        }
-      />
-
-      <RecommendationCard
-        item={recommendation.data}
-        isLoading={recommendation.isLoading}
-        onPress={() => navigation.navigate('AdaptiveLearning')}
-      />
-
-      <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate('Assessment')}>
-        <Text style={styles.secondaryTitle}>Пройти начальную диагностику</Text>
-        <Text style={styles.secondaryText}>Система точнее подберёт первые кейсы</Text>
-      </Pressable>
-
-      <Text style={styles.sectionTitle}>Разделы</Text>
-      {units.map((unit) => (
-        <UnitBlock key={unit.id || unit.title} unit={unit} navigation={navigation} />
-      ))}
-
-      {completedLessons.length > 0 ? (
-        <View style={styles.doneBlock}>
-          <Text style={styles.doneTitle}>Пройдено · {completedLessons.length}</Text>
-          {completedLessons.map((lesson) => (
-            <Pressable
-              key={lesson.id}
-              style={styles.doneRow}
-              onPress={() =>
-                navigation.navigate('Lesson', {
-                  lessonId: lesson.id,
-                  title: lesson.title,
-                })
-              }
-            >
-              <Text style={styles.doneCheck}>✓</Text>
-              <Text style={styles.doneText} numberOfLines={1}>
-                {lesson.title}
-              </Text>
-              <Text style={styles.doneXp}>+{lesson.xp_reward} XP</Text>
-            </Pressable>
-          ))}
+      {units.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptySign}>§</Text>
+          <Text style={styles.emptyText}>Программа скоро появится</Text>
         </View>
-      ) : null}
+      ) : (
+        units.map((unit, uIdx) => {
+          const theme = CHAPTER_THEMES[uIdx % CHAPTER_THEMES.length];
+          const roman = ROMAN[uIdx] || String(uIdx + 1);
+          const lessons = Array.isArray(unit.lessons) ? unit.lessons : [];
+          const doneCount = lessons.filter((l) => l.completed).length;
+          const pct =
+            lessons.length > 0
+              ? Math.round((doneCount / lessons.length) * 100)
+              : 0;
+
+          return (
+            <View key={unit.id ?? uIdx} style={styles.unitSection}>
+              {uIdx > 0 ? (
+                <KhokhlomaDivider style={styles.chapterDivider} />
+              ) : null}
+
+              {/* Заголовок главы с точечной красно-золотой хохломой и закладкой кодекса */}
+              <View
+                style={[
+                  styles.unitBanner,
+                  {
+                    backgroundColor: theme.bg,
+                    borderBottomColor: theme.lip,
+                  },
+                ]}
+              >
+                <RibbonBookmark
+                  color={theme.ribbon}
+                  symbol={roman}
+                  right={16}
+                  height={28}
+                  width={22}
+                  cutoutColor={theme.bg}
+                />
+
+                <KhokhlomaGarland
+                  variant={theme.garland}
+                  count={5}
+                  style={styles.bannerGarland}
+                />
+
+                <View style={styles.bannerTop}>
+                  <View style={styles.bannerTextWrap}>
+                    <Text style={[styles.bannerEyebrow, { color: theme.eyebrow }]}>
+                      ГЛАВА {roman} · РАЗДЕЛ {uIdx + 1}
+                    </Text>
+                    <Text style={styles.bannerTitle}>{unit.title}</Text>
+                    {unit.description ? (
+                      <Text style={styles.bannerDesc}>{unit.description}</Text>
+                    ) : null}
+                  </View>
+
+                  <View
+                    style={[
+                      styles.crownBox,
+                      { backgroundColor: theme.crownBg },
+                    ]}
+                  >
+                    <Text style={styles.crownEmoji}>👑</Text>
+                    <Text style={styles.crownCount}>
+                      {doneCount}/{lessons.length}
+                    </Text>
+                  </View>
+                </View>
+
+                {lessons.length > 0 ? (
+                  <View
+                    style={[
+                      styles.bannerTrack,
+                      { backgroundColor: theme.trackBg },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.bannerFill,
+                        { width: `${Math.max(pct, pct > 0 ? 10 : 0)}%` },
+                      ]}
+                    >
+                      <View style={styles.bannerShine} />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Чистая S-образная тропа уроков на сливочной бумаге */}
+              <View style={styles.pathContainer}>
+                {lessons.map((lesson, lIdx) => {
+                  const isLocked = !lesson.completed && globalSeenIncomplete;
+                  const isCurrent = !lesson.completed && !globalSeenIncomplete;
+                  if (!lesson.completed) globalSeenIncomplete = true;
+
+                  const offsetX = SNAKE_OFFSETS[lIdx % SNAKE_OFFSETS.length];
+                  const nextOffsetX =
+                    lIdx < lessons.length - 1
+                      ? SNAKE_OFFSETS[(lIdx + 1) % SNAKE_OFFSETS.length]
+                      : offsetX;
+                  const midOffsetX = Math.round((offsetX + nextOffsetX) / 2);
+
+                  return (
+                    <View key={lesson.id} style={styles.nodeWrapper}>
+                      <View
+                        style={[
+                          styles.nodeColumn,
+                          { transform: [{ translateX: offsetX }] },
+                        ]}
+                      >
+                        {/* Плашка «НАЧАТЬ» над текущим уроком */}
+                        {isCurrent && (
+                          <View style={styles.startTooltipWrap}>
+                            <View style={styles.startTooltip}>
+                              <Text style={styles.startTooltipText}>
+                                НАЧАТЬ
+                              </Text>
+                            </View>
+                            <View style={styles.startTooltipTail} />
+                          </View>
+                        )}
+
+                        <View
+                          style={[
+                            styles.puckAnchor,
+                            isCurrent && styles.currentHalo,
+                          ]}
+                        >
+                          <Pressable
+                            disabled={isLocked}
+                            onPress={() =>
+                              navigation.navigate('Lesson', {
+                                lessonId: lesson.id,
+                                title: lesson.title,
+                              })
+                            }
+                            style={({ pressed }) => [
+                              styles.puck,
+                              lesson.completed
+                                ? styles.puckDone
+                                : isLocked
+                                ? styles.puckLocked
+                                : styles.puckCurrent,
+                              pressed && !isLocked && styles.puckPressed,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.puckInnerRing,
+                                isLocked && styles.puckInnerRingLocked,
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.puckIcon,
+                                lesson.completed && styles.puckIconDone,
+                                isCurrent && styles.puckIconCurrent,
+                                isLocked && styles.puckIconLocked,
+                              ]}
+                            >
+                              {lesson.completed ? '👑' : isLocked ? '🔒' : '★'}
+                            </Text>
+                          </Pressable>
+
+                          {/* Золотая награда +XP и хвойная отметка у пройденного урока */}
+                          {lesson.completed && lesson.xp_reward ? (
+                            <View style={styles.xpFloatingBadge}>
+                              <Text style={styles.xpFloatingText}>
+                                +{lesson.xp_reward} XP
+                              </Text>
+                            </View>
+                          ) : null}
+                          {lesson.completed ? (
+                            <View style={styles.doneCheckDot}>
+                              <Text style={styles.doneCheckText}>✓</Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        <Pressable
+                          disabled={isLocked}
+                          onPress={() =>
+                            navigation.navigate('Lesson', {
+                              lessonId: lesson.id,
+                              title: lesson.title,
+                            })
+                          }
+                          style={[
+                            styles.nodeLabelPill,
+                            isCurrent && styles.nodeLabelPillCurrent,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.lessonTitle,
+                              isCurrent && styles.lessonTitleCurrent,
+                              isLocked && styles.lessonTitleLocked,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {lesson.title}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {/* Аккуратные пунктирные точки-вехи между уроками */}
+                      {lIdx < lessons.length - 1 ? (
+                        <View
+                          style={[
+                            styles.connectorWrap,
+                            { transform: [{ translateX: midOffsetX }] },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.connectorDot,
+                              lesson.completed && styles.connectorDotDone,
+                            ]}
+                          />
+                          <View
+                            style={[
+                              styles.connectorDotSmall,
+                              lesson.completed && styles.connectorDotDone,
+                            ]}
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
 
-
-/**
- * Карточка «Продолжить»: единственный явный следующий шаг.
- */
-function ContinueCard({ lesson, onPress }) {
-  // Всё пройдено — предлагаем закрепить кейсами, а не пустой экран.
-  if (!lesson) {
-    return (
-      <Pressable style={[styles.continueCard, styles.continueCardDone]} onPress={onPress}>
-        <Text style={styles.continueEyebrow}>ВСЕ УРОКИ ПРОЙДЕНЫ</Text>
-        <Text style={styles.continueTitle}>Закрепим кейсами?</Text>
-        <Text style={styles.continueText}>
-          Адаптивная сессия подберёт ситуации под слабые темы
-        </Text>
-      </Pressable>
-    );
-  }
-
-  return (
-    <Pressable style={styles.continueCard} onPress={onPress}>
-      <Text style={styles.continueEyebrow}>ПРОДОЛЖИТЬ</Text>
-      <Text style={styles.continueTitle} numberOfLines={2}>
-        {lesson.title}
-      </Text>
-      <Text style={styles.continueText}>+{lesson.xp_reward} XP за урок · 5 минут</Text>
-    </Pressable>
-  );
-}
-
-/**
- * Карточка рекомендации из адаптивного банка.
- */
-function RecommendationCard({ item, isLoading, onPress }) {
-  if (isLoading) {
-    return (
-      <View style={[styles.recoCard, styles.recoCardIdle]}>
-        <Text style={styles.recoEyebrow}>РЕКОМЕНДУЕМ СЕЙЧАС</Text>
-        <Text style={styles.recoText}>Подбираем кейс под твои темы…</Text>
-      </View>
-    );
-  }
-
-  // Пустой банк (или сервер недоступен) — блок не нужен, не показываем пустоту.
-  if (!item) return null;
-
-  return (
-    <Pressable style={styles.recoCard} onPress={onPress}>
-      <Text style={styles.recoEyebrow}>РЕКОМЕНДУЕМ СЕЙЧАС</Text>
-      <Text style={styles.recoSituation} numberOfLines={3}>
-        {item.situation}
-      </Text>
-      <Text style={styles.recoCta}>Разобрать ситуацию →</Text>
-    </Pressable>
-  );
-}
-
-/**
- * Юнит программы: заголовок с прогрессом и полный список уроков.
- */
-function UnitBlock({ unit, navigation }) {
-  const lessons = unit.lessons ?? [];
-  const completedCount = lessons.filter((lesson) => lesson.completed).length;
-  const isFinished = lessons.length > 0 && completedCount === lessons.length;
-
-  return (
-    <View style={styles.unit}>
-      <View style={styles.unitHeader}>
-        <View style={styles.unitIndex}>
-          <Text style={styles.unitIndexText}>{unit.title?.charAt(0) || '•'}</Text>
-        </View>
-        <View style={styles.unitHeaderText}>
-          <Text style={styles.unitTitle} numberOfLines={2}>
-            {unit.title}
-          </Text>
-          <Text style={styles.unitMeta}>
-            {completedCount}/{lessons.length} уроков{isFinished ? ' · закрыт' : ''}
-          </Text>
-        </View>
-      </View>
-
-      {/* Список уроков не обрезается: высота карточки растёт по содержимому,
-          а прокрутку обеспечивает внешний ScrollView. */}
-      <View style={styles.lessonList}>
-        {lessons.map((lesson) => (
-          <Pressable
-            key={lesson.id}
-            onPress={() =>
-              navigation.navigate('Lesson', {
-                lessonId: lesson.id,
-                title: lesson.title,
-              })
-            }
-            style={styles.lessonNode}
-          >
-            <View style={[styles.nodeIcon, lesson.completed ? styles.nodeDone : styles.nodeCurrent]}>
-              <Text style={styles.nodeEmoji}>{lesson.completed ? '✓' : '▶'}</Text>
-            </View>
-            <View style={styles.lessonTextBlock}>
-              <Text
-                style={[styles.lessonTitle, lesson.completed && styles.lessonTitleDone]}
-                numberOfLines={2}
-              >
-                {lesson.title}
-              </Text>
-              <Text style={styles.lessonMeta}>
-                {lesson.completed ? 'Пройдено' : `+${lesson.xp_reward} XP`}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.xxl * 3, paddingTop: spacing.sm },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 112,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.base,
     backgroundColor: colors.background,
+    padding: 24,
+    gap: 12,
   },
-  errorText: { ...typography.bodyStrong, color: colors.error },
+  stateHint: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+  stateCard: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
+    borderColor: brand.rule,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  errorText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  errorDetail: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.subtext,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 6,
+    height: 46,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+    backgroundColor: brand.red,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.redDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
+  },
+  retryBtnText: {
+    color: brand.creamText,
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
 
-  header: { paddingHorizontal: spacing.base, marginTop: spacing.base },
-  title: { ...typography.display, color: colors.text },
-  subtitle: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
-  progressTrack: {
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.track,
-    marginTop: spacing.md,
+  /* Шапка */
+  header: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 6,
+    gap: 14,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  titleBody: {
+    flex: 1,
+  },
+  docKicker: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: brand.muted,
+    marginBottom: 2,
+  },
+  titleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  title: {
+    fontSize: 27,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.4,
+  },
+  titleSprig: {
+    marginTop: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.subtext,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+
+  /* Две чистые карточки быстрых действий */
+  questRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  questCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    padding: 13,
+    gap: 5,
+  },
+  questCardPrimary: {
+    borderColor: brand.goldBorder,
+  },
+  questPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 1.5,
+  },
+  questTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  sealMiniRed: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: brand.red,
+    borderBottomWidth: 2,
+    borderBottomColor: brand.redDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sealMiniText: {
+    color: brand.creamText,
+    fontSize: 14,
+    fontWeight: '800',
+    fontFamily: serifFamily,
+  },
+  sealMiniGold: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1.2,
+    borderColor: brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sealMiniDarkText: {
+    color: brand.goldInk,
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: serifFamily,
+  },
+  goldTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1,
+    borderColor: brand.goldBorder,
+  },
+  goldTagText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: brand.goldInk,
+    letterSpacing: 0.5,
+  },
+  infoTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: brand.infoSoft,
+    borderWidth: 1,
+    borderColor: brand.infoBorder,
+  },
+  infoTagText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: brand.infoInk,
+    letterSpacing: 0.5,
+  },
+  questTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  questDesc: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: colors.subtext,
+    lineHeight: 15.5,
+  },
+
+  emptyCard: {
+    margin: 18,
+    padding: 28,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptySign: {
+    fontSize: 28,
+    fontFamily: serifFamily,
+    color: brand.gold,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+
+  /* Глава (Unit) */
+  unitSection: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+  },
+  chapterDivider: {
+    marginBottom: 14,
+    paddingHorizontal: 10,
+  },
+  unitBanner: {
+    position: 'relative',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 15,
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 168, 73, 0.45)',
+    borderBottomWidth: 5,
+    gap: 11,
+  },
+  bannerGarland: {
+    paddingRight: 32,
+  },
+  bannerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bannerTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  bannerEyebrow: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  bannerTitle: {
+    fontSize: 18.5,
+    fontWeight: '800',
+    color: brand.creamText,
+    lineHeight: 23,
+    letterSpacing: -0.2,
+  },
+  bannerDesc: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: 'rgba(252, 248, 240, 0.84)',
+    lineHeight: 17,
+    marginTop: 1,
+  },
+  crownBox: {
+    minWidth: 50,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(241, 217, 153, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 2,
+  },
+  crownEmoji: {
+    fontSize: 16,
+  },
+  crownCount: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: brand.creamText,
+  },
+  bannerTrack: {
+    height: 9,
+    borderRadius: 999,
     overflow: 'hidden',
   },
-  progressFill: {
+  bannerFill: {
     height: '100%',
-    borderRadius: radius.pill,
-    backgroundColor: colors.success,
+    borderRadius: 999,
+    backgroundColor: brand.gold,
+  },
+  bannerShine: {
+    height: 3,
+    marginHorizontal: 4,
+    marginTop: 1.5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(252, 248, 240, 0.45)',
   },
 
-  continueCard: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.lg,
-    padding: spacing.base,
-    borderRadius: radius.lg,
-    borderWidth: 3,
-    borderColor: colors.border,
-    backgroundColor: colors.accent,
+  /* Тропа уроков */
+  pathContainer: {
+    alignItems: 'center',
+    paddingTop: 22,
+    paddingBottom: 10,
   },
-  continueCardDone: { backgroundColor: colors.success },
-  continueEyebrow: { ...typography.micro, color: colors.text, opacity: 0.7 },
-  continueTitle: { ...typography.title, color: colors.text, marginTop: spacing.xs },
-  continueText: {
-    ...typography.caption,
+  nodeWrapper: {
+    alignItems: 'center',
+  },
+  nodeColumn: {
+    alignItems: 'center',
+  },
+  startTooltipWrap: {
+    alignItems: 'center',
+    marginBottom: 7,
+  },
+  startTooltip: {
+    backgroundColor: colors.card,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.red,
+  },
+  startTooltipText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    color: brand.red,
+  },
+  startTooltipTail: {
+    width: 9,
+    height: 9,
+    backgroundColor: colors.card,
+    borderRightWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: brand.red,
+    transform: [{ rotate: '45deg' }],
+    marginTop: -5,
+  },
+
+  puckAnchor: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentHalo: {
+    padding: 8,
+    borderRadius: 999,
+    backgroundColor: brand.redSoft,
+    borderWidth: 2,
+    borderColor: brand.red,
+  },
+  puck: {
+    width: 72,
+    height: 68,
+    borderRadius: 36,
+    borderBottomWidth: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  puckDone: {
+    backgroundColor: brand.gold,
+    borderBottomColor: brand.goldDark,
+  },
+  puckCurrent: {
+    backgroundColor: brand.red,
+    borderBottomColor: brand.redDark,
+  },
+  puckLocked: {
+    backgroundColor: colors.paper,
+    borderBottomColor: brand.ruleStrong,
+  },
+  puckPressed: {
+    transform: [{ translateY: 3 }],
+    borderBottomWidth: 3,
+  },
+  puckInnerRing: {
+    position: 'absolute',
+    width: 56,
+    height: 52,
+    borderRadius: 28,
+    borderWidth: 1.2,
+    borderColor: 'rgba(252, 248, 240, 0.42)',
+  },
+  puckInnerRingLocked: {
+    borderColor: 'rgba(150, 133, 113, 0.25)',
+  },
+  puckIcon: {
+    fontSize: 24,
+  },
+  puckIconDone: {
+    fontSize: 24,
+  },
+  puckIconCurrent: {
+    fontSize: 25,
+    color: brand.creamText,
+  },
+  puckIconLocked: {
+    fontSize: 20,
+    opacity: 0.65,
+  },
+
+  /* Золотой XP и хвойная галочка выполненного урока */
+  xpFloatingBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -24,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1.5,
+    borderColor: brand.gold,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+  },
+  xpFloatingText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: brand.goldInk,
+  },
+  doneCheckDot: {
+    position: 'absolute',
+    bottom: 2,
+    left: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: brand.pine,
+    borderWidth: 2,
+    borderColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneCheckText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: brand.creamText,
+  },
+
+  nodeLabelPill: {
+    marginTop: 8,
+    maxWidth: 196,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  nodeLabelPillCurrent: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: brand.rule,
+  },
+  lessonTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
     color: colors.text,
-    marginTop: spacing.xs,
-    opacity: 0.85,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  lessonTitleCurrent: {
+    fontWeight: '800',
+    color: brand.ink,
+  },
+  lessonTitleLocked: {
+    color: colors.locked,
+    fontWeight: '600',
   },
 
-  recoCard: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.md,
-    padding: spacing.base,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-  },
-  recoCardIdle: { opacity: 0.7 },
-  recoEyebrow: { ...typography.micro, color: colors.accent },
-  recoSituation: { ...typography.bodyStrong, color: colors.text, marginTop: spacing.sm },
-  recoText: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
-  recoCta: { ...typography.caption, color: colors.accentPressed, marginTop: spacing.md },
-
-  secondaryBtn: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    backgroundColor: colors.surfaceAlt,
-  },
-  secondaryTitle: { ...typography.bodyStrong, color: colors.text },
-  secondaryText: { ...typography.caption, color: colors.subtext, marginTop: 2 },
-  retryBtn: {
-    minHeight: sizes.minTouchTarget,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-  },
-  retryText: { ...typography.bodyStrong, color: colors.text },
-
-  sectionTitle: {
-    ...typography.title,
-    color: colors.text,
-    marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-  },
-  unit: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.lg,
-    padding: spacing.base,
-  },
-  unitHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  unitIndex: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.accent,
+  connectorWrap: {
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
-  unitIndexText: { color: colors.text, fontWeight: '900', fontSize: 18 },
-  unitHeaderText: { flex: 1 },
-  unitTitle: { ...typography.heading, color: colors.text },
-  unitMeta: { ...typography.caption, color: colors.subtext, marginTop: 2 },
-  lessonList: { marginTop: spacing.md, gap: spacing.sm },
-  lessonNode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: colors.surfaceAlt,
+  connectorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: brand.ruleStrong,
   },
-  nodeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+  connectorDotSmall: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: brand.ruleStrong,
   },
-  nodeDone: { backgroundColor: colors.successTint },
-  nodeCurrent: { backgroundColor: colors.goldTint },
-  nodeEmoji: { fontSize: 14, color: colors.text, fontWeight: '900' },
-  lessonTextBlock: { flex: 1 },
-  lessonTitle: { ...typography.bodyStrong, color: colors.text },
-  lessonTitleDone: { color: colors.subtext },
-  lessonMeta: { ...typography.caption, color: colors.success, marginTop: 2 },
-
-  doneBlock: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    padding: spacing.base,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    backgroundColor: colors.surfaceAlt,
+  connectorDotDone: {
+    backgroundColor: brand.gold,
   },
-  doneTitle: { ...typography.heading, color: colors.subtext, marginBottom: spacing.sm },
-  doneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  doneCheck: { color: colors.success, fontWeight: '900', fontSize: 14 },
-  doneText: { ...typography.caption, color: colors.subtext, flex: 1 },
-  doneXp: { ...typography.caption, color: colors.subtext },
 });

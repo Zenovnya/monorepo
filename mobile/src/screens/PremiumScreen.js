@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,172 +10,490 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { usePremium } from '../hooks/usePremium';
-import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
+import {
+  brand,
+  KhokhlomaGarland,
+  KhokhlomaMedallion,
+  KhokhlomaCorners,
+  RibbonBookmark,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 
 const PLANS = [
-  { key: 'monthly', title: '1 месяц', price: '399 ₽/мес', note: 'Экономия 0%' },
-  { key: 'yearly', title: '1 год', price: '2 990 ₽/год', note: 'Экономия 38%', popular: true },
+  { key: 'monthly', title: '1 месяц', price: '399 ₽/мес', note: 'Базовый тариф' },
+  {
+    key: 'yearly',
+    title: '1 год',
+    price: '2 990 ₽/год',
+    note: 'Экономия 38%',
+    popular: true,
+  },
 ];
 
 const perks = [
-  { i: '❤️', t: 'Без лимита жизней' },
-  { i: '📶', t: 'Офлайн-кейсы' },
-  { i: '⚖️', t: 'Мантия мишки эксклюзив' },
-  { i: '🎯', t: 'Разбор сложных составов' },
-  { i: '🚫', t: 'Без рекламы' },
+  { i: '❤️', t: 'Без лимита жизней', bg: brand.redSoft },
+  { i: '📜', t: 'Офлайн-архив кейсов', bg: brand.infoSoft },
+  { i: '⚖️', t: 'Эксклюзивная мантия мишки', bg: brand.goldSoft },
+  { i: '§', t: 'Разбор сложных составов', bg: brand.goldSoft },
+  { i: '✓', t: 'Без рекламы', bg: brand.pineSoft },
 ];
 
+/**
+ * Экран подписки LexBear Plus (PremiumScreen):
+ * парадная чёрно-золотая хохломская шапка (#302820 + #D9A849 + #C9362B),
+ * чистые карточки тарифов на сливочной бумаге (#F7EFDF),
+ * хвойные галочки преимуществ (#315B46) и лаково-красная главная кнопка (#C9362B).
+ */
 export default function PremiumScreen({ navigation }) {
   const [plan, setPlan] = useState('yearly');
   const { isPremium, startCheckout, isCheckingOut } = usePremium();
 
   const onSubscribe = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Haptics.notificationAsync(
+      Haptics.NotificationFeedbackType.Success
+    ).catch(() => {});
     startCheckout(plan);
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </Pressable>
-        <Text style={styles.title}>LexBear Plus</Text>
-      </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <PaperGrain />
 
-      {isPremium ? (
-        <View style={styles.activeBanner}>
-          <Text style={styles.activeText}>✓ Премиум активен — спасибо!</Text>
-        </View>
-      ) : null}
+      {/* Парадная лаковая шапка в эстетике хохломы */}
+      <View style={styles.superHero}>
+        <KhokhlomaCorners variant="onDark" size="md" inset={10} />
 
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Премиум</Text>
-        <Text style={styles.heroTitle}>Учись без ограничений</Text>
-        <AnimatedMascot size={140} emotion="cheer" />
-        <Text style={styles.price}>{plan === 'yearly' ? '2 990 ₽' : '399 ₽'} / {plan === 'yearly' ? 'год' : 'мес'}</Text>
-        <Text style={styles.priceNote}>или {plan === 'yearly' ? '399 ₽ / мес' : '2 990 ₽ / год · экономия 38%'}</Text>
-      </View>
-
-      {/* Выбор тарифа */}
-      <View style={styles.plans}>
-        {PLANS.map((p) => (
+        <View style={styles.header}>
           <Pressable
-            key={p.key}
-            onPress={() => setPlan(p.key)}
-            style={[styles.plan, plan === p.key && styles.planSelected]}
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            style={styles.closeBtn}
           >
-            {p.popular && <Text style={styles.popularBadge}>🔥 Популярный</Text>}
-            <Text style={styles.planTitle}>{p.title}</Text>
-            <Text style={styles.planPrice}>{p.price}</Text>
-            <Text style={styles.planNote}>{p.note}</Text>
+            <Text style={styles.closeText}>✕</Text>
           </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.perkList}>
-        {perks.map((p) => (
-          <View key={p.t} style={styles.perk}>
-            <Text style={styles.perkIcon}>{p.i}</Text>
-            <Text style={styles.perkText}>{p.t}</Text>
-            <Text style={styles.perkCheck}>✓</Text>
+          <View style={styles.superPill}>
+            <Text style={styles.superPillText}>LEXBEAR PLUS</Text>
           </View>
-        ))}
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <KhokhlomaMedallion
+          size={152}
+          variant="onDark"
+          style={styles.heroMedallion}
+        >
+          <AnimatedMascot size={130} emotion="cheer" celebrate />
+        </KhokhlomaMedallion>
+
+        <Text style={styles.heroTitle}>Учитесь без ограничений</Text>
+        <Text style={styles.price}>
+          {plan === 'yearly' ? '2 990 ₽' : '399 ₽'} /{' '}
+          {plan === 'yearly' ? 'год' : 'мес'}
+        </Text>
+        <Text style={styles.priceNote}>
+          или{' '}
+          {plan === 'yearly'
+            ? '399 ₽ / мес'
+            : '2 990 ₽ / год · экономия 38%'}
+        </Text>
+
+        <KhokhlomaGarland
+          variant="onDark"
+          count={6}
+          style={styles.heroGarland}
+        />
       </View>
 
-      {isCheckingOut ? (
-        <Text style={styles.paymentHint}>
-          Оплата открыта в браузере. После оплаты вернитесь в приложение —
-          статус обновится автоматически.
-        </Text>
-      ) : null}
+      <View style={styles.body}>
+        {isPremium ? (
+          <View style={styles.activeBanner}>
+            <Text style={styles.activeText}>✓ Подписка активна — спасибо!</Text>
+          </View>
+        ) : null}
 
-      <AnimatedButton
-        title={isPremium ? 'Подписка активна' : 'Оформить подписку'}
-        onPress={onSubscribe}
-        loading={isCheckingOut}
-        disabled={isPremium}
-      />
-      <Text style={styles.terms}>Первые 7 дней бесплатно. Отмена в любой момент.</Text>
+        {/* Карточки тарифов */}
+        <View style={styles.plans}>
+          {PLANS.map((p) => {
+            const isSelected = plan === p.key;
+            return (
+              <Pressable
+                key={p.key}
+                onPress={() => setPlan(p.key)}
+                style={({ pressed }) => [
+                  styles.plan,
+                  isSelected && styles.planSelected,
+                  pressed && styles.planPressed,
+                ]}
+              >
+                {p.popular ? (
+                  <RibbonBookmark
+                    color={brand.red}
+                    symbol="★"
+                    right={12}
+                    height={26}
+                    width={19}
+                    cutoutColor={isSelected ? brand.goldSoft : colors.card}
+                  />
+                ) : null}
+
+                <View style={styles.planTopRow}>
+                  {p.popular ? (
+                    <View style={styles.popularChip}>
+                      <Text style={styles.popularBadge}>Выбор</Text>
+                    </View>
+                  ) : (
+                    <View />
+                  )}
+                  <View
+                    style={[
+                      styles.radio,
+                      isSelected && styles.radioSelected,
+                      p.popular && { marginRight: 22 },
+                    ]}
+                  >
+                    {isSelected ? (
+                      <Text style={styles.radioMark}>✓</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <Text style={styles.planTitle}>{p.title}</Text>
+                <Text
+                  style={[
+                    styles.planPrice,
+                    isSelected && styles.planPriceSelected,
+                  ]}
+                >
+                  {p.price}
+                </Text>
+                <Text
+                  style={[
+                    styles.planNote,
+                    p.popular && styles.planNotePine,
+                  ]}
+                >
+                  {p.note}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Чистый список преимуществ с хвойными галочками */}
+        <View style={styles.perkCard}>
+          {perks.map((p, idx) => (
+            <View
+              key={p.t}
+              style={[
+                styles.perk,
+                idx < perks.length - 1 && styles.perkDivider,
+              ]}
+            >
+              <View style={[styles.perkIconBox, { backgroundColor: p.bg }]}>
+                <Text style={styles.perkIcon}>{p.i}</Text>
+              </View>
+              <Text style={styles.perkText}>{p.t}</Text>
+              <View style={styles.perkCheckCircle}>
+                <Text style={styles.perkCheck}>✓</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {isCheckingOut ? (
+          <View style={styles.paymentHintBox}>
+            <Text style={styles.paymentHint}>
+              Оплата открыта в браузере. После оплаты вернитесь в приложение —
+              статус обновится автоматически.
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.ctaBlock}>
+          <AnimatedButton
+            title={isPremium ? 'Подписка активна' : 'Оформить подписку'}
+            onPress={onSubscribe}
+            loading={isCheckingOut}
+            disabled={isPremium}
+          />
+          <Text style={styles.terms}>
+            Первые 7 дней бесплатно. Отмена в любой момент.
+          </Text>
+        </View>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.base, paddingBottom: spacing.xxl },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 44,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  backBtn: {
-    width: sizes.minTouchTarget,
-    height: sizes.minTouchTarget,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
+  /* Парадная шапка — чернильный лак (#302820), лаковый красный (#C9362B) и золото (#D9A849) */
+  superHero: {
+    position: 'relative',
+    backgroundColor: brand.ink,
+    paddingTop: 14,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.gold,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    marginBottom: 12,
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(252, 248, 240, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { ...typography.heading, color: colors.text },
-  title: { ...typography.title, color: colors.text },
+  closeText: {
+    color: brand.creamText,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  superPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: brand.red,
+    borderWidth: 1.2,
+    borderColor: brand.gold,
+  },
+  superPillText: {
+    color: brand.creamText,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  headerSpacer: {
+    width: 34,
+  },
+  heroMedallion: {
+    marginVertical: 4,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: brand.creamText,
+    textAlign: 'center',
+    marginTop: 12,
+    letterSpacing: -0.2,
+  },
+  price: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: brand.gold,
+    marginTop: 4,
+  },
+  priceNote: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: 'rgba(252, 248, 240, 0.72)',
+    marginTop: 2,
+  },
+  heroGarland: {
+    marginTop: 14,
+  },
 
-  hero: {
-    marginTop: spacing.base,
-    backgroundColor: colors.goldTint,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  body: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    gap: 14,
+  },
+  activeBanner: {
+    backgroundColor: brand.pineSoft,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.pine,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     alignItems: 'center',
   },
-  heroLabel: { ...typography.micro, color: colors.accent, textTransform: 'uppercase' },
-  heroTitle: { ...typography.title, color: colors.text, marginTop: spacing.xs },
-  price: { ...typography.display, color: colors.text, marginTop: spacing.sm },
-  priceNote: { ...typography.caption, color: colors.subtext, marginTop: 2 },
+  activeText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: brand.pine,
+  },
 
-  plans: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.base },
+  plans: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   plan: {
+    position: 'relative',
     flex: 1,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.border,
-    padding: spacing.base,
-    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    padding: 14,
+    gap: 4,
   },
-  planSelected: { borderColor: colors.accent, backgroundColor: colors.goldTint },
-  popularBadge: { ...typography.micro, color: colors.accent, marginBottom: spacing.xs + 2 },
-  planTitle: { ...typography.body, color: colors.text },
-  planPrice: { ...typography.heading, color: colors.text, marginTop: spacing.sm },
-  planNote: { ...typography.micro, color: colors.subtext, marginTop: spacing.xs },
+  planSelected: {
+    backgroundColor: brand.goldSoft,
+    borderColor: brand.gold,
+  },
+  planPressed: {
+    transform: [{ translateY: 2 }],
+  },
+  planTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 24,
+    marginBottom: 4,
+  },
+  popularChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    backgroundColor: brand.red,
+  },
+  popularBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: brand.creamText,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: brand.ruleStrong,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioSelected: {
+    backgroundColor: brand.gold,
+    borderColor: brand.goldDark,
+  },
+  radioMark: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: brand.ink,
+  },
+  planTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.subtext,
+  },
+  planPrice: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  planPriceSelected: {
+    color: brand.ink,
+  },
+  planNote: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: brand.muted,
+  },
+  planNotePine: {
+    color: brand.pine,
+    fontWeight: '800',
+  },
 
-  perkList: { marginTop: spacing.base, gap: spacing.sm + 2 },
+  perkCard: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    overflow: 'hidden',
+  },
   perk: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  perkIcon: { fontSize: 24 },
-  perkText: { ...typography.bodyStrong, color: colors.text, flex: 1 },
-  perkCheck: { ...typography.bodyStrong, color: colors.success },
-
-  activeBanner: {
-    marginTop: spacing.base,
-    backgroundColor: colors.successTint,
-    borderWidth: 2,
-    borderColor: colors.success,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+  perkDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: brand.rule,
+  },
+  perkIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  activeText: { ...typography.bodyStrong, color: colors.text },
-  paymentHint: { ...typography.caption, color: colors.subtext, textAlign: 'center', marginTop: spacing.base },
-  terms: { ...typography.micro, color: colors.subtext, textAlign: 'center', marginTop: spacing.md },
-});
+  perkIcon: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: brand.ink,
+  },
+  perkText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  perkCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: brand.pine,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  perkCheck: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: brand.creamText,
+  },
 
+  paymentHintBox: {
+    backgroundColor: brand.infoSoft,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: brand.infoBorder,
+    padding: 12,
+  },
+  paymentHint: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: brand.infoInk,
+    lineHeight: 18,
+  },
+
+  ctaBlock: {
+    gap: 8,
+    marginTop: 2,
+  },
+  terms: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: brand.muted,
+    textAlign: 'center',
+  },
+});

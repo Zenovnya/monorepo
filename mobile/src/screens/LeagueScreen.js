@@ -1,236 +1,461 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+} from 'react-native';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { gamificationApi } from '../api/gamification';
-import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
+import {
+  brand,
+  KhokhlomaCorners,
+  KhokhlomaDivider,
+  WaxSeal,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 
-/** Порядок лиг по возрастанию — держим в синхроне с backend `LEAGUES`. */
-const LEAGUES = ['Бронза', 'Серебро', 'Золото', 'Мантия', 'Фемида'];
+const leagues = ['Бронза', 'Серебро', 'Золото', 'Мантия', 'Фемида'];
 
-/** Цвет медали для первых трёх мест. */
-const MEDAL_COLORS = [colors.gold, colors.silver, colors.bronze];
+const SHIELD_META = {
+  Бронза: { icon: '🥉', bg: '#B07443', lip: '#85532A' },
+  Серебро: { icon: '🥈', bg: '#8C969E', lip: '#69737B' },
+  Золото: { icon: '🥇', bg: brand.gold, lip: brand.goldDark },
+  Мантия: { icon: '⚖️', bg: brand.red, lip: brand.redDark },
+  Фемида: { icon: '👑', bg: brand.ink, lip: brand.inkDeep },
+};
 
+const AVATAR_COLORS = [brand.red, brand.gold, brand.pine, brand.ink, '#9A5B32'];
+
+const fake = [
+  { name: 'Артём К.', xp: 340 },
+  { name: 'Мария С.', xp: 315 },
+  { name: 'Ты', xp: 0, me: true },
+  { name: 'Игорь Д.', xp: 260 },
+  { name: 'Полина В.', xp: 245 },
+  { name: 'Никита М.', xp: 220 },
+  { name: 'Алина Ф.', xp: 200 },
+  { name: 'Сергей Т.', xp: 190 },
+  { name: 'Кристина О.', xp: 170 },
+  { name: 'Роман Б.', xp: 155 },
+];
+
+/**
+ * Экран «Лига» (LeagueScreen):
+ * наградная карточка дивизиона в красно-золотой рамке хохломы,
+ * золотые счётчики XP (#D9A849), хвойная зона повышения (#315B46)
+ * и чистая таблица участников на сливочной бумаге (#F7EFDF).
+ */
 export default function LeagueScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
-
-  // Реальная таблица лидеров: раньше экран рисовал выдуманный список.
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['gamification-leaderboard'],
-    queryFn: () => gamificationApi.leaderboard(),
-  });
-
-  const league = data?.league ?? user?.league ?? LEAGUES[0];
-  const nextLeague = data?.next_league ?? LEAGUES[0];
-  const entries = data?.entries ?? [];
-
-  const header = (
-    <View style={styles.header}>
-      <Pressable
-        onPress={() => navigation.goBack()}
-        style={styles.backBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Назад"
-        hitSlop={8}
-      >
-        <Text style={styles.backText}>←</Text>
-      </Pressable>
-      <Text style={styles.title}>Лига</Text>
-    </View>
-  );
-
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        {header}
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.container}>
-        {header}
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Не удалось загрузить таблицу лидеров</Text>
-          <Pressable style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Повторить</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
+  const board = fake
+    .map((f) =>
+      f.me ? { ...f, xp: user?.xp ?? 0, name: user?.name || 'Ты' } : f
+    )
+    .sort((a, b) => b.xp - a.xp);
+  const league = user?.league || 'Бронза';
+  const curIdx = Math.max(0, leagues.indexOf(league));
+  const nextIdx = Math.min(leagues.length - 1, leagues.indexOf(league) + 1);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {header}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <PaperGrain />
 
-      <View style={styles.hero}>
-        <AnimatedMascot size={64} emotion="cheer" />
-        <View style={styles.heroText}>
-          <Text style={styles.heroTitle}>{league}</Text>
-          <Text style={styles.heroSubtitle}>
-            {nextLeague === league ? 'Это высшая лига' : `Топ 5 идут в ${nextLeague}`}
+      {/* Шапка */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && styles.backPressed,
+          ]}
+        >
+          <Text style={styles.backText}>←</Text>
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerKicker}>§ ТУРНИР НЕДЕЛИ</Text>
+          <Text style={styles.title}>Лига</Text>
+        </View>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {/* Наградной картуш лиги с точечными уголками хохломы */}
+      <View style={styles.shieldsBanner}>
+        <KhokhlomaCorners variant="light" size="md" inset={8} />
+
+        <View style={styles.shieldsRow}>
+          {leagues.map((l, idx) => {
+            const isCur = l === league;
+            const isLocked = idx > curIdx;
+            const meta = SHIELD_META[l] || SHIELD_META.Бронза;
+            return (
+              <View key={l} style={styles.shieldCol}>
+                <View
+                  style={[
+                    styles.shield,
+                    isCur && styles.shieldCurrent,
+                    isLocked
+                      ? styles.shieldLocked
+                      : {
+                          backgroundColor: meta.bg,
+                          borderBottomColor: meta.lip,
+                        },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.shieldEmoji,
+                      isCur && styles.shieldEmojiCurrent,
+                    ]}
+                  >
+                    {isLocked ? '🔒' : meta.icon}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.shieldLabel,
+                    isCur && styles.shieldLabelCurrent,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {l}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <Text style={styles.heroTitle}>{league}</Text>
+        <Text style={styles.heroSubtitle}>
+          Топ 5 переходят в лигу «{leagues[nextIdx]}»
+        </Text>
+
+        <KhokhlomaDivider style={styles.bannerDivider} />
+
+        <View style={styles.mascotCheerPill}>
+          <AnimatedMascot size={50} emotion="cheer" />
+          <Text style={styles.mascotCheerText}>
+            Набирайте XP в уроках и поднимайтесь выше в ведомости!
           </Text>
         </View>
       </View>
 
-      <View style={styles.leagueChips}>
-        {LEAGUES.map((item) => {
-          const active = item === league;
+      {/* Чистая ведомость участников */}
+      <View style={styles.list}>
+        {board.map((r, i) => {
+          const isTop3 = i < 3;
+          const sealTone = i === 0 ? 'gold' : i === 1 ? 'red' : 'pine';
+          const avatarBg = r.me
+            ? brand.red
+            : AVATAR_COLORS[i % AVATAR_COLORS.length];
+          const initial = (r.name || '?').trim().charAt(0).toUpperCase();
+
           return (
-            <View key={item} style={[styles.leagueChip, active && styles.leagueChipActive]}>
-              <Text style={[styles.leagueChipText, active && styles.leagueChipTextActive]}>
-                {item}
-              </Text>
-            </View>
+            <React.Fragment key={r.name + i}>
+              <View style={[styles.row, r.me && styles.rowMe]}>
+                {isTop3 ? (
+                  <WaxSeal
+                    label={String(i + 1)}
+                    size={32}
+                    tone={sealTone}
+                  />
+                ) : (
+                  <View style={styles.rankPlain}>
+                    <Text
+                      style={[
+                        styles.rankPlainText,
+                        i < 5 && { color: brand.pine },
+                      ]}
+                    >
+                      {i + 1}
+                    </Text>
+                  </View>
+                )}
+
+                <View
+                  style={[styles.userAvatar, { backgroundColor: avatarBg }]}
+                >
+                  <Text
+                    style={[
+                      styles.userAvatarText,
+                      avatarBg === brand.gold && { color: brand.ink },
+                    ]}
+                  >
+                    {initial}
+                  </Text>
+                </View>
+
+                <Text
+                  style={[styles.rowName, r.me && styles.rowNameMe]}
+                  numberOfLines={1}
+                >
+                  {r.name}
+                </Text>
+
+                <View style={[styles.xpBadge, r.me && styles.xpBadgeMe]}>
+                  <Text style={styles.rowXp}>{r.xp} XP</Text>
+                </View>
+              </View>
+
+              {i === 4 && (
+                <View style={styles.promoDivider}>
+                  <View style={styles.promoLine} />
+                  <Text style={styles.promoText}>▲ Зона повышения ▲</Text>
+                  <View style={styles.promoLine} />
+                </View>
+              )}
+            </React.Fragment>
           );
         })}
       </View>
-
-      {entries.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>
-            В этой лиге пока никого нет. Наберите XP, чтобы попасть в таблицу.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.list}>
-          {entries.map((entry) => (
-            <View key={entry.position} style={[styles.row, entry.is_me && styles.rowMe]}>
-              <View
-                style={[
-                  styles.rank,
-                  entry.position <= 3 && {
-                    backgroundColor: MEDAL_COLORS[entry.position - 1],
-                  },
-                ]}
-              >
-                <Text style={[styles.rankText, entry.position <= 3 && styles.rankTextTop]}>
-                  {entry.position}
-                </Text>
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowName, entry.is_me && styles.rowNameMe]} numberOfLines={1}>
-                  {entry.name}
-                </Text>
-                <Text style={styles.rowLevel}>Уровень {entry.level}</Text>
-              </View>
-              <Text style={styles.rowXp}>{entry.xp} XP</Text>
-            </View>
-          ))}
-        </View>
-      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.base, paddingBottom: spacing.xxl },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 48,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
   backBtn: {
-    width: sizes.minTouchTarget,
-    height: sizes.minTouchTarget,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { ...typography.heading, color: colors.text },
-  title: { ...typography.title, color: colors.text },
+  backPressed: {
+    transform: [{ translateY: 1.5 }],
+  },
+  backText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  headerCenter: {
+    alignItems: 'center',
+  },
+  headerKicker: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: brand.muted,
+  },
+  title: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  headerSpacer: {
+    width: 38,
+  },
 
-  hero: {
+  /* Наградной картуш с рамкой хохломы */
+  shieldsBanner: {
+    position: 'relative',
+    marginHorizontal: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    borderWidth: 1.8,
+    borderBottomWidth: 4,
+    borderColor: brand.gold,
+    alignItems: 'center',
+  },
+  shieldsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 2,
+    marginBottom: 12,
+  },
+  shieldCol: {
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  shield: {
+    width: 44,
+    height: 46,
+    borderRadius: 14,
+    borderBottomWidth: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldCurrent: {
+    width: 54,
+    height: 56,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: brand.gold,
+  },
+  shieldLocked: {
+    backgroundColor: colors.paper,
+    borderBottomColor: brand.ruleStrong,
+    opacity: 0.72,
+  },
+  shieldEmoji: {
+    fontSize: 19,
+  },
+  shieldEmojiCurrent: {
+    fontSize: 24,
+  },
+  shieldLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: brand.muted,
+  },
+  shieldLabelCurrent: {
+    fontWeight: '800',
+    color: brand.ink,
+  },
+
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  heroSubtitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: brand.pine,
+    marginTop: 2,
+  },
+  bannerDivider: {
+    marginVertical: 12,
+  },
+  mascotCheerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.goldTint,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginTop: spacing.base,
+    gap: 10,
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: brand.rule,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  heroText: { flex: 1 },
-  heroTitle: { ...typography.heading, color: colors.text },
-  heroSubtitle: { ...typography.caption, color: colors.subtext, marginTop: spacing.xs },
+  mascotCheerText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.text,
+    lineHeight: 17.5,
+  },
 
-  leagueChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.base,
+  /* Таблица */
+  list: {
+    marginHorizontal: 18,
+    marginTop: 14,
+    gap: 8,
   },
-  leagueChip: {
-    borderRadius: radius.pill,
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-  },
-  leagueChipActive: { backgroundColor: colors.accent },
-  leagueChipText: { ...typography.caption, color: colors.text },
-  leagueChipTextActive: { color: colors.card },
-
-  list: { marginTop: spacing.base, gap: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    gap: 11,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
-  rowMe: { backgroundColor: colors.successTint, borderColor: colors.success },
-  rank: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
+  rowMe: {
+    backgroundColor: brand.goldSoft,
+    borderColor: brand.gold,
+  },
+  rankPlain: {
+    width: 32,
+    alignItems: 'center',
+  },
+  rankPlainText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: brand.muted,
+  },
+  userAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankText: { ...typography.bodyStrong, color: colors.text },
-  rankTextTop: { color: colors.card },
-  rowBody: { flex: 1 },
-  rowName: { ...typography.bodyStrong, color: colors.text },
-  rowNameMe: { fontWeight: '900' },
-  rowLevel: { ...typography.caption, color: colors.subtext },
-  rowXp: { ...typography.bodyStrong, color: colors.subtext },
+  userAvatarText: {
+    color: brand.creamText,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  rowName: {
+    flex: 1,
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  rowNameMe: {
+    fontWeight: '800',
+    color: brand.ink,
+  },
+  xpBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 9,
+    backgroundColor: brand.goldSoft,
+  },
+  xpBadgeMe: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: brand.gold,
+  },
+  rowXp: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: brand.goldInk,
+  },
 
-  emptyCard: {
-    marginTop: spacing.base,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
-    padding: spacing.base,
+  promoDivider: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
   },
-  emptyText: { ...typography.caption, color: colors.subtext, textAlign: 'center' },
-
-  errorText: { ...typography.bodyStrong, color: colors.error, textAlign: 'center' },
-  retryBtn: {
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.base,
+  promoLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: brand.pineBorder,
   },
-  retryText: { ...typography.bodyStrong, color: colors.text },
+  promoText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    color: brand.pine,
+  },
 });
-

@@ -47,7 +47,7 @@ export const AnimatedButton = ({ title, onPress, loading, disabled, style, varia
       />
       <Animated.View style={[styles.topLayer, isOutline ? styles.outlineTop : styles.primaryTop, topStyle]}>
         {loading ? (
-          <ActivityIndicator color={colors.text} />
+          <ActivityIndicator color="#FCF8F0" />
         ) : (
           <Text style={[styles.text, isOutline && { color: colors.text }]}>{title}</Text>
         )}
@@ -68,7 +68,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
   },
-  primaryBottom: { backgroundColor: colors.accentPressed },
+  // Лаковый красный из фирменной палитры LexBear (док: основной CTA — #C9362B)
+  primaryBottom: { backgroundColor: '#99241B' },
   outlineBottom: { backgroundColor: '#E4D9C8' },
   topLayer: {
     height: 58,
@@ -78,7 +79,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
   },
-  primaryTop: { backgroundColor: colors.accent },
+  primaryTop: { backgroundColor: colors.error }, // лаковый красный #C9362B
   outlineTop: { backgroundColor: colors.card },
-  text: { fontSize: 18, fontWeight: '700', color: colors.text },
+  text: { fontSize: 18, fontWeight: '700', color: '#FCF8F0' },
 });
