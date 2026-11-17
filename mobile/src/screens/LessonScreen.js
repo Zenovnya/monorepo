@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,16 +12,18 @@ import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LegalText } from '../components/LegalText';
 import { useMascotToast } from '../components/MascotToast';
-import { colors } from '../theme/tokens';
+import {
+  brand,
+  serifFamily,
+  KhokhlomaCorners,
+  KhokhlomaMedallion,
+  KhokhlomaDivider,
+  RibbonBookmark,
+  WaxSeal,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 
-/**
- * Нормализует поле `correct` вопроса к массиву индексов правильных ответов.
- *
- * Backend хранит `correct` в JSON и может вернуть:
- * - число (одиночный выбор) — индекс;
- * - булево (kind = truefalse) — true → 0, false → 1;
- * - массив индексов (множественный выбор).
- */
 function normalizeCorrect(correct) {
   if (Array.isArray(correct)) return correct;
   if (typeof correct === 'boolean') return [correct ? 0 : 1];
@@ -29,8 +31,16 @@ function normalizeCorrect(correct) {
   return [];
 }
 
+function hasSelection(q, selected, multi) {
+  if (!q) return false;
+  return Array.isArray(q.correct) ? multi.length > 0 : selected !== null;
+}
+
 /**
- * Экран урока LexBear: теория → практика → результат.
+ * Экран урока LexBear:
+ * во время теории и вопросов — чистый современный интерфейс с деликатными
+ * деталями старинного документа (закладка-ляссе, §, синяя справка #7298BC);
+ * на экране завершения — праздничная красно-золотая грамота в рамке хохломы.
  */
 export default function LessonScreen({ route, navigation }) {
   const { lessonId } = route.params;
@@ -41,14 +51,10 @@ export default function LessonScreen({ route, navigation }) {
   const [qIdx, setQIdx] = useState(0);
   const [lives, setLives] = useState(3);
   const [correctCount, setCorrectCount] = useState(0);
-  const [selected, setSelected] = useState(null); // индекс для одиночного выбора
-  const [multi, setMulti] = useState([]); // индексы для множественного выбора
+  const [selected, setSelected] = useState(null);
+  const [multi, setMulti] = useState([]);
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [shake, setShake] = useState(false);
-  // id вопроса -> ответ. Уходит на сервер: результат считает он.
-  // Храним в ref, а не в state: финальный POST должен нести ВСЕ ответы,
-  // включая последний, а значение из state внутри `nextQuestion` ещё не обновлено.
-  const answersRef = useRef({});
 
   const { data: lesson, isLoading, error } = useQuery({
     queryKey: ['lexbear-lesson', lessonId],
@@ -57,23 +63,14 @@ export default function LessonScreen({ route, navigation }) {
 
   const toast = useMascotToast();
 
-  // Завершение урока через lexbear-эндпоинт (XP, короны, стрик).
-  // Ответ содержит level_up / streak_incremented / achievements_unlocked —
-  // по ним показываем очередь тостов с медведем в нужной мимике.
   const completeMutation = useMutation({
-    mutationFn: ({ answers: payload }) =>
-      lexbearApi.completeLesson(lessonId, { answers: payload }),
+    mutationFn: ({ correct, total }) =>
+      lexbearApi.completeLesson(lessonId, { correct, total }),
     onSuccess: (data) => {
-      // Итог на экране берём с сервера: он же начислил XP.
-      if (typeof data?.correct === 'number') {
-        setCorrectCount(data.correct);
-      }
-
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
       queryClient.invalidateQueries(['gamification-me']);
 
-      // Очередь событий-реакций от сервера:
       if (data?.level_up) {
         toast.show({
           kind: 'level_up',
@@ -101,7 +98,9 @@ export default function LessonScreen({ route, navigation }) {
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <AnimatedMascot size={110} emotion="thinking" />
+        <ActivityIndicator size="small" color={brand.red} />
+        <Text style={styles.loadingHint}>Готовим материалы урока…</Text>
       </View>
     );
   }
@@ -109,7 +108,19 @@ export default function LessonScreen({ route, navigation }) {
   if (error || !lesson) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>Не удалось загрузить урок</Text>
+        <View style={styles.errorCard}>
+          <WaxSeal label="§" tone="red" size={48} />
+          <Text style={styles.errorText}>Не удалось загрузить урок</Text>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              styles.errorBackBtn,
+              pressed && styles.btnPressed,
+            ]}
+          >
+            <Text style={styles.errorBackText}>Назад</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -117,8 +128,8 @@ export default function LessonScreen({ route, navigation }) {
   const cards = lesson.cards ?? [];
   const questions = lesson.questions ?? [];
 
-  // Если теории нет — начинаем сразу с практики.
-  const effectivePhase = phase === 'theory' && cards.length === 0 ? 'practice' : phase;
+  const effectivePhase =
+    phase === 'theory' && cards.length === 0 ? 'practice' : phase;
   const totalSteps = cards.length + questions.length;
 
   const nextTheory = () => {
@@ -126,16 +137,11 @@ export default function LessonScreen({ route, navigation }) {
     else setPhase('practice');
   };
 
-  // Проверка ответа: поддерживает одиночный, множественный и true/false выбор.
   const check = () => {
     const q = questions[qIdx];
     if (!q) return;
     const rightAnswers = normalizeCorrect(q.correct);
     const isMulti = Array.isArray(q.correct);
-
-    // Ответ уходит на сервер как есть: сервер сам сравнит с эталоном.
-    const given = isMulti ? [...multi].sort() : selected;
-    answersRef.current = { ...answersRef.current, [q.id]: given };
 
     let isRight;
     if (isMulti) {
@@ -158,94 +164,180 @@ export default function LessonScreen({ route, navigation }) {
   };
 
   const nextQuestion = () => {
-    // Ответ на текущий вопрос уже сохранён в check().
     setChecked(null);
     setSelected(null);
     setMulti([]);
     if (qIdx + 1 < questions.length && lives > 0) {
       setQIdx(qIdx + 1);
     } else {
-      // Завершение урока: отправляем только что сформированные ответы.
-      // Берём из ref — там уже есть ответ на текущий вопрос.
-      completeMutation.mutate({ answers: answersRef.current });
+      completeMutation.mutate({
+        correct: correctCount,
+        total: questions.length,
+      });
       setPhase('done');
     }
   };
 
-  // ==== Результат ====
+  /* ==== ЭКРАН ЗАВЕРШЕНИЯ ОБУЧЕНИЯ — ПРАЗДНИЧНАЯ ГРАМОТА ХОХЛОМЫ ==== */
   if (effectivePhase === 'done') {
-    const accuracy = questions.length > 0
-      ? Math.round((correctCount / questions.length) * 100)
-      : 0;
+    const accuracy =
+      questions.length > 0
+        ? Math.round((correctCount / questions.length) * 100)
+        : 0;
 
-    // Умная реакция медведя на итог:
-    //   идеально (100% без потерь) → perfect_lesson (звёзды в глазах);
-    //   80%+ → celebrate (correct_big с прыжком);
-    //   60%+ → нейтрально-позитивно (idle + happy);
-    //   ниже → wrong_sad (опускание + слёзы).
     const isPerfect = accuracy === 100 && lives === 3 && questions.length > 0;
     const isGreat = !isPerfect && accuracy >= 80;
     const isPassed = !isPerfect && !isGreat && accuracy >= 60;
     const isFailed = !isPerfect && !isGreat && !isPassed;
 
     const titleText = isPerfect
-      ? 'Идеально! ⭐'
+      ? 'Блестящий результат!'
       : isGreat
       ? 'Отличный урок!'
       : isPassed
-      ? 'Урок пройден!'
+      ? 'Урок освоен!'
       : 'Ещё раз попробуем?';
 
     return (
-      <View style={styles.resultContainer}>
-        <Text style={styles.resultTitle}>{titleText}</Text>
-        <Text style={styles.resultSubtitle}>
-          {isFailed ? 'Не всё получилось — повтори теорию.' : 'Ты становишься сильнее ⚖️'}
-        </Text>
-        <AnimatedMascot
-          size={180}
-          perfect={isPerfect}
-          celebrate={isGreat}
-          emotion={isPassed ? 'happy' : isFailed ? 'sad' : undefined}
-        />
-        <View style={styles.resultStats}>
-          <StatCard label="Точность" value={`${accuracy}%`} color={colors.skyDark} />
-          <StatCard label="Жизни" value={`❤️ ${lives}`} color={colors.error} />
+      <View style={styles.resultScreen}>
+        <PaperGrain />
+        <View style={styles.resultBody}>
+          <View
+            style={[
+              styles.diplomaCard,
+              isFailed && styles.diplomaCardMuted,
+            ]}
+          >
+            {!isFailed ? (
+              <KhokhlomaCorners variant="light" size="md" inset={9} />
+            ) : null}
+
+            <Text style={styles.diplomaKicker}>
+              {isFailed ? '§ ПОВТОРЕНИЕ НОРМЫ' : '§ УРОК ЗАВЕРШЁН · НАГРАДА'}
+            </Text>
+
+            <KhokhlomaMedallion
+              size={182}
+              muted={isFailed}
+              style={styles.diplomaMedallion}
+            >
+              <AnimatedMascot
+                size={156}
+                perfect={isPerfect}
+                celebrate={isGreat}
+                emotion={isPassed ? 'happy' : isFailed ? 'sad' : undefined}
+              />
+            </KhokhlomaMedallion>
+
+            <Text
+              style={[
+                styles.resultTitle,
+                isFailed && styles.resultTitleFailed,
+              ]}
+            >
+              {titleText}
+            </Text>
+            <Text style={styles.resultSubtitle}>
+              {isFailed
+                ? 'Ничего страшного — освежим теорию и закрепим статью.'
+                : 'Знание закона — твоя надёжная опора.'}
+            </Text>
+
+            <KhokhlomaDivider style={styles.resultDivider} />
+
+            {/* Рамки итогов: золотая точность/награда и лаковые жизни */}
+            <View style={styles.resultStats}>
+              <StatCard
+                label="Точность"
+                value={`${accuracy}%`}
+                frameColor={isFailed ? brand.ruleStrong : brand.gold}
+                textColor={isFailed ? colors.subtext : brand.goldInk}
+              />
+              <StatCard
+                label="Жизни"
+                value={`❤️ ${lives}`}
+                frameColor={brand.red}
+                textColor={brand.red}
+              />
+            </View>
+          </View>
         </View>
-        <Pressable
-          style={[styles.btn, { marginTop: 24, alignSelf: 'stretch' }]}
-          onPress={() => navigation.popToTop()}
-        >
-          <Text style={styles.btnText}>На путь</Text>
-        </Pressable>
+
+        <View style={styles.footer}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.btn,
+              styles.btnRed,
+              pressed && styles.btnPressed,
+            ]}
+            onPress={() => navigation.popToTop()}
+          >
+            <Text style={styles.btnText}>На путь</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
-  // ==== Основной рендер ====
-  const progressPct = totalSteps > 0
-    ? Math.min(100, ((effectivePhase === 'theory' ? tIdx : cards.length + qIdx) / totalSteps) * 100)
-    : 0;
+  /* ==== ОСНОВНОЙ ЭКРАН УРОКА ==== */
+  const progressPct =
+    totalSteps > 0
+      ? Math.min(
+          100,
+          ((effectivePhase === 'theory'
+            ? tIdx + 0.5
+            : cards.length + qIdx + (checked ? 1 : 0.4)) /
+            totalSteps) *
+            100
+        )
+      : 0;
+  const canCheck = hasSelection(questions[qIdx], selected, multi);
 
   return (
     <View style={styles.container}>
-      {/* Шапка: назад + прогресс + жизни */}
+      <PaperGrain />
+
+      {/* Чистая шапка урока: закрытие + золотая шкала прогресса + жизни */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.closeBtn}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Закрыть"
+          style={styles.closeBtn}
+        >
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
+
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${Math.max(progressPct, 10)}%` },
+            ]}
+          >
+            <View style={styles.progressShine} />
+          </View>
         </View>
-        <View style={styles.livesChip}>
-          <Text style={styles.livesText}>❤️ {lives}</Text>
+
+        <View style={styles.livesWrap}>
+          <Text style={styles.livesHeart}>❤️</Text>
+          <Text style={styles.livesCount}>{lives}</Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} style={{ flex: 1 }}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          checked && styles.contentWithSheet,
+        ]}
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         {effectivePhase === 'theory' && cards[tIdx] && (
           <TheoryView card={cards[tIdx]} step={tIdx + 1} total={cards.length} />
         )}
+
         {effectivePhase === 'practice' && questions[qIdx] && (
           <QuestionView
             q={questions[qIdx]}
@@ -254,94 +346,166 @@ export default function LessonScreen({ route, navigation }) {
             checked={checked}
             shake={shake}
             onSelectSingle={(i) => !checked && setSelected(i)}
-            onToggleMulti={(i) =>
-              !checked &&
+            onToggleMulti={(i) => {
+              if (checked) return;
               setMulti((prev) =>
                 prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]
-              )
-            }
+              );
+            }}
           />
-        )}
-
-        {effectivePhase === 'practice' && checked && (
-          <View style={[styles.feedback, checked === 'right' ? styles.feedbackOk : styles.feedbackBad]}>
-            {/* При потере последней жизни — сильнее грусть (wrong_sad + слёзы). */}
-            <AnimatedMascot
-              size={60}
-              celebrate={checked === 'right'}
-              error={checked === 'wrong' && lives > 1}
-              emotion={checked === 'wrong' && lives <= 1 ? 'sad' : undefined}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.feedbackTitle}>{checked === 'right' ? 'Верно!' : 'Не то'}</Text>
-              <LegalText style={styles.feedbackText}>{questions[qIdx]?.explanation}</LegalText>
-            </View>
-          </View>
         )}
       </ScrollView>
 
-      {/* Кнопки */}
-      <View style={styles.footer}>
-        {effectivePhase === 'theory' && (
-          <Pressable style={styles.btn} onPress={nextTheory}>
-            <Text style={styles.btnText}>Дальше</Text>
-          </Pressable>
-        )}
-        {effectivePhase === 'practice' && !checked && (
+      {/* Нижняя шторка проверки (хвойный #315B46 для верного, лаковый #C9362B для ошибки) */}
+      {effectivePhase === 'practice' && checked ? (
+        <View
+          style={[
+            styles.feedbackSheet,
+            checked === 'right'
+              ? styles.feedbackSheetRight
+              : styles.feedbackSheetWrong,
+          ]}
+        >
+          <View style={styles.feedbackTopRow}>
+            <WaxSeal
+              label={checked === 'right' ? '✓' : '✕'}
+              size={36}
+              tone={checked === 'right' ? 'pine' : 'red'}
+            />
+            <Text
+              style={[
+                styles.feedbackTitle,
+                {
+                  color: checked === 'right' ? brand.pineDark : brand.redDark,
+                },
+              ]}
+            >
+              {checked === 'right' ? 'Верно!' : 'Разберём ошибку'}
+            </Text>
+            <AnimatedMascot
+              size={60}
+              celebrate={checked === 'right'}
+              error={checked === 'wrong'}
+              emotion={checked === 'right' ? 'happy' : 'sad'}
+            />
+          </View>
+
+          {questions[qIdx]?.explanation ? (
+            <LegalText style={styles.feedbackText}>
+              {questions[qIdx]?.explanation}
+            </LegalText>
+          ) : null}
+
           <Pressable
-            style={[styles.btn, { opacity: hasSelection(questions[qIdx], selected, multi) ? 1 : 0.55 }]}
-            disabled={!hasSelection(questions[qIdx], selected, multi)}
-            onPress={check}
-          >
-            <Text style={styles.btnText}>Проверить</Text>
-          </Pressable>
-        )}
-        {effectivePhase === 'practice' && checked && (
-          <Pressable
-            style={[styles.btn, checked === 'right' ? styles.btnGreen : styles.btnRed]}
+            style={({ pressed }) => [
+              styles.btn,
+              checked === 'right' ? styles.btnPine : styles.btnRed,
+              pressed && styles.btnPressed,
+            ]}
             onPress={nextQuestion}
           >
             <Text style={styles.btnText}>Продолжить</Text>
           </Pressable>
-        )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.footer}>
+          {effectivePhase === 'theory' && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnRed,
+                pressed && styles.btnPressed,
+              ]}
+              onPress={nextTheory}
+            >
+              <Text style={styles.btnText}>Дальше</Text>
+            </Pressable>
+          )}
+
+          {effectivePhase === 'practice' && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.btn,
+                canCheck ? styles.btnRed : styles.btnDisabled,
+                pressed && canCheck && styles.btnPressed,
+              ]}
+              disabled={!canCheck}
+              onPress={check}
+            >
+              <Text
+                style={[styles.btnText, !canCheck && styles.btnTextDisabled]}
+              >
+                Проверить
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
-// Есть ли хотя бы один выбранный ответ (для активации кнопки «Проверить»).
-function hasSelection(q, selected, multi) {
-  if (!q) return false;
-  if (Array.isArray(q.correct)) return multi.length > 0;
-  return selected !== null;
-}
-
 function TheoryView({ card, step, total }) {
+  const chips = Array.isArray(card.chips) ? card.chips : [];
+
   return (
     <View style={styles.theory}>
-      <Text style={styles.theoryMeta}>Теория · {step}/{total}</Text>
+      <View style={styles.newTagRow}>
+        <Text style={styles.paraSign}>§</Text>
+        <Text style={styles.theoryMeta}>
+          ТЕОРИЯ · ЛИСТ {step} ИЗ {total}
+        </Text>
+      </View>
+
       <Text style={styles.theoryTitle}>{card.title}</Text>
-      <View style={styles.card}>
-        <LegalText style={styles.cardText}>{card.definition}</LegalText>
-      </View>
-      <View style={[styles.card, styles.practicalCard]}>
-        <Text style={styles.practicalLabel}>НА ПРАКТИКЕ</Text>
-        <LegalText style={styles.cardText}>{card.practical}</LegalText>
-      </View>
-      <View style={styles.chips}>
-        {(card.chips || []).map((chip) => (
-          <View key={chip} style={styles.chip}>
-            <Text style={styles.chipText}>{chip}</Text>
-          </View>
-        ))}
-      </View>
+
+      {/* Мишка-юрист с репликой */}
       {card.bear_line ? (
         <View style={styles.bearLine}>
-          {/* Медведь говорит реплику — циклический рот (talk_loop). */}
-          <AnimatedMascot size={80} emotion="happy" talking />
-          <View style={styles.bubble}>
-            <LegalText style={styles.bubbleText}>{card.bear_line}</LegalText>
+          <AnimatedMascot
+            size={88}
+            emotion={card.practical || step > 1 ? 'strict' : 'neutral'}
+            wave={!card.practical && step === 1}
+            talking
+          />
+          <View style={styles.bubbleOuter}>
+            <View style={styles.bubbleTail} />
+            <View style={styles.bubble}>
+              <LegalText style={styles.bubbleText}>{card.bear_line}</LegalText>
+            </View>
           </View>
+        </View>
+      ) : null}
+
+      {/* Лист нормы права со шёлковой закладкой кодекса */}
+      <View style={styles.card}>
+        <RibbonBookmark
+          color={brand.red}
+          symbol="§"
+          right={16}
+          height={28}
+          width={20}
+          cutoutColor={colors.card}
+        />
+        <Text style={styles.statuteEyebrow}>НОРМА ПРАВА</Text>
+        <LegalText style={styles.cardText}>{card.definition}</LegalText>
+      </View>
+
+      {/* Информационная памятка «На практике» — приглушённый синий (#7298BC) */}
+      {card.practical ? (
+        <View style={styles.practicalCard}>
+          <Text style={styles.practicalLabel}>ℹ️ НА ПРАКТИКЕ · ПАМЯТКА</Text>
+          <LegalText style={styles.practicalText}>{card.practical}</LegalText>
+        </View>
+      ) : null}
+
+      {chips.length > 0 ? (
+        <View style={styles.chips}>
+          {chips.map((chip) => (
+            <View key={chip} style={styles.chip}>
+              <Text style={styles.chipText}>{chip}</Text>
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -357,43 +521,99 @@ const kindLabels = {
   match: 'Сопоставить',
 };
 
-function QuestionView({ q, selected, multi, checked, shake, onSelectSingle, onToggleMulti }) {
+function QuestionView({
+  q,
+  selected,
+  multi,
+  checked,
+  shake,
+  onSelectSingle,
+  onToggleMulti,
+}) {
   const isMulti = Array.isArray(q.correct);
+  const rightList = normalizeCorrect(q.correct);
 
   return (
     <View style={[styles.question, shake && styles.shake]}>
-      <Text style={styles.questionKind}>{kindLabels[q.kind] || q.kind}</Text>
+      <View style={styles.newTagRow}>
+        <Text style={styles.paraSign}>§</Text>
+        <Text style={styles.questionKind}>
+          {kindLabels[q.kind] || q.kind}
+        </Text>
+      </View>
+
       <Text style={styles.questionPrompt}>{q.prompt}</Text>
+
       {isMulti && (
-        <Text style={styles.multiHint}>Выберите все подходящие варианты</Text>
+        <View style={styles.multiHintBox}>
+          <Text style={styles.multiHint}>
+            Выберите все подходящие варианты
+          </Text>
+        </View>
       )}
+
       {q.case_text ? (
-        <View style={styles.card}>
+        <View style={styles.scenarioCard}>
           <Text style={styles.cardText}>{q.case_text}</Text>
         </View>
       ) : null}
+
       <View style={styles.options}>
         {(q.options || []).map((opt, i) => {
           const isSel = isMulti ? multi.includes(i) : selected === i;
-          const isCorrect = checked && (normalizeCorrect(q.correct)).includes(i);
+          const isCorrect = Boolean(checked) && rightList.includes(i);
           const isWrongPick = checked === 'wrong' && isSel && !isCorrect;
+
           return (
             <Pressable
               key={String(i)}
+              disabled={Boolean(checked)}
               onPress={() => (isMulti ? onToggleMulti(i) : onSelectSingle(i))}
-              style={[
+              style={({ pressed }) => [
                 styles.option,
+                isSel && !checked && styles.optionSelected,
                 isCorrect && styles.optionCorrect,
                 isWrongPick && styles.optionWrong,
-                isSel && !checked && styles.optionSelected,
+                pressed && !checked && styles.optionPressed,
               ]}
             >
-              <View style={[styles.optionLetter, isSel && { backgroundColor: colors.accent }]}>
-                <Text style={[styles.optionLetterText, isSel && styles.optionLetterTextSelected]}>
-                  {isMulti ? (isSel ? '✓' : '') : String.fromCharCode(65 + i)}
+              <View
+                style={[
+                  styles.optionLetter,
+                  isSel && !checked && styles.optionLetterSelected,
+                  isCorrect && styles.optionLetterCorrect,
+                  isWrongPick && styles.optionLetterWrong,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.optionLetterText,
+                    isSel && !checked && styles.optionLetterTextSelected,
+                    (isCorrect || isWrongPick) &&
+                      styles.optionLetterTextWhite,
+                  ]}
+                >
+                  {isCorrect
+                    ? '✓'
+                    : isWrongPick
+                    ? '✕'
+                    : isMulti
+                    ? isSel
+                      ? '✓'
+                      : ''
+                    : String.fromCharCode(65 + i)}
                 </Text>
               </View>
-              <Text style={styles.optionText}>{opt?.text ?? opt}</Text>
+              <Text
+                style={[
+                  styles.optionText,
+                  isSel && !checked && styles.optionTextSelected,
+                  isCorrect && styles.optionTextCorrect,
+                  isWrongPick && styles.optionTextWrong,
+                ]}
+              >
+                {opt?.text ?? opt}
+              </Text>
             </Pressable>
           );
         })}
@@ -402,101 +622,568 @@ function QuestionView({ q, selected, multi, checked, shake, onSelectSingle, onTo
   );
 }
 
-function StatCard({ label, value, color }) {
+function StatCard({ label, value, frameColor, textColor }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.statOuter, { backgroundColor: frameColor }]}>
+      <Text
+        style={[
+          styles.statLabel,
+          frameColor === brand.gold && { color: brand.ink },
+        ]}
+      >
+        {label}
+      </Text>
+      <View style={styles.statInner}>
+        <Text style={[styles.statValue, { color: textColor }]}>{value}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  errorText: { fontSize: 15, fontWeight: '700', color: colors.error },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scroll: {
+    flex: 1,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+    backgroundColor: colors.background,
+  },
+  loadingHint: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+  errorCard: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
+    borderColor: brand.rule,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  errorBackBtn: {
+    marginTop: 6,
+    height: 46,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+    backgroundColor: brand.red,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.redDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorBackText: {
+    color: brand.creamText,
+    fontWeight: '800',
+    fontSize: 13.5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+
+  /* Шапка урока */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
+  },
   closeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.border,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeText: { fontSize: 16, fontWeight: '900', color: colors.text },
-  progressTrack: { flex: 1, height: 16, backgroundColor: colors.track, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: colors.border },
-  progressFill: { height: '100%', backgroundColor: colors.success },
-  livesChip: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: colors.errorTint, borderWidth: 2, borderColor: colors.border },
-  livesText: { fontSize: 13, fontWeight: '800', color: colors.text },
-  content: { padding: 20, paddingBottom: 140 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: colors.background, borderTopWidth: 3, borderTopColor: colors.border },
-  btn: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.success,
-    borderWidth: 3,
-    borderColor: colors.border,
+  closeText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: brand.muted,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: brand.rule,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: brand.gold,
+  },
+  progressShine: {
+    height: 3.5,
+    marginHorizontal: 5,
+    marginTop: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(252, 248, 240, 0.5)',
+  },
+  livesWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
   },
-  btnGreen: { backgroundColor: colors.success },
-  btnRed: { backgroundColor: colors.error },
-  btnText: { color: colors.card, fontWeight: '800', fontSize: 17 },
-  theory: { gap: 16 },
-  theoryMeta: { fontSize: 12, fontWeight: '700', color: colors.subtext },
-  theoryTitle: { fontSize: 26, fontWeight: '900', color: colors.text },
-  card: {
-    backgroundColor: colors.card,
-    borderWidth: 3,
-    borderColor: colors.border,
-    borderRadius: 18,
-    padding: 16,
+  livesHeart: {
+    fontSize: 16,
   },
-  practicalCard: { backgroundColor: colors.goldTint },
-  practicalLabel: { fontSize: 11, fontWeight: '900', color: colors.subtext, marginBottom: 6 },
-  cardText: { fontSize: 15, color: colors.text, lineHeight: 21 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.card },
-  chipText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  bearLine: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  bubble: { flex: 1, backgroundColor: colors.card, borderWidth: 3, borderColor: colors.border, borderRadius: 20, padding: 12 },
-  bubbleText: { fontSize: 14, fontWeight: '600', color: colors.text, lineHeight: 20 },
-  question: { gap: 16 },
-  questionKind: { fontSize: 12, fontWeight: '800', color: colors.subtext, textTransform: 'uppercase' },
-  questionPrompt: { fontSize: 22, fontWeight: '900', color: colors.text },
-  multiHint: { fontSize: 13, color: colors.subtext, fontWeight: '600' },
-  options: { gap: 12 },
-  option: {
+  livesCount: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.red,
+  },
+
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 28,
+  },
+  contentWithSheet: {
+    paddingBottom: 210,
+  },
+
+  /* Теория */
+  theory: {
+    gap: 14,
+  },
+  newTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  paraSign: {
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: serifFamily,
+    color: brand.red,
+  },
+  theoryMeta: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    color: brand.goldInk,
+  },
+  theoryTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+  },
+
+  bearLine: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  bubbleOuter: {
+    flex: 1,
+    position: 'relative',
+  },
+  bubbleTail: {
+    position: 'absolute',
+    left: -6,
+    top: 18,
+    width: 12,
+    height: 12,
     backgroundColor: colors.card,
-    borderWidth: 3,
-    borderColor: colors.border,
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: brand.rule,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 2,
+  },
+  bubble: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  bubbleText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.text,
+    lineHeight: 19.5,
+  },
+
+  card: {
+    position: 'relative',
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    padding: 16,
+    gap: 7,
+  },
+  statuteEyebrow: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    color: brand.muted,
+    paddingRight: 26,
+  },
+  cardText: {
+    fontSize: 14.5,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 21.5,
+  },
+
+  /* Памятка в приглушённом синем (#7298BC — только информация) */
+  practicalCard: {
+    backgroundColor: brand.infoSoft,
     borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: brand.infoBorder,
+    borderLeftWidth: 4,
+    borderLeftColor: brand.info,
+    padding: 14,
+    gap: 6,
+  },
+  practicalLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: brand.infoInk,
+  },
+  practicalText: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 19.5,
+  },
+
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: brand.rule,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.subtext,
+  },
+
+  /* Практика */
+  question: {
+    gap: 14,
+  },
+  shake: {
+    transform: [{ translateX: -5 }],
+  },
+  questionKind: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    color: brand.red,
+  },
+  questionPrompt: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+  },
+  multiHintBox: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: brand.infoSoft,
+  },
+  multiHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: brand.infoInk,
+  },
+  scenarioCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
     padding: 14,
   },
-  optionLetter: { width: 24, height: 24, borderRadius: 6, backgroundColor: colors.paper, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  optionLetterText: { fontSize: 13, fontWeight: '700', color: colors.text },
-  optionLetterTextSelected: { color: colors.card },
-  optionCorrect: { backgroundColor: colors.successTint, borderColor: colors.success },
-  optionWrong: { backgroundColor: colors.errorTint, borderColor: colors.error },
-  optionSelected: { backgroundColor: colors.goldTint, borderColor: colors.accent },
-  optionText: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1 },
-  feedback: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderRadius: 16, padding: 16, borderWidth: 3, borderColor: colors.border },
-  feedbackOk: { backgroundColor: colors.successTint },
-  feedbackBad: { backgroundColor: colors.errorTint },
-  feedbackTitle: { fontSize: 18, fontWeight: '900', color: colors.text },
-  feedbackText: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
-  shake: { transform: [{ translateX: -6 }] },
-  resultContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24 },
-  resultTitle: { fontSize: 28, fontWeight: '900', color: colors.accent },
-  resultSubtitle: { fontSize: 15, color: colors.subtext, marginTop: 8 },
-  resultStats: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  statCard: { backgroundColor: colors.card, borderRadius: 16, borderWidth: 3, borderColor: colors.border, paddingVertical: 12, paddingHorizontal: 20, alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '900' },
-  statLabel: { fontSize: 12, color: colors.subtext, marginTop: 4 },
+  options: {
+    gap: 10,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  optionSelected: {
+    backgroundColor: brand.goldSoft,
+    borderColor: brand.gold,
+  },
+  optionCorrect: {
+    backgroundColor: brand.pineSoft,
+    borderColor: brand.pine,
+  },
+  optionWrong: {
+    backgroundColor: brand.redSoft,
+    borderColor: brand.red,
+  },
+  optionPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 1.5,
+  },
+  optionLetter: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: colors.background,
+    borderWidth: 1.2,
+    borderColor: brand.rule,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionLetterSelected: {
+    backgroundColor: brand.gold,
+    borderColor: brand.goldDark,
+  },
+  optionLetterCorrect: {
+    backgroundColor: brand.pine,
+    borderColor: brand.pineDark,
+  },
+  optionLetterWrong: {
+    backgroundColor: brand.red,
+    borderColor: brand.redDark,
+  },
+  optionLetterText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.subtext,
+  },
+  optionLetterTextSelected: {
+    color: brand.ink,
+  },
+  optionLetterTextWhite: {
+    color: brand.creamText,
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    lineHeight: 19.5,
+  },
+  optionTextSelected: {
+    fontWeight: '700',
+    color: brand.ink,
+  },
+  optionTextCorrect: {
+    fontWeight: '700',
+    color: brand.pineDark,
+  },
+  optionTextWrong: {
+    fontWeight: '700',
+    color: brand.redDark,
+  },
+
+  /* Шторка ответа и нижняя кнопка */
+  footer: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: brand.rule,
+  },
+  feedbackSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 2,
+    gap: 10,
+  },
+  feedbackSheetRight: {
+    backgroundColor: brand.pineSoft,
+    borderTopColor: brand.pine,
+  },
+  feedbackSheetWrong: {
+    backgroundColor: brand.redSoft,
+    borderTopColor: brand.red,
+  },
+  feedbackTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  feedbackTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  feedbackText: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 19.5,
+  },
+
+  btn: {
+    height: 52,
+    borderRadius: 16,
+    borderBottomWidth: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnRed: {
+    backgroundColor: brand.red,
+    borderBottomColor: brand.redDark,
+  },
+  btnPine: {
+    backgroundColor: brand.pine,
+    borderBottomColor: brand.pineDark,
+  },
+  btnDisabled: {
+    backgroundColor: brand.rule,
+    borderBottomWidth: 0,
+  },
+  btnPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
+  },
+  btnText: {
+    color: brand.creamText,
+    fontSize: 14.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  btnTextDisabled: {
+    color: colors.locked,
+  },
+
+  /* Финал обучения — грамота с рамкой хохломы */
+  resultScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  resultBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  diplomaCard: {
+    position: 'relative',
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderBottomWidth: 5,
+    borderColor: brand.gold,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  diplomaCardMuted: {
+    borderColor: brand.rule,
+  },
+  diplomaKicker: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: brand.goldInk,
+    marginBottom: 14,
+  },
+  diplomaMedallion: {
+    marginBottom: 16,
+  },
+  resultTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: brand.ink,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  resultTitleFailed: {
+    color: brand.subtext,
+  },
+  resultSubtitle: {
+    marginTop: 5,
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: colors.subtext,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  resultDivider: {
+    marginVertical: 16,
+  },
+  resultStats: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  statOuter: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 3,
+    paddingTop: 6,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: brand.creamText,
+    marginBottom: 5,
+  },
+  statInner: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderRadius: 13,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
 });

@@ -1,182 +1,400 @@
 import React from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
   View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
-import { colors, radius, sizes, spacing, typography } from '../theme/tokens';
+import { AnimatedMascot } from '../components/AnimatedMascot';
+import {
+  brand,
+  serifFamily,
+  KhokhlomaGarland,
+  WaxSeal,
+  RibbonBookmark,
+  PaperGrain,
+} from '../components/KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 
+/**
+ * Экран «Мои статьи» (ArticlesScreen):
+ * свод изученных норм в духе старинного кодекса — лаково-красный заголовок главы
+ * с золотым фризом хохломы, круглые сургучные печати «ст. N», шёлковые закладки-ляссе,
+ * хвойный статус «✓ открыто» (#315B46) и приглушённо-синие ссылки на кодексы (#7298BC).
+ */
 export default function ArticlesScreen({ navigation }) {
-  // Раньше ветки `error` не было: при падении запроса экран оставался пустым.
-  const { data: articles, isLoading, error, refetch } = useQuery({
+  const { data: articles, isLoading } = useQuery({
     queryKey: ['lexbear-articles'],
     queryFn: lexbearApi.articles,
   });
 
-  const all = articles ?? [];
-  const learned = all.filter((a) => a.learned);
-
-  const header = (
-    <View style={styles.header}>
-      <Pressable
-        onPress={() => navigation.goBack()}
-        style={styles.backBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Назад"
-        hitSlop={8}
-      >
-        <Text style={styles.backText}>←</Text>
-      </Pressable>
-      <View style={styles.headerText}>
-        <Text style={styles.title}>Мои статьи</Text>
-        <Text style={styles.subtitle}>
-          Выучено: {learned.length} / {all.length}
-        </Text>
-      </View>
-    </View>
-  );
-
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        {header}
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={brand.red} />
       </View>
     );
   }
 
-  if (error) {
-    return (
-      <View style={styles.container}>
-        {header}
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Не удалось загрузить статьи</Text>
-          <Pressable style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Повторить</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
+  const all = articles ?? [];
+  const learned = all.filter((a) => a.learned);
+  const pct =
+    all.length > 0 ? Math.round((learned.length / all.length) * 100) : 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {header}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <PaperGrain />
 
-      {all.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>
-            Статьи появятся, когда откроете первую главу кодекса.
-          </Text>
+      {/* Шапка */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.backBtn,
+            pressed && styles.backPressed,
+          ]}
+        >
+          <Text style={styles.backText}>←</Text>
+        </Pressable>
+        <View>
+          <Text style={styles.kicker}>§ КОДЕКСЫ И УЛОЖЕНИЯ</Text>
+          <Text style={styles.title}>Мои статьи</Text>
         </View>
-      ) : (
-        <View style={styles.list}>
-          {all.map((a) => (
-            <View key={a.id} style={[styles.card, !a.learned && styles.cardLocked]}>
-              <View style={styles.row}>
-                <View
-                  style={[styles.number, a.learned && styles.numberLearned]}
-                >
-                  <Text style={styles.numberText}>{a.number}</Text>
-                </View>
-                <View style={styles.articleText}>
-                  <Text style={styles.articleTitle}>{a.title}</Text>
-                  <Text style={styles.articleMeta}>
-                    {a.codex} · {a.learned ? 'открыто' : '🔒 закрыто'}
-                  </Text>
+      </View>
+
+      {/* Лаково-красный заголовок свода с золотым бордюром хохломы */}
+      <View style={styles.heroBanner}>
+        <KhokhlomaGarland variant="onRed" count={6} />
+
+        <View style={styles.heroTopRow}>
+          <AnimatedMascot size={74} emotion="strict" />
+          <View style={styles.heroCenter}>
+            <Text style={styles.heroEyebrow}>СВОД СТАТЕЙ ЮРИСТА</Text>
+            <Text style={styles.subtitle}>
+              Изучено: {learned.length} из {all.length}
+            </Text>
+          </View>
+          <View style={styles.pctBadge}>
+            <Text style={styles.pctText}>{pct}%</Text>
+          </View>
+        </View>
+
+        <View style={styles.heroTrack}>
+          <View
+            style={[
+              styles.heroFill,
+              { width: `${Math.max(pct, pct > 0 ? 8 : 0)}%` },
+            ]}
+          >
+            <View style={styles.heroShine} />
+          </View>
+        </View>
+      </View>
+
+      {/* Листы статей с сургучными печатями и закладками */}
+      <View style={styles.list}>
+        {all.map((a) => (
+          <View
+            key={a.id}
+            style={[styles.card, !a.learned && styles.cardLocked]}
+          >
+            {a.learned ? (
+              <RibbonBookmark
+                color={brand.gold}
+                symbol="§"
+                right={16}
+                height={27}
+                width={20}
+                cutoutColor={colors.card}
+              />
+            ) : null}
+
+            <View style={styles.row}>
+              <WaxSeal
+                sub="ст."
+                label={String(a.number)}
+                size={52}
+                tone={a.learned ? 'red' : 'locked'}
+              />
+
+              <View style={styles.titleBody}>
+                <Text style={styles.articleTitle}>{a.title}</Text>
+                <View style={styles.metaRow}>
+                  <View style={styles.codexPill}>
+                    <Text style={styles.codexText}>{a.codex}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      a.learned
+                        ? styles.statusPillOpen
+                        : styles.statusPillClosed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        a.learned
+                          ? styles.statusTextOpen
+                          : styles.statusTextClosed,
+                      ]}
+                    >
+                      {a.learned ? '✓ изучено' : '🔒 закрыто'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              {a.learned ? (
-                <View style={styles.articleBody}>
-                  <Text style={styles.plain}>«{a.plain}»</Text>
-                  <Text style={styles.full}>{a.full}</Text>
-                </View>
-              ) : null}
             </View>
-          ))}
-        </View>
-      )}
+
+            {a.learned && (
+              <View style={styles.articleBody}>
+                <View style={styles.plainBox}>
+                  <Text style={styles.plainLabel}>ПРОСТЫМИ СЛОВАМИ</Text>
+                  <Text style={styles.plain}>«{a.plain}»</Text>
+                </View>
+                <Text style={styles.full}>{a.full}</Text>
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.base, paddingBottom: spacing.xxl },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 48,
+    gap: 15,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerText: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   backBtn: {
-    width: sizes.minTouchTarget,
-    height: sizes.minTouchTarget,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderColor: brand.rule,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: { ...typography.heading, color: colors.text },
-  title: { ...typography.title, color: colors.text },
-  subtitle: { ...typography.caption, color: colors.subtext, marginTop: 2 },
+  backPressed: {
+    transform: [{ translateY: 1.5 }],
+  },
+  backText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  kicker: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+    color: brand.muted,
+  },
+  title: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
 
-  list: { marginTop: spacing.base, gap: spacing.sm + 2 },
+  /* Заголовок главы/свода — лаковый красный + золото хохломы */
+  heroBanner: {
+    backgroundColor: brand.red,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 168, 73, 0.5)',
+    borderBottomWidth: 5,
+    borderBottomColor: brand.redDark,
+    paddingHorizontal: 16,
+    paddingTop: 11,
+    paddingBottom: 15,
+    gap: 11,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  heroCenter: {
+    flex: 1,
+    gap: 3,
+  },
+  heroEyebrow: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    color: brand.goldLight,
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: brand.creamText,
+  },
+  pctBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 13,
+    backgroundColor: 'rgba(48, 40, 32, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(241, 217, 153, 0.4)',
+  },
+  pctText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: brand.goldLight,
+  },
+  heroTrack: {
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(48, 40, 32, 0.26)',
+    overflow: 'hidden',
+  },
+  heroFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: brand.gold,
+  },
+  heroShine: {
+    height: 3,
+    marginHorizontal: 4,
+    marginTop: 1.5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(252, 248, 240, 0.45)',
+  },
+
+  list: {
+    gap: 12,
+  },
   card: {
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+    position: 'relative',
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderBottomWidth: 3.5,
+    borderColor: brand.rule,
+    padding: 16,
+    gap: 12,
   },
-  cardLocked: { opacity: 0.55 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  number: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.locked,
+  cardLocked: {
+    opacity: 0.72,
+    backgroundColor: brand.paperSoft,
+  },
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 12,
+    paddingRight: 22,
   },
-  numberLearned: { backgroundColor: colors.accent },
-  numberText: { ...typography.bodyStrong, color: colors.card },
-  articleText: { flex: 1 },
-  articleTitle: { ...typography.bodyStrong, color: colors.text },
-  articleMeta: { ...typography.micro, color: colors.subtext, marginTop: 2 },
-  articleBody: { marginTop: spacing.sm + 2, gap: spacing.xs + 2 },
-  plain: { ...typography.caption, fontStyle: 'italic', color: colors.subtext },
-  full: { ...typography.caption, color: colors.text },
-
-  emptyCard: {
-    marginTop: spacing.base,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 2,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.md,
-    padding: spacing.base,
+  titleBody: {
+    flex: 1,
+    gap: 6,
+  },
+  articleTitle: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 20.5,
+  },
+  metaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
-  emptyText: { ...typography.caption, color: colors.subtext, textAlign: 'center' },
+  codexPill: {
+    paddingHorizontal: 8.5,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: brand.infoSoft,
+    borderWidth: 1,
+    borderColor: brand.infoBorder,
+  },
+  codexText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: brand.infoInk,
+  },
+  statusPill: {
+    paddingHorizontal: 8.5,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  statusPillOpen: {
+    backgroundColor: brand.pineSoft,
+  },
+  statusPillClosed: {
+    backgroundColor: colors.paper,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusTextOpen: {
+    color: brand.pine,
+  },
+  statusTextClosed: {
+    color: brand.muted,
+  },
 
-  errorText: { ...typography.bodyStrong, color: colors.error, textAlign: 'center' },
-  retryBtn: {
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.base,
+  articleBody: {
+    gap: 10,
   },
-  retryText: { ...typography.bodyStrong, color: colors.text },
+  plainBox: {
+    backgroundColor: brand.goldSoft,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: brand.goldBorder,
+    borderLeftWidth: 3.5,
+    borderLeftColor: brand.gold,
+    padding: 12,
+    gap: 4,
+  },
+  plainLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: brand.goldInk,
+  },
+  plain: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontFamily: serifFamily,
+    color: colors.text,
+    lineHeight: 19.5,
+  },
+  full: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.subtext,
+    lineHeight: 19,
+  },
 });
-
