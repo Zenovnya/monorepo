@@ -111,3 +111,46 @@ def test_missing_pack_is_treated_as_empty(tmp_path: Path) -> None:
 
 
 pack = json.loads(json.dumps(PACK))
+
+
+class TestCaseInValidation:
+    """Валидация ``codex``/``case_text`` в схеме кейса.
+
+    Пустой ``codex`` проходил схему, кейс сохранялся в админке, но
+    ``GET /lexbear/cases`` такие кейсы молча отфильтровывал: контент
+    «терялся» без единой ошибки.
+    """
+
+    BASE = {
+        "slug": "case-1",
+        "title": "Кейс",
+        "difficulty": "easy",
+        "options": [{"text": "Да", "is_correct": True}, {"text": "Нет"}],
+    }
+
+    def test_valid_codex_normalized(self) -> None:
+        from app.modules.content.content_schemas import CaseIn
+
+        case = CaseIn(**self.BASE, codex="  ГК РФ  ", case_text="  Текст  ")
+        assert case.codex == "ГК РФ"
+        assert case.case_text == "Текст"
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("codex", ""),
+            ("codex", "   "),
+            ("case_text", ""),
+            ("case_text", "   "),
+            ("title", "  "),
+        ],
+    )
+    def test_blank_required_fields_rejected(self, field: str, value: str) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import CaseIn
+
+        payload = {**self.BASE, "codex": "ГК РФ", "case_text": "Текст"}
+        payload[field] = value
+        with pytest.raises(ValidationError):
+            CaseIn(**payload)

@@ -20,6 +20,27 @@ class OnboardOut(BaseModel):
     daily_goal: int
 
 
+class ProfileIn(BaseModel):
+    """Смена отображаемого имени профиля."""
+
+    name: str = Field(min_length=1, max_length=40)
+
+
+class ProfileOut(BaseModel):
+    """Текущий профиль пользователя."""
+
+    name: str
+    email: str
+    username: str | None = None
+    gems: int = 0
+    xp: int = 0
+    level: int = 1
+    streak: int = 0
+    lives: int = 5
+    league: str = "Бронза"
+    daily_goal: int = 10
+
+
 class PetBearOut(BaseModel):
     """Результат поглаживания мишки."""
 

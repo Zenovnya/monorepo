@@ -109,3 +109,79 @@ def test_award_achievement_idempotent() -> None:
     import asyncio
 
     asyncio.run(run())
+
+class TestLessonGems:
+    """Гемы за урок.
+
+    До этого гемы начислялись только после оплаты через платёжный шлюз,
+    которого в MVP нет (ManualProvider → checkout.invalid). Новый игрок
+    навсегда оставался с нулём гемов и не мог ничего купить в магазине.
+    """
+
+    def test_first_completion_gives_full_reward(self) -> None:
+        from app.modules.content.lexbear_service import _gems_for_lesson
+
+        assert _gems_for_lesson(0.5, is_new=True) == 10
+        assert _gems_for_lesson(1.0, is_new=True) == 15
+
+    def test_repeat_completion_gives_reduced_reward(self) -> None:
+        """Повторное прохождение нельзя «фармить» на полную награду."""
+        from app.modules.content.lexbear_service import _gems_for_lesson
+
+        assert _gems_for_lesson(0.5, is_new=False) == 2
+        assert _gems_for_lesson(1.0, is_new=False) == 4
+        assert _gems_for_lesson(0.0, is_new=False) >= 1
+
+    def test_shop_items_affordable_with_lesson_gems(self) -> None:
+        """Дешёвый товар достижим за разумное число уроков."""
+        from app.modules.gamification.service import SHOP_ITEMS
+
+        cheapest = min(SHOP_ITEMS.values())
+        lessons_needed = -(-cheapest // 10)  # ceil
+        assert lessons_needed <= 10
+
+
+class TestRepeatCosmeticPurchase:
+    """Повторная покупка костюма не должна списывать гемы.
+
+    Раньше ``purchase_shop_item`` списывал цену и просто заново выставлял
+    флаг в ``bear_outfit``: за 300 гемов можно было «купить» уже надетый
+    цилиндр и не получить ничего.
+    """
+
+    def test_owned_item_raises_before_charging(self) -> None:
+        from app.modules.gamification.service import ItemAlreadyOwnedError
+
+        assert issubclass(ItemAlreadyOwnedError, Exception)
+
+    @pytest.mark.asyncio
+    async def test_repeat_purchase_keeps_gems(self, monkeypatch) -> None:
+        import uuid
+
+        from app.modules.gamification import service as gam
+        from app.modules.auth.models import User
+
+        user = User(
+            id=uuid.uuid4(),
+            email="fit@example.com",
+            hashed_password="x",
+            gems=1000,
+            bear_outfit={"top_hat": True},
+        )
+
+        class _Session:
+            async def get(self, _model, _pk):
+                return user
+
+            async def flush(self):
+                return None
+
+        async def _noop(_key):
+            return None
+
+        monkeypatch.setattr(gam, "cache_delete", _noop)
+
+        with pytest.raises(gam.ItemAlreadyOwnedError):
+            await gam.purchase_shop_item(_Session(), user.id, "outfit_top_hat")
+
+        assert user.gems == 1000

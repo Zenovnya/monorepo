@@ -8,6 +8,13 @@ export const userApi = {
   onboard: (payload) =>
     apiClient.post('/user/onboard', payload).then((r) => r.data),
 
+  // Профиль текущего пользователя
+  getMe: () => apiClient.get('/user/me').then((r) => r.data),
+
+  // Сменить отображаемое имя
+  updateMe: (name) =>
+    apiClient.patch('/user/me', { name }).then((r) => r.data),
+
   // Погладить мишку (повышает настроение)
   petBear: () => apiClient.post('/user/bear/pet').then((r) => r.data),
 };

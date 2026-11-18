@@ -23,6 +23,7 @@ import PremiumScreen from '../screens/PremiumScreen';
 import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
 import AssessmentScreen from '../screens/AssessmentScreen';
 import LearningProgressScreen from '../screens/LearningProgressScreen';
+import ReviewsScreen from '../screens/ReviewsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -100,6 +101,7 @@ function MainStack() {
       <Stack.Screen name="AdaptiveLearning" component={AdaptiveLearningScreen} />
       <Stack.Screen name="Assessment" component={AssessmentScreen} />
       <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
+      <Stack.Screen name="Reviews" component={ReviewsScreen} />
     </Stack.Navigator>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -55,6 +55,9 @@ export default function LessonScreen({ route, navigation }) {
   const [multi, setMulti] = useState([]);
   const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
   const [shake, setShake] = useState(false);
+  // Ответы по id вопроса. Сервер сам считает результат (доверять клиентскому
+  // correct/total нельзя), поэтому шлём именно их, а не счёт.
+  const answersRef = useRef({});
 
   const { data: lesson, isLoading, error } = useQuery({
     queryKey: ['lexbear-lesson', lessonId],
@@ -64,8 +67,7 @@ export default function LessonScreen({ route, navigation }) {
   const toast = useMascotToast();
 
   const completeMutation = useMutation({
-    mutationFn: ({ correct, total }) =>
-      lexbearApi.completeLesson(lessonId, { correct, total }),
+    mutationFn: ({ answers }) => lexbearApi.completeLesson(lessonId, { answers }),
     onSuccess: (data) => {
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
@@ -154,6 +156,11 @@ export default function LessonScreen({ route, navigation }) {
       isRight = selected === rightAnswers[0];
     }
 
+    // Запоминаем ответ для отправки на сервер: id вопроса -> выбранные индексы.
+    if (q?.id !== undefined && q?.id !== null) {
+      answersRef.current[q.id] = isMulti ? [...multi].sort() : selected;
+    }
+
     setChecked(isRight ? 'right' : 'wrong');
     if (isRight) setCorrectCount((c) => c + 1);
     else {
@@ -170,20 +177,21 @@ export default function LessonScreen({ route, navigation }) {
     if (qIdx + 1 < questions.length && lives > 0) {
       setQIdx(qIdx + 1);
     } else {
-      completeMutation.mutate({
-        correct: correctCount,
-        total: questions.length,
-      });
+      completeMutation.mutate({ answers: answersRef.current });
       setPhase('done');
     }
   };
 
   /* ==== ЭКРАН ЗАВЕРШЕНИЯ ОБУЧЕНИЯ — ПРАЗДНИЧНАЯ ГРАМОТА ХОХЛОМЫ ==== */
   if (effectivePhase === 'done') {
-    const accuracy =
-      questions.length > 0
-        ? Math.round((correctCount / questions.length) * 100)
-        : 0;
+    // Сервер — источник истины: он посчитал правильные по присланным answers.
+    const serverResult = completeMutation.data;
+    const accuracy = serverResult?.total
+      ? Math.round((serverResult.correct / serverResult.total) * 100)
+      : questions.length > 0
+      ? Math.round((correctCount / questions.length) * 100)
+      : 0;
+    const gemsGain = serverResult?.gems_gain ?? 0;
 
     const isPerfect = accuracy === 100 && lives === 3 && questions.length > 0;
     const isGreat = !isPerfect && accuracy >= 80;
@@ -259,7 +267,21 @@ export default function LessonScreen({ route, navigation }) {
                 frameColor={brand.red}
                 textColor={brand.red}
               />
+              {gemsGain > 0 ? (
+                <StatCard
+                  label="Гемы"
+                  value={`💎 +${gemsGain}`}
+                  frameColor={brand.pine ?? brand.gold}
+                  textColor={brand.pineDark ?? brand.goldInk}
+                />
+              ) : null}
             </View>
+
+            {completeMutation.isError ? (
+              <Text style={styles.serverError}>
+                Результат не сохранён: проверьте соединение и откройте урок снова.
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -641,6 +663,13 @@ function StatCard({ label, value, frameColor, textColor }) {
 }
 
 const styles = StyleSheet.create({
+  serverError: {
+    marginTop: 12,
+    color: brand.red,
+    fontSize: 12.5,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

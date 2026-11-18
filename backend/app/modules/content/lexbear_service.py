@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.cache import cache_get, cache_set, content_version
+from app.cache import cache_delete, cache_get, cache_set, content_version
 from app.modules.content import lexbear_scoring
 from app.modules.content.lexbear_models import (
     Article,
@@ -460,6 +460,13 @@ async def complete_lesson(
                 except gamification_service.AchievementAlreadyAwardedError:
                     pass
 
+    # Гемы за урок: начисляем после XP, чтобы они попали в тот же коммит.
+    gems_gain = 0
+    if user is not None:
+        gems_gain = _gems_for_lesson(accuracy, is_new)
+        user.gems = (user.gems or 0) + gems_gain
+        await cache_delete(f"gamification:{user.id}")
+
     await session.commit()
 
     return {
@@ -480,7 +487,28 @@ async def complete_lesson(
         "level_up": bool(user and user.level > prev_level),
         "streak_incremented": bool(user and user.streak > prev_streak),
         "achievements_unlocked": achievements_unlocked,
+        # Гемы за урок и новый баланс — клиент обновляет чип «💎» по этому полю.
+        "gems_gain": gems_gain,
+        "gems": user.gems if user else 0,
     }
+
+
+# Сколько гемов даёт урок. Гемы иначе было не получить вообще: они начислялись
+# только после оплаты через платёжный шлюз, которого в MVP нет (заглушка
+# checkout.invalid). Из-за этого весь магазин был недоступен новому игроку.
+GEMS_PER_LESSON = 10
+GEMS_PERFECT_BONUS = 5
+# Первое прохождение урока даёт полную награду, повторное — четверть: иначе
+# один урок можно было бы «фармить» бесконечно.
+GEMS_REPEAT_RATIO = 0.25
+
+
+def _gems_for_lesson(accuracy: float, is_new: bool) -> int:
+    """Считает награду в гемах за пройденный урок."""
+    base = GEMS_PER_LESSON + (GEMS_PERFECT_BONUS if accuracy >= 0.999 else 0)
+    if not is_new:
+        return max(1, round(base * GEMS_REPEAT_RATIO))
+    return base
 
 
 def _achievement_to_dict(a) -> dict:

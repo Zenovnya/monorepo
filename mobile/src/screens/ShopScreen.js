@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,11 @@ import {
   Pressable,
   Linking,
 } from 'react-native';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
 import { paymentsApi } from '../api/payments';
+import { gamificationApi } from '../api/gamification';
 import { analyticsApi } from '../api/analytics';
 import {
   brand,
@@ -20,12 +21,18 @@ import {
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 
+/**
+ * Каталог наград. Ключ `item` совпадает с `SHOP_ITEMS` на бэкенде
+ * (app/modules/gamification/service.py) — по нему списываются гемы и выдаётся
+ * эффект. Цены здесь только для показа; списание считает сервер, поэтому
+ * расхождение в цене не даст купить дешевле.
+ */
 const items = [
-  { icon: '❤️', title: 'Пополнить жизни', price: '50 ✦', tint: brand.redSoft, border: brand.redBorder },
-  { icon: '🧣', title: 'Заморозка стрика', price: '200 ✦', tint: brand.infoSoft, border: brand.infoBorder },
-  { icon: '🎩', title: 'Костюм: цилиндр', price: '300 ✦', tint: brand.paperSoft, border: brand.rule },
-  { icon: '⚖️', title: 'Мантия судьи', price: '800 ✦', tint: brand.goldSoft, border: brand.goldBorder },
-  { icon: '🎁', title: 'Сундук XP', price: '150 ✦', tint: brand.goldSoft, border: brand.goldBorder },
+  { item: 'life_refill', icon: '❤️', title: 'Пополнить жизни', price: 50, tint: brand.redSoft, border: brand.redBorder },
+  { item: 'streak_freeze', icon: '🧣', title: 'Заморозка стрика', price: 200, tint: brand.infoSoft, border: brand.infoBorder },
+  { item: 'outfit_top_hat', icon: '🎩', title: 'Костюм: цилиндр', price: 300, tint: brand.paperSoft, border: brand.rule },
+  { item: 'outfit_judge_robe', icon: '⚖️', title: 'Мантия судьи', price: 800, tint: brand.goldSoft, border: brand.goldBorder },
+  { item: 'chest_xp', icon: '🎁', title: 'Сундук XP', price: 150, tint: brand.goldSoft, border: brand.goldBorder },
 ];
 
 const bundles = [
@@ -42,6 +49,50 @@ const bundles = [
  */
 export default function ShopScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState(null);
+
+  // Купленная косметика: сервер отклонит повторную покупку (409), поэтому
+  // кнопку показываем сразу неактивной. Ключи — те же, что в SHOP_ITEMS.
+  const outfit = user?.bear_outfit || {};
+  const ownedOutfits = [
+    outfit.top_hat ? 'outfit_top_hat' : null,
+    outfit.judge_robe ? 'outfit_judge_robe' : null,
+  ].filter(Boolean);
+
+  /**
+   * Покупка награды за гемы. Раньше кнопка только вибрировала и отправляла
+   * аналитику — запрос к API не делался никогда, хотя эндпоинт и клиентский
+   * метод существовали. Пользователь платил гемы «в пустоту».
+   */
+  const buyItem = useMutation({
+    mutationFn: (it) => gamificationApi.purchaseShopItem(it.item),
+    onSuccess: (data, it) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      analyticsApi.track('shop_item_purchased', { item: it.item }).catch(() => {});
+      setUser({ gems: data.gems });
+      const effect = data.effect || {};
+      const messages = {
+        lives: `Жизни восстановлены: ${effect.lives ?? ''}`.trim(),
+        xp: `Сундук открыт: +${effect.gained ?? 0} XP`,
+        outfit: effect.already_owned
+          ? 'Этот предмет уже был в гардеробе — гемы списаны'
+          : 'Предмет добавлен в гардероб',
+        streak_freeze: `Заморозок стрика: ${effect.count ?? 1}`,
+      };
+      setNotice(messages[effect.kind] || 'Покупка совершена');
+      // Обновляем состояние геймификации и профиль, чтобы чипы сверху и
+      // экран профиля показали новые XP/гемы, а не данные из кэша.
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+      queryClient.invalidateQueries({ queryKey: ['premium-status'] });
+    },
+    onError: (error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const detail = error?.response?.data?.detail;
+      setNotice(detail || 'Не удалось купить — проверьте соединение');
+    },
+  });
 
   const buyGems = useMutation({
     mutationFn: (plan) => paymentsApi.createPayment(plan),
@@ -82,6 +133,15 @@ export default function ShopScreen({ navigation }) {
       </View>
 
       {/* Награды и усиления */}
+      {notice ? (
+        <Pressable
+          onPress={() => setNotice(null)}
+          style={({ pressed }) => [styles.notice, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.noticeText}>{notice}</Text>
+        </Pressable>
+      ) : null}
+
       <DocumentSectionHeader
         title="Награды и предметы"
         style={styles.sectionHeader}
@@ -109,16 +169,20 @@ export default function ShopScreen({ navigation }) {
                 styles.buyBtn,
                 pressed && styles.smallPressed,
               ]}
-              onPress={() => {
-                Haptics.notificationAsync(
-                  Haptics.NotificationFeedbackType.Warning
-                );
-                analyticsApi
-                  .track('shop_item_tapped', { item: it.title })
-                  .catch(() => {});
-              }}
+              disabled={
+                buyItem.isPending ||
+                (user?.gems ?? 0) < it.price ||
+                ownedOutfits.includes(it.item)
+              }
+              onPress={() => buyItem.mutate(it)}
             >
-              <Text style={styles.buyBtnText}>{it.price}</Text>
+              <Text style={styles.buyBtnText}>
+                {buyItem.isPending && buyItem.variables?.item === it.item
+                  ? '…'
+                  : ownedOutfits.includes(it.item)
+                  ? 'В гардеробе'
+                  : `${it.price} ✦`}
+              </Text>
             </Pressable>
           </View>
         ))}
@@ -174,6 +238,21 @@ export default function ShopScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  notice: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: brand.pineSoft,
+    borderWidth: 1,
+    borderColor: brand.pineBorder,
+  },
+  noticeText: {
+    color: brand.pineDark,
+    fontWeight: '700',
+    fontSize: 13.5,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

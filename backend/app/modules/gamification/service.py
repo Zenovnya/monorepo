@@ -29,6 +29,10 @@ class InsufficientGemsError(GamificationError):
     """У пользователя недостаточно гемов для покупки."""
 
 
+class ItemAlreadyOwnedError(GamificationError):
+    """Предмет гардероба уже куплен — повторная покупка не нужна."""
+
+
 class UnknownShopItemError(GamificationError):
     """Товар отсутствует в каталоге магазина."""
 
@@ -276,6 +280,11 @@ async def purchase_shop_item(
     if user.gems < price:
         raise InsufficientGemsError("Недостаточно гемов")
 
+    # Косметику нельзя купить дважды: раньше повторная покупка списывала
+    # гемы и просто выставляла тот же флаг, то есть забирала валюту впустую.
+    if item in _OUTFITS and (user.bear_outfit or {}).get(_OUTFITS[item]):
+        raise ItemAlreadyOwnedError("Этот предмет уже есть в гардеробе")
+
     user.gems -= price
     effect = _apply_shop_effect(session, user, item)
     await session.flush()
@@ -319,10 +328,11 @@ def _apply_shop_effect(session, user: User, item: str) -> dict:
     if item in _OUTFITS:
         key = _OUTFITS[item]
         outfit = dict(user.bear_outfit or {})
-        already = bool(outfit.get(key))
         outfit[key] = True
         user.bear_outfit = outfit
-        return {"kind": "outfit", "outfit": key, "already_owned": already}
+        # Повторную покупку отсекает ItemAlreadyOwnedError выше, поэтому здесь
+        # предмет всегда новый.
+        return {"kind": "outfit", "outfit": key, "already_owned": False}
 
     if item == "streak_freeze":
         # Заморозки стрика кладём в то же расширяемое JSON-поле, что и одежду:

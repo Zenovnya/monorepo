@@ -7,7 +7,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TheoryCardIn(BaseModel):
@@ -101,14 +101,28 @@ class CaseIn(BaseModel):
 
     slug: str = Field(min_length=1, max_length=96)
     title: str
-    codex: str
+    # min_length=1: пустой кодекс проходил схему, и такой кейс молча исчезал
+    # из GET /lexbear/cases (там пустой codex отфильтровывается) — кейс
+    # сохранялся в админке, но до пользователя не доходил.
+    codex: str = Field(min_length=1, max_length=128)
     difficulty: str = "easy"
-    case_text: str
+    case_text: str = Field(min_length=1)
     featured: bool = False
     # Опциональная подсказка для кнопки «Подсказка» на экране кейса —
     # ссылка на статью/закон, не раскрывающая правильный ответ.
     hint: str | None = None
     options: list[CaseOptionIn] = Field(min_length=2)
+
+    @field_validator("codex", "case_text", "title", mode="before")
+    @classmethod
+    def _strip_required(cls, value):
+        """Обрезает пробелы и запрещает строки из одних пробелов."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError("Поле не может быть пустым")
+            return stripped
+        return value
 
 
 class CasesPack(BaseModel):

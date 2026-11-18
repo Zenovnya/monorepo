@@ -145,10 +145,15 @@ async def register(session: AsyncSession, data: UserRegister) -> User:
     if existing is not None:
         raise EmailAlreadyRegisteredError("Пользователь с таким email уже существует")
 
+    display_name = (data.username or "").strip()[:40]
     user = User(
         email=data.email,
         username=data.username,
         hashed_password=await hash_password_async(data.password),
+        # Имя профиля по умолчанию — то, что ввёл пользователь при регистрации.
+        # Иначе `name` остаётся дефолтом модели («Юрист»), и в интерфейсе
+        # пользователь видит не своё имя, а заглушку.
+        name=display_name or "Юрист",
     )
     session.add(user)
     await session.commit()

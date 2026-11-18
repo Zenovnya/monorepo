@@ -1,11 +1,17 @@
 import { NavigationContainer } from '@react-navigation/native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  onlineManager,
+} from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { MascotToastProvider } from './src/components';
+import { OfflineBanner } from './src/components/OfflineBanner';
 import { RootNavigator } from './src/navigation';
 
 /**
@@ -20,13 +26,27 @@ import { RootNavigator } from './src/navigation';
  * `retry: 1` вместо трёх попыток: при живом backend ошибка сети почти
  * всегда настоящая, а три повтора с задержкой держат спиннер заметно дольше.
  */
+/**
+ * Связываем react-query с реальным состоянием сети.
+ *
+ * Без этого onlineManager всегда считает сеть доступной: запросы уходят
+ * в никуда при офлайне, а `refetchOnReconnect` не срабатывает никогда.
+ */
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => {
+    setOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
+  })
+);
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
       gcTime: 30 * 60 * 1000,
       refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      // При возвращении сети перезапрашиваем данные — иначе экран
+      // остаётся с ошибкой, хотя интернет уже появился.
+      refetchOnReconnect: true,
       retry: 1,
     },
   },
@@ -40,6 +60,7 @@ export default function App() {
           <NavigationContainer>
             <MascotToastProvider>
               <RootNavigator />
+              <OfflineBanner />
               <StatusBar style="auto" />
             </MascotToastProvider>
           </NavigationContainer>

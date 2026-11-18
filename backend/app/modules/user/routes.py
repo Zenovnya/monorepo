@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
-from app.modules.user.schemas import OnboardIn, OnboardOut, PetBearOut
+from app.modules.user.schemas import (
+    OnboardIn,
+    OnboardOut,
+    PetBearOut,
+    ProfileIn,
+    ProfileOut,
+)
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -24,6 +30,63 @@ def _get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
         ) from exc
+
+
+def _profile_dict(user: User) -> dict:
+    """Сериализует профиль для мобилки."""
+    return {
+        "name": user.name,
+        "email": user.email,
+        "username": user.username,
+        "gems": user.gems,
+        "xp": user.xp,
+        "level": user.level,
+        "streak": user.streak,
+        "lives": user.lives,
+        "league": user.league,
+        "daily_goal": user.daily_goal,
+    }
+
+
+@router.get("/me", response_model=ProfileOut)
+async def get_me(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Возвращает профиль текущего пользователя."""
+    user_id = _get_current_user_id(authorization)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    return _profile_dict(user)
+
+
+@router.patch("/me", response_model=ProfileOut)
+async def update_me(
+    data: ProfileIn,
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Меняет отображаемое имя профиля.
+
+    До этого эндпоинта у пользователя вообще не было способа изменить имя:
+    после регистрации везде показывался дефолт модели («Юрист»).
+    """
+    user_id = _get_current_user_id(authorization)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Имя не может быть пустым",
+        )
+    user.name = name[:40]
+    await session.commit()
+    await session.refresh(user)
+    return _profile_dict(user)
 
 
 @router.post("/onboard", response_model=OnboardOut)

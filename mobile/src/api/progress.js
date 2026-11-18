@@ -12,4 +12,7 @@ export const progressApi = {
 
   // Завершение урока
   complete: (payload) => apiClient.post('/progress/complete', payload).then((r) => r.data),
+
+  // Кейсы, подлежащие повторению по SM-2 (GET /srs/reviews)
+  reviews: () => apiClient.get('/srs/reviews').then((r) => r.data),
 };

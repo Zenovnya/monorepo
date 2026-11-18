@@ -47,3 +47,58 @@ def test_decode_access_token_rejects_wrong_type() -> None:
 
     with pytest.raises(service.InvalidCredentialsError):
         service.decode_access_token(wrong_type_token)
+
+class _StubSession:
+    """Минимальная заглушка AsyncSession для проверки register()."""
+
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    async def scalar(self, *_args, **_kwargs):
+        return None  # почты ещё нет в базе
+
+    def add(self, obj) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, _obj) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_register_copies_username_to_display_name() -> None:
+    """Имя профиля берётся из username, а не остаётся дефолтом «Юрист».
+
+    Раньше register() не заполнял User.name, поэтому пользователь видел
+    «Юрист» в профиле и лидерборде, хотя при регистрации ввёл своё имя.
+    """
+    from app.modules.auth.schemas import UserRegister
+
+    session = _StubSession()
+    user = await service.register(
+        session,
+        UserRegister(
+            email="lawyer@example.com",
+            username="  Анна Петрова  ",
+            password="strong-password-123",
+        ),
+    )
+
+    assert user.username == "  Анна Петрова  "
+    assert user.name == "Анна Петрова"
+
+
+@pytest.mark.asyncio
+async def test_register_without_username_uses_fallback_name() -> None:
+    """Без username профиль получает понятный дефолт, а не пустую строку."""
+    from app.modules.auth.schemas import UserRegister
+
+    session = _StubSession()
+    user = await service.register(
+        session,
+        UserRegister(email="noname@example.com", password="strong-password-123"),
+    )
+
+    assert user.name == "Юрист"

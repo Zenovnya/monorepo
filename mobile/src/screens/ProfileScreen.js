@@ -5,13 +5,16 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { progressApi } from '../api/progress';
+import { userApi } from '../api/user';
 import {
   brand,
   KhokhlomaCorners,
@@ -27,6 +30,7 @@ const ROW_SEAL = {
   bear: { label: '§', tone: 'red' },
   league: { label: 'I', tone: 'gold' },
   articles: { label: 'ст', tone: 'red' },
+  reviews: { label: '↻', tone: 'gold' },
   shop: { label: '✦', tone: 'gold' },
 };
 
@@ -38,6 +42,25 @@ const ROW_SEAL = {
  */
 export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
+
+  // Редактирование имени: до этого сменить имя было нельзя вообще —
+  // в профиле навсегда оставался дефолт «Юрист».
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(user?.name ?? '');
+  const [nameError, setNameError] = useState(null);
+
+  const saveName = useMutation({
+    mutationFn: (value) => userApi.updateMe(value),
+    onSuccess: (profile) => {
+      setUser({ name: profile.name });
+      queryClient.invalidateQueries(['gamification-me']);
+      setEditingName(false);
+      setNameError(null);
+    },
+    onError: () => setNameError('Не удалось сохранить имя. Попробуйте ещё раз.'),
+  });
 
   const { data: articles } = useQuery({
     queryKey: ['lexbear-articles'],
@@ -119,6 +142,11 @@ export default function ProfileScreen({ navigation }) {
       hint: `Изучено статей: ${learnedCount}`,
     },
     {
+      key: 'reviews',
+      title: 'Повторить',
+      hint: 'Кейсы, срок повторения которых наступил',
+    },
+    {
       key: 'shop',
       title: 'Лавка наград',
       hint: 'Кристаллы, жизни, атрибуты',
@@ -136,6 +164,7 @@ export default function ProfileScreen({ navigation }) {
       bear: 'Bear',
       league: 'League',
       articles: 'Articles',
+      reviews: 'Reviews',
       shop: 'Shop',
       premium: 'Premium',
     };
@@ -186,7 +215,78 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Имя, золотой чин лиги и информационная плашка уровня (#7298BC) */}
       <View style={styles.identitySection}>
-        <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+        {editingName ? (
+          <View style={styles.nameEditRow}>
+            <TextInput
+              value={nameDraft}
+              onChangeText={(t) => {
+                setNameDraft(t);
+                setNameError(null);
+              }}
+              maxLength={40}
+              autoFocus
+              placeholder="Как вас зовут?"
+              placeholderTextColor={colors.locked}
+              style={styles.nameInput}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (nameDraft.trim()) saveName.mutate(nameDraft.trim());
+              }}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Сохранить имя"
+              disabled={!nameDraft.trim() || saveName.isPending}
+              onPress={() => saveName.mutate(nameDraft.trim())}
+              style={({ pressed }) => [
+                styles.nameSaveBtn,
+                (!nameDraft.trim() || saveName.isPending) && { opacity: 0.45 },
+                pressed && styles.smallPressed,
+              ]}
+            >
+              {saveName.isPending ? (
+                <ActivityIndicator size="small" color={colors.card} />
+              ) : (
+                <Text style={styles.nameSaveText}>OK</Text>
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Отменить"
+              onPress={() => {
+                setEditingName(false);
+                setNameDraft(user?.name ?? '');
+                setNameError(null);
+              }}
+              style={({ pressed }) => [
+                styles.nameCancelBtn,
+                pressed && styles.smallPressed,
+              ]}
+            >
+              <Text style={styles.nameCancelText}>✕</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Изменить имя"
+            onPress={() => {
+              setNameDraft(user?.name ?? '');
+              setEditingName(true);
+            }}
+            style={({ pressed }) => [
+              styles.nameRow,
+              pressed && styles.smallPressed,
+            ]}
+          >
+            <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+            <Text style={styles.namePencil}>✎</Text>
+          </Pressable>
+        )}
+
+        {nameError ? (
+          <Text style={styles.nameError}>{nameError}</Text>
+        ) : null}
         <View style={styles.pillsRow}>
           <View style={styles.leaguePill}>
             <Text style={styles.leaguePillText}>
@@ -298,6 +398,68 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  namePencil: {
+    fontSize: 15,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  nameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nameInput: {
+    minWidth: 150,
+    maxWidth: 230,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: brand.gold,
+    backgroundColor: colors.card,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  nameSaveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: brand.pine,
+    minWidth: 46,
+    alignItems: 'center',
+  },
+  nameSaveText: {
+    color: colors.card,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  nameCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+  },
+  nameCancelText: {
+    color: colors.subtext,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  nameError: {
+    marginTop: 8,
+    color: brand.red,
+    fontSize: 12.5,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
