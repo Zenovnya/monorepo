@@ -120,6 +120,37 @@ async def adaptive_review_queue(
     ]
 
 
+@router.get("/adaptive/review/summary")
+async def adaptive_review_summary(
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Сколько кейсов реально видит пользователь.
+
+    Пользователю показываются только кейсы со статусом ``approved``
+    (см. ``learning.service.PUBLISHED_REVIEW_STATUS``). Сразу после импорта у
+    всех кейсов статус ``imported``, то есть адаптивная лента пуста — и без
+    этой сводки это выглядит как поломка ленты, а не как «контент ещё не
+    проверили». Модератору нужно видеть цифры сразу.
+    """
+    rows = (
+        await session.execute(
+            select(CaseVersion.review_status, CaseVersion.status)
+        )
+    ).all()
+    by_status: dict[str, int] = {}
+    visible = 0
+    for review, publish_state in rows:
+        by_status[review] = by_status.get(review, 0) + 1
+        if review == "approved" and publish_state == "published":
+            visible += 1
+    return {
+        "total": len(rows),
+        "by_review_status": by_status,
+        "visible_to_users": visible,
+        "hidden_by_review": len(rows) - visible,
+    }
+
+
 @router.post("/adaptive/review/{slug}")
 async def adaptive_set_review(
     slug: str,

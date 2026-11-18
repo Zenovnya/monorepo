@@ -29,6 +29,23 @@ def new_competency_state(
     )
 
 
+# Кейс попадает пользователю только с этим статусом юридической проверки.
+# Импорт из JSON-паков или админки ставит ``imported`` — то есть «загружено,
+# но юристом не проверено». До этой проверки непроверенный кейс отдавался
+# в ``/learning/next`` и в диагностику наравне с проверенным: студент учился
+# по тексту, который никто не валидировал, а продукт при этом обещал
+# обратное («review_status остаётся imported до approved»).
+PUBLISHED_REVIEW_STATUS = "approved"
+
+# Почему гейт, а не фильтр «показывать всё, кроме отклонённого»: статусов три
+# (imported / in_review / approved), и по умолчанию кейс именно ``imported``.
+# Белый список означает, что новая стадия проверки по умолчанию не пропускает
+# контент, а не наоборот.
+def is_user_visible(version: CaseVersion) -> bool:
+    """Можно ли показывать версию кейса пользователю."""
+    return version.review_status == PUBLISHED_REVIEW_STATUS
+
+
 def adaptive_score(weakness: float, difficulty: float) -> float:
     """Deterministic, explainable baseline score used by the MVP ranker."""
     return 0.65 * weakness + 0.25 * (1 - difficulty) + 0.10
@@ -46,7 +63,18 @@ async def _case_payload(session: AsyncSession, version: CaseVersion):
 
 async def next_case(session: AsyncSession, user_id: uuid.UUID, exclude: set[uuid.UUID] | None = None):
     exclude = exclude or set()
-    versions = (await session.execute(select(CaseVersion).join(LearningCase).where(CaseVersion.status == "published", LearningCase.status == "published").order_by(CaseVersion.difficulty))).scalars().all()
+    versions = (await session.execute(
+        select(CaseVersion)
+        .join(LearningCase)
+        .where(
+            CaseVersion.status == "published",
+            LearningCase.status == "published",
+            # Только проверенные юристом кейсы. Иначе адаптивная лента и
+            # диагностика учат по непроверенному тексту.
+            CaseVersion.review_status == PUBLISHED_REVIEW_STATUS,
+        )
+        .order_by(CaseVersion.difficulty)
+    )).scalars().all()
     if not versions:
         return None
     states = (await session.execute(select(UserCompetencyState).where(UserCompetencyState.user_id == user_id))).scalars().all()
@@ -101,6 +129,11 @@ async def evaluate(session: AsyncSession, user_id: uuid.UUID, data):
     answer = await session.get(CaseAnswer, data.answer_id)
     if not version or version.status != "published" or not step or step.case_version_id != version.id or not answer or answer.step_id != step.id:
         raise LearningError("Кейс, шаг и ответ не соответствуют друг другу")
+    # Ответ на непроверенный кейс отклоняем не «на всякий случай»: иначе
+    # клиент, сохранивший id версии до перевода в in_review, продолжал бы
+    # писать попытки по снятому с показа контенту.
+    if not is_user_visible(version):
+        raise LearningError("Кейс ещё не прошёл юридическую проверку")
     if data.assessment_session_id is not None:
         existing = (await session.execute(select(Attempt).where(
             Attempt.user_id == user_id,

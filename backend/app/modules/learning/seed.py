@@ -1,5 +1,7 @@
 """Idempotent starter content for local development and a clean MVP database."""
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +40,14 @@ async def seed_starter_content(session: AsyncSession) -> None:
         situation="Сотрудник полиции просит предъявить документы на улице.",
         difficulty=0.35,
         status="published",
+        # Стартовый кейс — эталонный: он написан вместе с продуктом и служит
+        # образцом для импортируемых. Пользователю показываются только
+        # проверенные кейсы (``learning.service.PUBLISHED_REVIEW_STATUS``),
+        # поэтому без этого флага чистая установка отдавала пустую
+        # адаптивную ленту и «диагностика» сразу завершалась.
+        review_status="approved",
+        reviewed_by="seed",
+        reviewed_at=datetime.now(timezone.utc),
     )
     session.add(version)
     await session.flush()

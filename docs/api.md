@@ -101,6 +101,14 @@
 | GET | `/learning/assessment/next` | Следующий вопрос диагностики |
 | POST | `/learning/assessment/answer` | Ответить на вопрос диагностики |
 
+Пользователю показываются **только кейсы со статусом `approved`**. Импорт из
+паков и админки ставит `imported` — то есть «загружено, но юристом не
+проверено», и такой кейс не попадает ни в `/learning/next`, ни в диагностику.
+Сразу после `reload-adaptive` лента поэтому пуста, пока кейсы не проверены:
+`GET /admin/content/adaptive/review/summary` показывает
+`visible_to_users` и `hidden_by_review`. Эталонный стартовый кейс из сида
+создаётся уже проверенным.
+
 ## Геймификация (`/gamification`)
 
 | Метод | Путь | Назначение |
@@ -175,7 +183,9 @@
 | GET/PUT/DELETE | `/admin/content/cases` | CRUD кейсов (по `slug`) |
 | GET/PUT/DELETE | `/admin/content/units`, `/admin/content/units/{unit_code}/lessons` | Юниты и уроки |
 | GET/DELETE | `/admin/content/lessons` | Уроки |
-| GET/POST | `/admin/content/adaptive/review` | Очередь и разбор адаптивных кейсов |
+| GET | `/admin/content/adaptive/review` | Очередь юридической проверки (`?review_status=imported`) |
+| GET | `/admin/content/adaptive/review/summary` | Сколько кейсов видит пользователь (`visible_to_users`) и почему остальные скрыты |
+| POST | `/admin/content/adaptive/review/{slug}` | Поставить статус `in_review` / `approved` (фиксирует кто и когда) |
 | POST | `/admin/content/reload`, `/admin/content/reload-adaptive` | Перечитать контент |
 | POST | `/admin/content/notifications/dispatch` | Рассылка напоминаний (`dry_run` для проверки) |
 | GET | `/admin/ui` | Простая админ-страница |
