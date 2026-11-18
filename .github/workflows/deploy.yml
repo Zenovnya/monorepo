@@ -91,7 +91,9 @@ jobs:
         env:
           ADMIN_TOKEN: ci-admin-token
         run: |
-          bash scripts/ci-smoke.sh
+          # working-directory джобы — backend, а скрипт лежит в корне.
+          # Относительный путь без ../ давал exit 127 «command not found».
+          bash ../scripts/ci-smoke.sh
 
   mobile-lint:
     name: Lint (mobile)
