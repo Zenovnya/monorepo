@@ -47,7 +47,13 @@ const perks = [
  */
 export default function PremiumScreen({ navigation }) {
   const [plan, setPlan] = useState('yearly');
-  const { isPremium, startCheckout, isCheckingOut } = usePremium();
+  const {
+    isPremium,
+    startCheckout,
+    isCheckingOut,
+    checkoutConfigured,
+    checkoutError,
+  } = usePremium();
 
   const onSubscribe = () => {
     Haptics.notificationAsync(
@@ -205,7 +211,21 @@ export default function PremiumScreen({ navigation }) {
           ))}
         </View>
 
-        {isCheckingOut ? (
+        {checkoutConfigured === false ? (
+          <View style={[styles.paymentHintBox, styles.paymentWarnBox]}>
+            <Text style={styles.paymentWarn}>
+              Оплата пока недоступна: платёжный шлюз не подключён. Мы сообщим,
+              когда подписку можно будет оформить.
+            </Text>
+          </View>
+        ) : checkoutError ? (
+          <View style={[styles.paymentHintBox, styles.paymentWarnBox]}>
+            <Text style={styles.paymentWarn}>
+              Не удалось создать платёж. Проверьте соединение и попробуйте ещё
+              раз.
+            </Text>
+          </View>
+        ) : isCheckingOut ? (
           <View style={styles.paymentHintBox}>
             <Text style={styles.paymentHint}>
               Оплата открыта в браузере. После оплаты вернитесь в приложение —
@@ -231,6 +251,17 @@ export default function PremiumScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  paymentWarnBox: {
+    borderColor: brand.red,
+    backgroundColor: brand.redSoft,
+  },
+  paymentWarn: {
+    color: brand.red,
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

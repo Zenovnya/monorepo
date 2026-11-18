@@ -11,6 +11,7 @@ from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
 from app.modules.gamification import service
 from app.modules.gamification.schemas import (
+    DailyGoalRead,
     GamificationRead,
     LeaderboardRead,
     ShopPurchaseIn,
@@ -95,6 +96,22 @@ async def gamification_achievements(
             for a in achievements
         ]
     }
+
+
+@router.get("/daily-goal", response_model=DailyGoalRead)
+async def gamification_daily_goal(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Прогресс по ежедневной цели (XP за сегодня против daily_goal)."""
+    user_id = _get_current_user_id(authorization)
+    try:
+        return await service.get_daily_progress(session, user_id)
+    except service.GamificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/leaderboard", response_model=LeaderboardRead)

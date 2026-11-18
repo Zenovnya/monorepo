@@ -14,6 +14,9 @@ export const gamificationApi = {
   // Список достижений
   achievements: () => apiClient.get('/gamification/achievements').then((r) => r.data),
 
+  // Прогресс по ежедневной цели (XP за сегодня против daily_goal)
+  dailyGoal: () => apiClient.get('/gamification/daily-goal').then((r) => r.data),
+
   // Таблица лидеров лиги текущего пользователя
   leaderboard: (limit = 30) =>
     apiClient.get('/gamification/leaderboard', { params: { limit } }).then((r) => r.data),

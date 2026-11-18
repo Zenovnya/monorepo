@@ -194,3 +194,38 @@ class ReviewState(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+class DailyXp(Base):
+    """Сколько XP пользователь заработал за конкретный день.
+
+    Нужна для ежедневной цели: ``users.daily_goal`` задаётся в онбординге,
+    но нигде не использовался — цели дня как механики не существовало.
+    Считаем нарастающим итогом в пределах суток, чтобы не пересчитывать
+    историю при каждом запросе.
+    """
+
+    __tablename__ = "daily_xp"
+    __table_args__ = (
+        UniqueConstraint("user_id", "day", name="uq_daily_xp_user_day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Дата в UTC (см. gamification.service._today_utc).
+    day: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    xp: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

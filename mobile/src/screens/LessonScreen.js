@@ -91,6 +91,8 @@ export default function LessonScreen({ route, navigation }) {
       queryClient.invalidateQueries(['lexbear-learn']);
       queryClient.invalidateQueries(['progress-overview']);
       queryClient.invalidateQueries(['gamification-me']);
+      // Цель дня на главной должна отрасти сразу после урока.
+      queryClient.invalidateQueries(['gamification-daily-goal']);
 
       if (data?.level_up) {
         toast.show({

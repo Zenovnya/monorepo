@@ -69,6 +69,13 @@ async def test_add_xp_levels_up() -> None:
         async def flush(self):
             pass
 
+        # add_xp теперь пишет дневной счётчик XP (см. _add_daily_xp).
+        async def scalar(self, _query):
+            return None
+
+        def add(self, _obj):
+            pass
+
     user = _make_user()
     result = await service.add_xp(FakeSession(), user, 250, mark_active=False)
     assert result["xp"] == 250
@@ -283,3 +290,82 @@ class TestLives:
         effect = _apply_shop_effect(None, user, "life_refill")
         assert user.lives == MAX_LIVES
         assert effect["restored"] == MAX_LIVES - 1
+
+
+class TestDailyGoal:
+    """Ежедневная цель: daily_goal из онбординга наконец используется."""
+
+    @pytest.mark.asyncio
+    async def test_add_xp_accumulates_daily_counter(self) -> None:
+        import uuid
+
+        from app.modules.auth.models import User
+        from app.modules.gamification import service as gam
+        from app.modules.progress.models import DailyXp
+
+        user = User(
+            id=uuid.uuid4(),
+            email="day@example.com",
+            hashed_password="x",
+            xp=0,
+            level=1,
+        )
+        row = DailyXp(user_id=user.id, day=gam._today_utc(), xp=10)
+
+        class _Session:
+            async def scalar(self, _q):
+                return row
+
+            def add(self, _obj):
+                pass
+
+            async def flush(self):
+                return None
+
+        async def _noop(_key):
+            return None
+
+        monkeypatch_target = gam.cache_delete
+        gam.cache_delete = _noop
+        try:
+            await gam.add_xp(_Session(), user, 10, mark_active=False)
+            await gam.add_xp(_Session(), user, 5, mark_active=False)
+        finally:
+            gam.cache_delete = monkeypatch_target
+
+        assert user.xp == 15
+        # 10 было в счётчике + 10 + 5 начислено.
+        assert row.xp == 25
+
+    @pytest.mark.asyncio
+    async def test_daily_progress_reports_remaining(self) -> None:
+        import uuid
+
+        from app.modules.auth.models import User
+        from app.modules.gamification import service as gam
+        from app.modules.progress.models import DailyXp
+
+        user = User(
+            id=uuid.uuid4(),
+            email="goal@example.com",
+            hashed_password="x",
+            daily_goal=20,
+        )
+        row = DailyXp(user_id=user.id, day=gam._today_utc(), xp=15)
+
+        class _Session:
+            def __init__(self):
+                self.calls = 0
+
+            async def get(self, _model, _pk):
+                return user
+
+            async def scalar(self, _q):
+                return row
+
+        result = await gam.get_daily_progress(_Session(), user.id)
+
+        assert result["goal"] == 20
+        assert result["done"] == 15
+        assert result["remaining"] == 5
+        assert result["completed"] is False

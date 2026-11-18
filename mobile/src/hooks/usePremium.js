@@ -47,6 +47,9 @@ export function usePremium() {
       analyticsApi
         .track('subscription_checkout_started', { plan })
         .catch(() => {});
+      // Шлюз не настроен: confirmation_url — заглушка checkout.invalid.
+      // Раньше приложение молча открывало мёртвый адрес.
+      if (data?.checkout_configured === false) return;
       if (data?.confirmation_url) {
         Linking.openURL(data.confirmation_url).catch(() => {});
       }
@@ -62,6 +65,9 @@ export function usePremium() {
     startCheckout,
     isCheckingOut: checkout.isPending,
     checkoutError: checkout.error,
+    // false — платёжный шлюз не подключён (заглушка). Экран показывает
+    // пояснение вместо запуска «мёртвой» оплаты.
+    checkoutConfigured: checkout.data?.checkout_configured,
     refresh,
   };
 }

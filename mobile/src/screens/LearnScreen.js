@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { gamificationApi } from '../api/gamification';
 import { TopStats } from '../components/TopStats';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import {
@@ -59,6 +60,13 @@ export default function LearnScreen({ navigation }) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['lexbear-learn'],
     queryFn: lexbearApi.learnPath,
+  });
+
+  // Ежедневная цель: daily_goal задаётся в онбординге, но раньше нигде не
+  // отображался — пользователь не видел, выполнил ли норму за день.
+  const { data: dailyGoal } = useQuery({
+    queryKey: ['gamification-daily-goal'],
+    queryFn: gamificationApi.dailyGoal,
   });
 
   if (isLoading) {
@@ -171,6 +179,36 @@ export default function LearnScreen({ navigation }) {
             </Text>
           </Pressable>
         </View>
+
+        {dailyGoal && dailyGoal.goal > 0 ? (
+          <View style={styles.dailyGoalCard}>
+            <View style={styles.dailyGoalHead}>
+              <Text style={styles.dailyGoalKicker}>§ ЦЕЛЬ ДНЯ</Text>
+              <Text style={styles.dailyGoalValue}>
+                {dailyGoal.done} / {dailyGoal.goal} XP
+              </Text>
+            </View>
+            <View style={styles.dailyGoalTrack}>
+              <View
+                style={[
+                  styles.dailyGoalFill,
+                  {
+                    width: `${Math.min(
+                      100,
+                      Math.round((dailyGoal.done / dailyGoal.goal) * 100)
+                    )}%`,
+                  },
+                  dailyGoal.completed && styles.dailyGoalFillDone,
+                ]}
+              />
+            </View>
+            <Text style={styles.dailyGoalHint}>
+              {dailyGoal.completed
+                ? 'Норма выполнена — отличная работа!'
+                : `Осталось ${dailyGoal.remaining} XP. Один короткий урок закроет цель.`}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {units.length === 0 ? (
@@ -415,6 +453,52 @@ export default function LearnScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  dailyGoalCard: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    backgroundColor: colors.card,
+  },
+  dailyGoalHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dailyGoalKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    color: colors.subtext,
+  },
+  dailyGoalValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: brand.goldInk,
+  },
+  dailyGoalTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.track,
+    overflow: 'hidden',
+  },
+  dailyGoalFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: brand.gold,
+  },
+  dailyGoalFillDone: {
+    backgroundColor: brand.pine,
+  },
+  dailyGoalHint: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.subtext,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

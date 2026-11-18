@@ -128,6 +128,60 @@ def update_streak(user: User, now: datetime | None = None) -> int:
     return user.streak
 
 
+async def _add_daily_xp(
+    session: AsyncSession, user_id: uuid.UUID, amount: int
+) -> None:
+    """Инкрементирует счётчик XP за текущие сутки (UTC)."""
+    if amount == 0:
+        return
+    from app.modules.progress.models import DailyXp
+
+    today = _today_utc()
+    row = await session.scalar(
+        select(DailyXp).where(
+            DailyXp.user_id == user_id,
+            DailyXp.day == today,
+        )
+    )
+    if row is None:
+        session.add(DailyXp(user_id=user_id, day=today, xp=amount))
+    else:
+        row.xp += amount
+
+
+async def get_daily_progress(
+    session: AsyncSession, user_id: uuid.UUID
+) -> dict:
+    """Возвращает прогресс по ежедневной цели: сколько XP набрано сегодня.
+
+    ``daily_goal`` задаётся при онбординге (минуты × 2), но до этой правки
+    нигде не использовался, поэтому «цель дня» нельзя было ни показать,
+    ни выполнить.
+    """
+    from app.modules.progress.models import DailyXp
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise GamificationError("Пользователь не найден")
+
+    today = _today_utc()
+    row = await session.scalar(
+        select(DailyXp).where(
+            DailyXp.user_id == user_id,
+            DailyXp.day == today,
+        )
+    )
+    done = row.xp if row is not None else 0
+    goal = user.daily_goal or 0
+    return {
+        "goal": goal,
+        "done": done,
+        "remaining": max(0, goal - done),
+        "completed": goal > 0 and done >= goal,
+        "day": today.date().isoformat(),
+    }
+
+
 async def add_xp(
     session: AsyncSession,
     user: User,
@@ -139,6 +193,7 @@ async def add_xp(
         update_streak(user)
 
     user.xp += amount
+    await _add_daily_xp(session, user.id, amount)
     new_level = level_from_xp(user.xp)
     leveled_up = new_level > user.level
     user.level = new_level

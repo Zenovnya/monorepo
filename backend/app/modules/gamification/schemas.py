@@ -28,6 +28,16 @@ class GamificationRead(BaseModel):
     achievements: list[AchievementRead]
 
 
+class DailyGoalRead(BaseModel):
+    """Прогресс по ежедневной цели."""
+
+    goal: int
+    done: int
+    remaining: int
+    completed: bool
+    day: str
+
+
 class XpAddIn(BaseModel):
     """Начисление XP (внутреннее использование/тесты)."""
 
