@@ -1,6 +1,6 @@
 """Бизнес-логика модуля аутентификации.
 
-Хеширование паролей (bcrypt) и генерация JWT-токенов (python-jose).
+Хеширование паролей (bcrypt) и генерация JWT-токенов (PyJWT).
 """
 
 import hashlib
@@ -8,9 +8,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import jwt as pyjwt
 from anyio import to_thread
 from fastapi import Header, HTTPException, status
-from jose import JWTError, jwt
+from jwt import PyJWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -112,7 +113,7 @@ def _create_access_token(user_id: uuid.UUID) -> str:
         minutes=settings.access_token_expire_minutes
     )
     payload = {"sub": str(user_id), "exp": expire, "type": "access"}
-    return jwt.encode(
+    return pyjwt.encode(
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
@@ -129,7 +130,7 @@ def _create_refresh_token_value() -> str:
         "exp": expire,
         "type": "refresh",
     }
-    return jwt.encode(
+    return pyjwt.encode(
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
@@ -250,12 +251,14 @@ async def revoke_refresh_token(
 def decode_access_token(token: str) -> uuid.UUID:
     """Декодирует access-токен и возвращает идентификатор пользователя."""
     try:
-        payload = jwt.decode(
+        payload = pyjwt.decode(
             token,
             settings.jwt_secret_key,
+            # algorithms обязателен: без него PyJWT доверяет заголовку alg
+            # и позволяет подменить алгоритм на "none".
             algorithms=[settings.jwt_algorithm],
         )
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise InvalidCredentialsError("Недействительный access-токен") from exc
 
     if payload.get("type") != "access":
