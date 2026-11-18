@@ -62,6 +62,40 @@ export default function SettingsScreen({ navigation }) {
   });
   const notifications = data?.notifications ?? [];
 
+  // Настройки рассылки. Раньше «Уведомления: Включены» было текстом-заглушкой:
+  // отключить пуши было нельзя вообще.
+  const { data: pushSettings } = useQuery({
+    queryKey: ['notification-settings'],
+    queryFn: notificationsApi.getSettings,
+    enabled: isAuthenticated,
+  });
+
+  const [pushNotice, setPushNotice] = useState(null);
+
+  const updatePush = useMutation({
+    mutationFn: (patch) => notificationsApi.updateSettings(patch),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['notification-settings'], settings);
+    },
+    onError: () => setPushNotice('Не удалось сохранить настройку'),
+  });
+
+  const testPush = useMutation({
+    mutationFn: () => notificationsApi.sendTest(),
+    onSuccess: (res) => {
+      if (res.reason) {
+        setPushNotice('Нет активных устройств: разрешите уведомления в системе.');
+        return;
+      }
+      setPushNotice(
+        res.sent > 0
+          ? `Тестовое уведомление отправлено (${res.sent})`
+          : 'Expo не принял уведомление. Попробуйте позже.'
+      );
+    },
+    onError: () => setPushNotice('Не удалось отправить тестовое уведомление'),
+  });
+
   const rows = [
     {
       icon: '👤',
@@ -201,6 +235,94 @@ export default function SettingsScreen({ navigation }) {
           }
         />
 
+        {pushSettings ? (
+          <View style={styles.groupCard}>
+            {[
+              {
+                key: 'streak_reminders',
+                label: 'Стрик под угрозой',
+                hint: 'Напомним, если серия может прерваться',
+              },
+              {
+                key: 'daily_goal_reminders',
+                label: 'Цель дня',
+                hint: 'Напоминание, если норма ещё не закрыта',
+              },
+              {
+                key: 'review_reminders',
+                label: 'Повторения',
+                hint: 'Когда кейсы пора освежить',
+              },
+            ].map((item, idx, arr) => {
+              const value = Boolean(pushSettings[item.key]);
+              return (
+                <Pressable
+                  key={item.key}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: value }}
+                  accessibilityLabel={item.label}
+                  disabled={updatePush.isPending}
+                  onPress={() =>
+                    updatePush.mutate({ [item.key]: !value })
+                  }
+                  style={[
+                    styles.row,
+                    styles.pushRow,
+                    idx < arr.length - 1 && styles.rowDivider,
+                  ]}
+                >
+                  <View style={styles.pushBody}>
+                    <Text style={styles.rowTitle}>{item.label}</Text>
+                    <Text style={styles.pushHint}>{item.hint}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.switch,
+                      value && styles.switchOn,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.switchKnob,
+                        value && styles.switchKnobOn,
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {pushSettings ? (
+          <Pressable
+            onPress={() => testPush.mutate()}
+            disabled={testPush.isPending}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.testPushBtn,
+              pressed && styles.rowPressed,
+            ]}
+          >
+            {testPush.isPending ? (
+              <ActivityIndicator size="small" color={brand.pine} />
+            ) : (
+              <Text style={styles.testPushText}>
+                Отправить тестовое уведомление
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
+
+        {pushNotice ? (
+          <Pressable
+            onPress={() => setPushNotice(null)}
+            style={styles.notice}
+          >
+            <Text style={styles.noticeText}>{pushNotice}</Text>
+          </Pressable>
+        ) : null}
+
         {notifications.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>Пока нет новых уведомлений</Text>
@@ -266,6 +388,51 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  pushRow: {
+    alignItems: 'center',
+  },
+  pushBody: { flex: 1, paddingRight: 10 },
+  pushHint: {
+    marginTop: 2,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: colors.subtext,
+    fontWeight: '500',
+  },
+  switch: {
+    width: 46,
+    height: 27,
+    borderRadius: 14,
+    padding: 3,
+    backgroundColor: colors.track,
+    justifyContent: 'center',
+  },
+  switchOn: {
+    backgroundColor: brand.pine,
+  },
+  switchKnob: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    backgroundColor: colors.card,
+  },
+  switchKnobOn: {
+    alignSelf: 'flex-end',
+  },
+  testPushBtn: {
+    marginTop: 10,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: brand.pineBorder,
+    backgroundColor: brand.pineSoft,
+    alignItems: 'center',
+  },
+  testPushText: {
+    color: brand.pineDark,
+    fontWeight: '800',
+    fontSize: 12.5,
+  },
   rowPressed: { opacity: 0.75 },
   rowChevron: {
     marginLeft: 8,

@@ -13,6 +13,8 @@
 инвалидируется, и мобильное приложение сразу видит изменения.
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -338,3 +340,25 @@ async def admin_delete_lesson(
     await session.commit()
     await bump_content_version()
     return {"ok": True, "slug": slug}
+
+
+@router.post("/notifications/dispatch")
+async def admin_dispatch_notifications(
+    user_id: uuid.UUID | None = None,
+    dry_run: bool = False,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Запускает рассылку напоминаний (стрик, цель дня, повторения).
+
+    Планировщика в проекте нет, поэтому запуск идёт из cron/Railway Scheduled
+    Jobs: ``curl -X POST .../admin/content/notifications/dispatch -H "X-Admin-Token: ..."``.
+    Рассылка идемпотентна на уровне БД (user_id, type, day) — повторный запуск
+    в тот же день не отправит дубли даже при двух воркерах.
+
+    ``dry_run=true`` возвращает только план, ничего не отправляя.
+    """
+    from app.modules.notifications import dispatch
+
+    return await dispatch.dispatch_reminders(
+        session, user_id=user_id, dry_run=dry_run
+    )
