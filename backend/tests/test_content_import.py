@@ -249,3 +249,51 @@ class TestCurriculumPackCompleteness:
         # «карте обучения»: пользователь видел юнит и не мог ничего пройти.
         assert totals.get("КоАП", 0) >= 12
         assert totals.get("ТК", 0) >= 10
+
+
+class TestAdminCaseSchemaRejectsUnsolvableCases:
+    """Кейс без единственного правильного ответа нельзя даже сохранить.
+
+    Импорт из JSON-паков это проверял (`importer.validate_case`), админка —
+    нет: `PUT /admin/content/cases` с двумя неправильными вариантами отвечал
+    200, кейс уезжал в адаптивный банк и в диагностику, где вердикт выставить
+    невозможно, а пользователь получал XP за невыбираемый правильный ответ.
+    """
+
+    @staticmethod
+    def _payload(*flags: bool) -> dict:
+        return {
+            "slug": "admin-schema-case",
+            "title": "Тест",
+            "codex": "УК",
+            "difficulty": "easy",
+            "case_text": "Ситуация",
+            "options": [
+                {"text": f"Вариант {i}", "is_correct": flag, "explanation": "…"}
+                for i, flag in enumerate(flags)
+            ],
+        }
+
+    def test_case_without_correct_option_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import CaseIn
+
+        with pytest.raises(ValidationError) as exc:
+            CaseIn(**self._payload(False, False))
+        assert "ровно один правильный" in str(exc.value)
+
+    def test_case_with_two_correct_options_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import CaseIn
+
+        with pytest.raises(ValidationError) as exc:
+            CaseIn(**self._payload(True, True, False))
+        assert "ровно один правильный" in str(exc.value)
+
+    def test_case_with_one_correct_option_is_accepted(self) -> None:
+        from app.modules.content.content_schemas import CaseIn
+
+        case = CaseIn(**self._payload(False, True, False))
+        assert sum(1 for option in case.options if option.is_correct) == 1

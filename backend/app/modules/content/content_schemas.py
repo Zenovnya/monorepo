@@ -124,6 +124,25 @@ class CaseIn(BaseModel):
             return stripped
         return value
 
+    @field_validator("options")
+    @classmethod
+    def _exactly_one_correct(cls, options: list[CaseOptionIn]):
+        """Ровно один правильный вариант — иначе кейс нерешаем.
+
+        Импорт из JSON-паков это проверяет (`importer.validate_case`), а
+        админка — нет: кейс без правильного ответа и кейс с двумя правильными
+        сохранялись с кодом 200. Дальше он попадал в адаптивный банк и в
+        диагностику, где `evaluate` не мог выставить вердикт, а пользователь
+        получал XP за ответ, который невозможно выбрать правильно.
+        """
+        correct = sum(1 for option in options if option.is_correct)
+        if correct != 1:
+            raise ValueError(
+                "У кейса должен быть ровно один правильный вариант "
+                f"(сейчас отмечено {correct})"
+            )
+        return options
+
 
 class CasesPack(BaseModel):
     """Пак самостоятельных кейсов."""
