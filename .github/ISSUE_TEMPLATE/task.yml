@@ -1,1 +1,44 @@
+name: Задача
+description: "Техническая работа: рефакторинг, тесты, инфраструктура, документация"
+labels: ["task"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Что не так сейчас и почему это мешает. Не «сделать красиво», а что ломается.
+    validations:
+      required: true
 
+  - type: textarea
+    id: done
+    attributes:
+      label: Критерии готовности
+      description: Проверяемые пункты — то, что можно подтвердить командой или тестом.
+      placeholder: |
+        - [ ] `pytest` зелёный
+        - [ ] есть тест на X
+        - [ ] docs/api.md обновлён
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Что входит и что не входит
+      description: Границы задачи. Явно перечислите, что делать НЕ планируется.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Backend
+        - Mobile
+        - CI / инфраструктура
+        - Документация
+        - Контент
+    validations:
+      required: true

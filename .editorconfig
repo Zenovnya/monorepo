@@ -1,1 +1,26 @@
+# Единый стиль для всех редакторов. Значения совпадают с тем, что уже
+# настроено в ruff (backend) и eslint/prettier (mobile), чтобы правки не
+# приезжали в диффе «переформатированием всего файла».
 
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{js,jsx,ts,tsx,json,yml,yaml,md}]
+indent_size = 2
+
+[*.md]
+# В markdown два пробела в конце строки — это перенос, удалять его нельзя.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+[*.{diff,patch}]
+trim_trailing_whitespace = false
