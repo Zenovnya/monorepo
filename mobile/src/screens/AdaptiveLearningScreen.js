@@ -36,10 +36,15 @@ export default function AdaptiveLearningScreen({ navigation }) {
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
 
-  const { data: item, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['learning-next'],
     queryFn: learningApi.next,
   });
+  // `learningApi.next` отдаёт {case, unavailableReason}: сервер объясняет,
+  // почему кейса нет, чтобы «всё пройдено» не показывалось вместо «контента
+  // ещё нет».
+  const item = data?.case;
+  const unavailableReason = data?.unavailableReason;
 
   const { data: progress = [] } = useQuery({
     queryKey: ['learning-progress'],
@@ -86,8 +91,46 @@ export default function AdaptiveLearningScreen({ navigation }) {
     );
   }
 
-  /* Экран завершения обучения — точечная рамка хохломы */
+  /*
+   * Кейса нет по одной из трёх причин, и показывать их одним экраном нельзя:
+   * «всё пройдено» — это достижение, а «контент не прошёл проверку» — это
+   * наша незакрытая работа. Раньше во всех случаях рисовалась золотая грамота
+   * «Все доступные кейсы пройдены», то есть приложение поздравляло
+   * пользователя с победой над пустым списком.
+   */
   if (!item) {
+    if (unavailableReason) {
+      return (
+        <View style={styles.center}>
+          <PaperGrain />
+          <View style={[styles.stateCard, styles.completeCard]}>
+            <KhokhlomaCorners variant="light" size="md" inset={9} />
+            <WaxSeal label="…" tone="gold" size={62} />
+            <Text style={styles.stateTitle}>
+              {unavailableReason === 'awaiting_review'
+                ? 'Кейсы на юридической проверке'
+                : 'Кейсы ещё не загружены'}
+            </Text>
+            <KhokhlomaDivider />
+            <Text style={styles.completeSubtitle}>
+              {unavailableReason === 'awaiting_review'
+                ? 'Мы показываем только разборы, проверенные юристом. Как только проверка закончится, кейсы появятся здесь — ничего делать не нужно.'
+                : 'Контент не загрузился на сервере. Попробуйте позже, мы уже знаем о проблеме.'}
+            </Text>
+            <PressableScale
+              style={[
+                styles.stateBtn,
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.buttonText}>Вернуться</Text>
+            </PressableScale>
+          </View>
+        </View>
+      );
+    }
+
+    /* Экран завершения обучения — точечная рамка хохломы */
     return (
       <View style={styles.center}>
         <PaperGrain />

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { PressableScale } from '../components/PressableScale';
-import { ErrorState, LoadingState } from '../components/StateViews';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { describeLoadError } from '../api/client';
 import {
   ScrollView,
@@ -67,19 +67,41 @@ export default function AssessmentScreen({ navigation }) {
     return <LoadingState label="Подготавливаем диагностику…" />;
   }
 
-  if (start.error || !data?.case) {
+  if (start.error) {
     return (
       <ErrorState
         title="Не удалось начать диагностику"
-        // Без серверного case причина почти всегда одна: пустая база контента
-        // или сбой загрузки. Говорим это словами, а не «ошибка».
-        message={
-          start.error
-            ? describeLoadError(start.error, 'диагностику')
-            : 'Кейсы диагностики не загрузились. Попробуйте ещё раз через минуту.'
-        }
+        message={describeLoadError(start.error, 'диагностику')}
         onRetry={() => start.refetch()}
         illustration={<WaxSeal label="§" tone="red" size={48} />}
+      />
+    );
+  }
+
+  /*
+   * Сервер вернул сессию без кейса и объяснил причину. Раньше этот случай
+   * выглядел как «кейсы не загрузились, попробуйте через минуту» — то есть
+   * предлагал повторять запрос, который никогда не завершится успехом, пока
+   * контент не пройдёт юридическую проверку. Повтор тут бесполезен, и честнее
+   * сказать об этом прямо.
+   */
+  if (!data?.case) {
+    const reason = data?.unavailable_reason;
+    return (
+      <EmptyState
+        title={
+          reason === 'awaiting_review'
+            ? 'Кейсы на юридической проверке'
+            : 'Диагностика пока недоступна'
+        }
+        message={
+          reason === 'awaiting_review'
+            ? 'Мы показываем только разборы, проверенные юристом. Как только проверка закончится, диагностика откроется — ничего делать не нужно.'
+            : 'На сервере нет ни одного опубликованного кейса. Мы уже знаем о проблеме.'
+        }
+        actionTitle="Вернуться"
+        onAction={() => navigation.goBack()}
+        illustration={<WaxSeal label="§" tone="gold" size={48} />}
       />
     );
   }

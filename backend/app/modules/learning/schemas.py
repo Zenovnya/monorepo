@@ -38,6 +38,11 @@ class AttemptResult(BaseModel):
 class AssessmentStart(BaseModel):
     session_id: uuid.UUID
     case: CaseRead | None
+    # Причина пустой выдачи: ``no_content`` — в банке нет опубликованных
+    # кейсов, ``awaiting_review`` — они есть, но ни один не прошёл юридическую
+    # проверку. ``None`` — кейс есть. Без этого клиент не может отличить
+    # «проверять нечего» от «всё пройдено» и от сбоя загрузки.
+    unavailable_reason: str | None = None
 
 
 class CompetencyProgress(BaseModel):

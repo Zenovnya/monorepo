@@ -214,3 +214,90 @@ class TestReviewGate:
             assert count == 0
 
         await engine.dispose()
+
+
+class TestUnavailableReason:
+    """Пустая лента должна объяснять причину, а не выдавать «всё пройдено».
+
+    Клиент показывал золотую грамоту «Все доступные кейсы пройдены» на любой
+    ``null`` от сервера — включая случай, когда в банке нет ни одного
+    проверенного кейса. Пользователь не проходил ничего, а получал достижение.
+    """
+
+    @staticmethod
+    async def _session_with(cases: list[tuple[str, str]]):
+        """Готовит БД с кейсами ``(source_slug, review_status)``."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.database import Base
+        from app.modules.learning.models import CaseVersion, LearningCase
+
+        engine = create_async_engine("sqlite+aiosqlite://")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+        session = factory()
+        for slug, review_status in cases:
+            case = LearningCase(title=slug, status="published")
+            session.add(case)
+            await session.flush()
+            session.add(
+                CaseVersion(
+                    case_id=case.id,
+                    version=1,
+                    situation=slug,
+                    difficulty=0.5,
+                    status="published",
+                    review_status=review_status,
+                    source_slug=slug,
+                )
+            )
+        await session.commit()
+        return engine, session
+
+    @pytest.mark.asyncio
+    async def test_empty_bank_reports_no_content(self) -> None:
+        from app.modules.learning import service as learning_service
+
+        engine, session = await self._session_with([])
+        try:
+            assert await learning_service.unavailable_reason(session) == "no_content"
+        finally:
+            await session.close()
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_imported_only_bank_reports_awaiting_review(self) -> None:
+        """Кейсы есть, но не проверены — это не «нет контента»."""
+        from app.modules.learning import service as learning_service
+
+        engine, session = await self._session_with([("a", "imported"), ("b", "in_review")])
+        try:
+            assert await learning_service.unavailable_reason(session) == "awaiting_review"
+        finally:
+            await session.close()
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_approved_content_reports_nothing(self) -> None:
+        """Есть что показать — причина не нужна, иначе клиент покажет заглушку."""
+        from app.modules.learning import service as learning_service
+
+        engine, session = await self._session_with([("a", "imported"), ("b", "approved")])
+        try:
+            assert await learning_service.unavailable_reason(session) is None
+        finally:
+            await session.close()
+            await engine.dispose()
+
+    def test_assessment_start_schema_carries_reason(self) -> None:
+        """Причина обязана доезжать до клиента в схеме ответа."""
+        from app.modules.learning.schemas import AssessmentStart
+
+        payload = AssessmentStart(session_id=uuid.uuid4(), case=None)
+        assert payload.unavailable_reason is None
+
+        payload = AssessmentStart(
+            session_id=uuid.uuid4(), case=None, unavailable_reason="awaiting_review"
+        )
+        assert payload.unavailable_reason == "awaiting_review"

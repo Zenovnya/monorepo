@@ -167,6 +167,34 @@ async def evaluate(session: AsyncSession, user_id: uuid.UUID, data):
             "explanation": answer.explanation, "mastery_updates": updates}
 
 
+async def unavailable_reason(session: AsyncSession) -> str | None:
+    """Почему пользователю нечего показать (``None`` — кейсы есть).
+
+    Без этого пустая выдача неотличима от сбоя: клиент показывал «все кейсы
+    пройдены» даже когда в банке не было ни одного проверенного кейса. Это
+    ложное достижение — пользователь считает, что всё выучил, хотя не увидел
+    ни одного разбора.
+    """
+    published = (await session.execute(
+        select(CaseVersion.id).where(
+            CaseVersion.status == "published",
+            LearningCase.status == "published",
+        ).join(LearningCase)
+    )).scalars().all()
+    if not published:
+        return "no_content"
+    approved = (await session.execute(
+        select(CaseVersion.id).where(
+            CaseVersion.status == "published",
+            LearningCase.status == "published",
+            CaseVersion.review_status == PUBLISHED_REVIEW_STATUS,
+        ).join(LearningCase)
+    )).scalars().all()
+    if not approved:
+        return "awaiting_review"
+    return None
+
+
 async def start_assessment(session: AsyncSession, user_id: uuid.UUID):
     assessment = AssessmentSession(user_id=user_id)
     session.add(assessment)

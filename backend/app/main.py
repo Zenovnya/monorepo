@@ -109,6 +109,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Заголовок с причиной пустой ленты (`no_content` / `awaiting_review`).
+    # Без expose_headers браузерный клиент его не прочитает: CORS отдаёт
+    # только простые заголовки, а остальные нужно разрешать явно.
+    expose_headers=["X-Learning-Unavailable"],
 )
 
 # Глобальный rate limiter: защита от спама и перерасхода бесплатных лимитов.

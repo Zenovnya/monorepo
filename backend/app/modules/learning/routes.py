@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,8 +23,9 @@ def user_id(authorization: str = Depends(auth_service.get_bearer_token)) -> uuid
 @router.post("/assessment/start", response_model=AssessmentStart)
 async def assessment_start(uid: uuid.UUID = Depends(user_id), session: AsyncSession = Depends(get_session)):
     assessment, case = await service.start_assessment(session, uid)
+    reason = None if case else await service.unavailable_reason(session)
     await session.commit()
-    return {"session_id": assessment.id, "case": case}
+    return {"session_id": assessment.id, "case": case, "unavailable_reason": reason}
 
 
 @router.get("/assessment/next", response_model=CaseRead | None)
@@ -51,6 +52,7 @@ async def assessment_answer(data: AttemptCreate, uid: uuid.UUID = Depends(user_i
 
 @router.get("/next", response_model=CaseRead | None)
 async def learning_next(
+    response: Response,
     exclude: str | None = Query(
         default=None,
         description=(
@@ -72,7 +74,15 @@ async def learning_next(
         except ValueError:
             # Мусор в query-параметре не должен ронять выдачу: пропускаем.
             continue
-    return await service.next_case(session, uid, exclude=seen)
+    case = await service.next_case(session, uid, exclude=seen)
+    if case is None:
+        # Пустая лента — это либо «всё пройдено», либо «показывать нечего».
+        # Клиент показывает разные экраны, поэтому причину отдаём заголовком:
+        # тело ответа — по контракту сам кейс или ``null``.
+        reason = await service.unavailable_reason(session)
+        if reason:
+            response.headers["X-Learning-Unavailable"] = reason
+    return case
 
 
 @router.post("/attempts", response_model=AttemptResult)

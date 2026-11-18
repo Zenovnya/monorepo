@@ -16,7 +16,17 @@ export const learningApi = {
       .get('/learning/next', {
         params: exclude.length ? { exclude: exclude.join(',') } : undefined,
       })
-      .then((r) => r.data),
+      .then((r) => {
+        const data = r.data;
+        // Сервер отдаёт `null`, когда показывать нечего, и объясняет причину
+        // заголовком: кейсов нет вовсе (`no_content`) или они не прошли
+        // юридическую проверку (`awaiting_review`). Без этого экран не мог
+        // отличить «всё пройдено» от «контента нет» и поздравлял зря.
+        if (data == null) {
+          return { case: null, unavailableReason: r.headers['x-learning-unavailable'] || null };
+        }
+        return { case: data, unavailableReason: null };
+      }),
   submitAttempt: (payload) => apiClient.post('/learning/attempts', payload).then((r) => r.data),
   submitAssessmentAnswer: (payload) =>
     apiClient.post('/learning/assessment/answer', payload).then((r) => r.data),
