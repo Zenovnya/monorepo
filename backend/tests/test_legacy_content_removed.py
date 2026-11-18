@@ -94,6 +94,61 @@ def test_migration_0026_drops_them() -> None:
     assert "daily_xp" not in dropped
 
 
+def _drop_order() -> list[str]:
+    import importlib.util
+
+    path = BACKEND / "migrations" / "versions" / "0026_drop_legacy_content.py"
+    spec = importlib.util.spec_from_file_location("m0026", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return list(module._DROP_ORDER)
+
+
+def test_drop_order_respects_foreign_keys() -> None:
+    """Таблицу нельзя удалить, пока на неё ссылается чужой внешний ключ.
+
+    ``ON DELETE CASCADE`` управляет удалением **строк**, а не таблиц: Postgres
+    отказывает в ``DROP TABLE cases``, если на неё всё ещё ссылается
+    ``review_states``. Первая версия миграции 0026 падала именно так — и падала
+    только в CI, потому что локальная проверка шла на sqlite, где внешние ключи
+    по умолчанию выключены.
+
+    Тест восстанавливает граф зависимостей из текста миграций 0001–0024 (там,
+    где эти таблицы создавались) и проверяет, что каждая таблица удаляется
+    раньше всех, кто на неё ссылается.
+    """
+    import re
+
+    # Зависимости: таблица -> таблицы, на которые она ссылается.
+    references: dict[str, set[str]] = {}
+    for path in sorted((BACKEND / "migrations" / "versions").glob("0*.py")):
+        if path.name.startswith("0025") or path.name.startswith("0026"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for block in re.split(r"op\.create_table\(", text)[1:]:
+            name = re.match(r'\s*"([a-z_]+)"', block)
+            if not name:
+                continue
+            table = name.group(1)
+            body = block.split("op.create_table(")[0]
+            refs = set(re.findall(r'sa\.ForeignKey\("([a-z_]+)\.', body))
+            refs |= set(re.findall(r'\[([a-z_]+)\.', body))
+            references.setdefault(table, set()).update(refs - {table})
+
+    dropped = _drop_order()
+    position = {table: index for index, table in enumerate(dropped)}
+
+    problems = []
+    for table, refs in references.items():
+        if table not in position:
+            continue  # таблица остаётся (notification_*, adaptive_*, daily_xp)
+        for target in refs:
+            if target in position and position[target] < position[table]:
+                problems.append(f"{table} удаляется после {target}, а ссылается на неё")
+
+    assert not problems, "\n".join(problems)
+
+
 @pytest.mark.parametrize(
     "path",
     ["/lexbear/cases", "/content/branches", "/learning/next", "/progress", "/srs/reviews"],

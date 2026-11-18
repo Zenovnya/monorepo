@@ -4,7 +4,7 @@
 `GET /docs` (Swagger UI) и `GET /openapi.json`.
 
 - Базовый префикс: `/` (модули развешивают свои префиксы: `/auth`, `/user`,
-  `/lexbear`, `/gamification`, …).
+  `/adaptive`, `/gamification`, …).
 - Формат — JSON, кодировка UTF-8.
 - Аутентификация — `Authorization: Bearer <access_token>` там, где указана.
   Access-токен живёт 60 минут (`ACCESS_TOKEN_EXPIRE_MINUTES`), refresh — 30 дней.
@@ -54,95 +54,89 @@
 подтвердил отмену, — клиент обязан сказать об этом пользователю (подробности в
 `docs/account-deletion.md`).
 
-## Учёба (`/lexbear`, `/content`)
+## Контент и адаптивное обучение (`/adaptive`)
+
+Контент поставляется файлом `app/content_packs/themes.json` (6 тем, 30 уроков,
+90 карточек, 72 нормы) и проверяется при импорте. Раньше он лежал в таблицах
+(`branches`/`lessons`/`cases`/`lexbear_*`) и в JSON-паках; эти таблицы и паки
+удалены миграцией 0026.
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| GET | `/lexbear/learn` | Карта обучения: юниты, уроки, прогресс |
-| GET | `/lexbear/lessons/{lesson_id}` | Урок с вопросами. При нуле жизней — `409` |
-| POST | `/lexbear/lessons/{lesson_id}/complete` | Завершить урок: ответы, XP, гемы, стрик. При нуле жизней — `409` |
-| GET | `/lexbear/cases` | Список кейсов |
-| GET | `/lexbear/cases/{case_id}` | Кейс с вариантами и разбором |
-| GET | `/lexbear/articles` | Свод статей с флагом «изучено» |
-| GET | `/content/branches` | Ветки контента (legacy) |
-| GET | `/content/branches/{branch_id}/lessons` | Уроки ветки |
-| GET | `/content/lessons/{lesson_id}` | Урок |
-| GET | `/content/lessons/{lesson_id}/cases` | Кейсы урока |
+| GET | `/adaptive` | Темы и пометка о редакционном статусе контента |
+| GET | `/adaptive/next` | Следующий кейс по решению сервера (открывает попытку) |
+| GET | `/adaptive/overview` | Прогресс по темам и последние ответы |
+| GET | `/adaptive/lessons/{lesson_id}` | Урок: теория, шаги, нормы |
+| POST | `/adaptive/attempts` | Открыть повтор уже виденного кейса |
+| POST | `/adaptive/attempts/{attempt_id}/actions` | Ответ / подсказка / пропуск / разбор |
 
-Ответ `409` при исчерпанном запасе жизней:
+### Кто решает, что показать
+
+Клиент **не выбирает** ни карточку, ни режим зачёта. `GET /adaptive/next` сам
+вызывает движок отбора и открывает попытку; параметры `topic_id`/`lesson_id`
+означают только пожелание пользователя. Ручки «открой эту карточку как свежий
+кейс» нет: иначе клиент выдал бы себе засчитанную попытку на уже показанный
+разбор, и приоритеты тем перестали бы отражать знания.
+
+`origin=auto` в `POST /adaptive/attempts` отклоняется (`400 BAD_ORIGIN`) —
+автоматическую выдачу делает только `/next`.
+
+### Ответ `/adaptive/next`
 
 ```json
 {
-  "detail": {
-    "code": "no_lives",
-    "message": "Жизни закончились. Новая восстановится через 12 минут.",
-    "lives": {
-      "lives": 0,
-      "max_lives": 5,
-      "next_life_in_seconds": 720,
-      "regen_minutes": 20
-    }
-  }
+  "choice": {"kind": "new_case", "reason": "THEME_PRIORITY",
+             "topic_id": "CIV", "item_id": "CIV01_R1", "origin": "auto"},
+  "item": {
+    "item_id": "CIV01_R1", "kind": "recommend_case",
+    "topic_id": "CIV", "topic_title": "…", "lesson_id": "CIV01", "lesson_title": "…",
+    "situation": "…", "question": "…",
+    "options": [{"id": "A", "text": "…"}, {"id": "B", "text": "…"}, {"id": "C", "text": "…"}]
+  },
+  "attempt_id": "a1", "mode": "fresh_case", "origin": "auto"
 }
 ```
 
-## Практика и повторения (`/progress`, `/srs`, `/learning`)
+Ключа ответа, разбора и ссылок на нормы в карточке **нет** — они приходят
+только в результате действия. `kind` в `choice`: `new_case`, `resume`,
+`review`, `lesson`, `catalog`, `none`. `review` означает «свежие кейсы темы
+закончились, предложен повтор» — попытка при этом не открывается.
 
-| Метод | Путь | Назначение |
-|---|---|---|
-| POST | `/progress/answer` | Ответ на кейс: пишет попытку, обновляет SM-2 |
-| GET | `/progress` | Сводный прогресс |
-| POST | `/progress/complete` | Завершить урок (legacy-путь) |
-| GET | `/srs/reviews` | Кейсы, срок повторения которых наступил |
-| GET | `/learning/next` | Следующий адаптивный кейс; `null`, если показывать нечего |
-| POST | `/learning/attempts` | Записать попытку |
-| GET | `/learning/progress` | Компетенции: освоение и уверенность |
-| POST | `/learning/assessment/start` | Начать диагностику |
-| GET | `/learning/assessment/next` | Следующий вопрос диагностики |
-| POST | `/learning/assessment/answer` | Ответить на вопрос диагностики |
+### Ответ на действие
 
-Пользователю показываются **только кейсы со статусом `approved`**. Гейт
-действует на **всех** путях к кейсам, а не только в адаптивной ленте:
+```json
+{"attempt_id": "a1", "status": "answered", "reason": "COUNTED", "counted": true,
+ "correct": true, "correct_option_id": "B",
+ "explanation": "…", "legal_basis_ids": ["RU_CONST_40"],
+ "options": [{"id": "A", "text": "…", "explanation": "…"}]}
+```
 
-| Путь | Как применяется гейт |
-|---|---|
-| `/learning/next`, `/learning/assessment/*` | Фильтр по `review_status` в запросе банка |
-| `/lexbear/cases`, `/lexbear/cases/{id}` | Связь `cases.slug` → `CaseVersion.source_slug` |
-| `POST /progress/answer` | Тот же гейт: ответ на скрытый кейс → `404` |
-| `GET /srs/reviews` | Скрытый кейс не попадает в повторения |
-| `DELETE /admin/content/cases/{slug}?hard=false` | Версии в банке переводятся в `retired` |
+`reason` при незачёте: `SKIP`, `REVEAL`, `NOT_ASSESSMENT`, `FAMILY_SEEN`,
+`PRACTICE`, `ASSISTED`, `CONTENT_UNAVAILABLE`. Порядок проверки именно такой —
+он важен: пропуск объясняется как пропуск, а не как «плохой ответ».
+Повторное действие по закрытой попытке возвращает `already_closed: true` и не
+меняет исход (две вкладки — выигрывает первая).
 
-Legacy-таблица `cases` поля статуса проверки не имеет, поэтому видимость
-определяется связью по slug. Без этого вкладка «Кейсы» обходила проверку:
-список отдавал 100 непроверенных кейсов при 4 одобренных в банке, а
-`POST /progress/answer` возвращал правильный ответ и разбор со ссылкой на норму
-по id любого кейса.
+`action: "help"` попытку **не закрывает**, но навсегда снимает зачёт и
+возвращает `assistance` (подсказку карточки или теорию урока).
 
-Импорт из паков и админки ставит `imported` — то есть «загружено, но юристом не
-проверено», и такой кейс не попадает ни в `/learning/next`, ни в диагностику.
-Сразу после `reload-adaptive` лента поэтому пуста, пока кейсы не проверены:
-`GET /admin/content/adaptive/review/summary` показывает
-`visible_to_users` и `hidden_by_review`. Эталонный стартовый кейс из сида
-создаётся уже проверенным.
+### Прогресс по темам
 
-### Пустая лента: почему именно
+`GET /adaptive/overview` отдаёт по каждой теме: `n` (ответов в окне),
+`errors`, `practice_priority` (проценты) и `state`
+(`NOT_ASSESSED` / `LIMITED` / `RECENT_RESULTS`).
 
-`null` от `/learning/next` означает две разные вещи, и клиент обязан их
-различать: «всё пройдено» и «показывать нечего». Второе — не достижение
-пользователя, а незакрытая работа редакции, и поздравлять с ним нельзя.
+`practice_priority` — **приоритет полезной практики**, а не вероятность
+правильного ответа: `need = (2 + errors) / (4 + n)` по последним пяти
+наблюдениям, умноженное на вес темы (80–120%). Пустая тема даёт 50% намеренно:
+про неё нет наблюдений.
 
-Причина приходит в заголовке ответа (тело остаётся `null` по контракту):
+### Контент и видимость
 
-| `X-Learning-Unavailable` | Значение |
-|---|---|
-| `no_content` | В банке нет опубликованных кейсов вовсе |
-| `awaiting_review` | Кейсы есть, но ни один не прошёл юридическую проверку |
-| отсутствует | Кейсов, доступных пользователю, нет — они пройдены |
-
-Заголовок разрешён в CORS (`expose_headers`), иначе браузерный клиент его не
-увидит. Диагностика отдаёт ту же причину полем `unavailable_reason` в
-`POST /learning/assessment/start` (`{"session_id": ..., "case": null,
-"unavailable_reason": "awaiting_review"}`).
+Пользователю показываются только карточки и уроки со статусом `approved`,
+у которых есть подпись и дата. Черновики доступны только с админ-токеном
+(`sandbox`), `retired` и `needs_recheck` — никогда. Отзыв карточки закрывает
+открытую попытку без зачёта (`CONTENT_UNAVAILABLE`) и не раскрывает ключ.
 
 ## Геймификация (`/gamification`)
 
@@ -214,16 +208,12 @@ Legacy-таблица `cases` поля статуса проверки не им
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/health` | Проверка живости и доступности БД |
-| POST | `/lexbear/seed` | Сид контента |
-| GET/PUT | `/admin/content/cases` | Список кейсов / upsert кейса по `slug` |
-| DELETE | `/admin/content/cases/{slug}` | Удаление: `?hard=false` — мягкое (`is_active=false` + версии в банке → `retired`), иначе физическое |
-| GET/PUT/DELETE | `/admin/content/units`, `/admin/content/units/{unit_code}/lessons` | Юниты и уроки |
-| GET | `/admin/content/lessons` | Уроки (список) |
-| DELETE | `/admin/content/lessons/{slug}` | Мягкое удаление урока |
-| GET | `/admin/content/adaptive/review` | Очередь юридической проверки (`?review_status=imported`) |
-| GET | `/admin/content/adaptive/review/summary` | Сколько кейсов видит пользователь (`visible_to_users`) и почему остальные скрыты |
-| POST | `/admin/content/adaptive/review/{slug}` | Поставить статус `in_review` / `approved` (фиксирует кто и когда) |
-| POST | `/admin/content/reload`, `/admin/content/reload-adaptive` | Перечитать контент |
+| GET | `/admin/content/pack` | Сводка по опубликованному паку: темы, уроки, карточки, нормы |
+| POST | `/admin/content/pack/validate` | Проверить пак теми же правилами, что и импорт |
+| GET | `/admin/content/status` | «Контент есть и валиден» для деплой-скриптов |
+| GET | `/admin/content/pack/{lesson_id}` | Предпросмотр урока так, как его видит пользователь |
+| POST | `/admin/content/validate/case` | Проверить кейс из формы, не записывая: нерешаемый кейс отклоняется |
+| POST | `/admin/content/validate/lesson` | Проверить урок с вопросами из формы |
 | POST | `/admin/content/notifications/dispatch` | Рассылка напоминаний (`dry_run` для проверки) |
 | GET | `/admin/ui` | Простая админ-страница |
 

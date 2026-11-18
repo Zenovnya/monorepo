@@ -50,34 +50,39 @@ depends_on: Union[str, Sequence[str], None] = None
 # Порядок важен: сначала потомки, потом родители. На Postgres каскад бы сработал
 # и сам, но явный порядок делает миграцию читаемой и безопасной на sqlite.
 _DROP_ORDER = (
-    # старое дерево контента
-    "case_options",
-    "cases",
-    "questions",
-    "theory_cards",
-    "lexbear_progress",
-    "lexbear_lessons",
-    "learned_articles",
+    # Сначала всё, что ссылается на контент, — потом сам контент.
+    #
+    # `ON DELETE CASCADE` управляет удалением СТРОК, а `DROP TABLE` требует,
+    # чтобы в этот момент на таблицу не ссылался ни один внешний ключ. Поэтому
+    # прогресс и повторения идут раньше `cases`/`lessons`, а `case_options` —
+    # раньше `cases`. Порядок проверяется тестом
+    # `tests/test_legacy_content_removed.py::test_drop_order_respects_foreign_keys`.
+    "case_options",                      # -> cases
+    "review_logs",                       # -> cases
+    "review_states",                     # -> cases
+    "progress",                          # -> lessons
+    "lexbear_progress",                  # -> lexbear_lessons
+    "cases",                             # <- case_options, review_*, progress
+    "questions",                         # -> lexbear_lessons
+    "theory_cards",                      # -> lexbear_lessons
+    "learned_articles",                  # -> articles
     "articles",
+    "lexbear_lessons",                   # <- lexbear_progress, questions, theory_cards
     "units",
-    "lessons",
+    "lessons",                           # <- progress, branches
     "branches",
-    # прогресс по удалённому контенту
-    "review_logs",
-    "review_states",
-    "progress",
-    # адаптивный банк прошлой итерации
-    "learning_case_competencies",
-    "learning_case_answers",
-    "learning_case_steps",
-    "learning_attempts",
+    # Адаптивный банк прошлой итерации: от потомков к родителям.
+    "learning_case_competencies",        # -> learning_case_versions
+    "learning_attempts",                 # -> learning_case_steps, case_answers, sessions
+    "learning_case_answers",             # -> learning_case_steps
+    "learning_case_steps",               # -> learning_case_versions
     "learning_assessment_sessions",
-    "learning_case_versions",
+    "learning_case_versions",            # -> learning_cases
     "learning_cases",
-    "learning_competency_prerequisites",
-    "learning_user_competency_states",
-    "learning_competencies",
-    "learning_topics",
+    "learning_competency_prerequisites", # -> learning_competencies
+    "learning_user_competency_states",   # -> learning_competencies
+    "learning_competencies",             # -> learning_topics
+    "learning_topics",                   # -> learning_domains
     "learning_domains",
 )
 

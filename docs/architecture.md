@@ -56,10 +56,9 @@ CORS выставляются вручную по той же причине.
 |---|---|---|
 | `auth` | `users`, `refresh_tokens`, `user_achievements`, `password_reset_tokens` | `service.py` (JWT, bcrypt, сброс пароля) |
 | `user` | профиль, онбординг, удаление аккаунта | `service.py` (`delete_account`) |
-| `content` | `units`, `lexbear_lessons`, `questions`, `theory_cards`, `articles`, legacy `branches`/`lessons`/`cases` | `lexbear_service.py`, `content_loader.py` |
-| `learning` | адаптивный банк: `learning_cases*`, компетенции, диагностика | `importer.py`, `service.py` |
-| `progress` | `progress`, `lexbear_progress`, `review_states`, `review_logs`, `daily_xp` | `service.py` |
-| `srs` | алгоритм SM-2 (чистые функции) | `sm2.py` |
+| `adaptive` | отбор кейсов: `adaptive_states`, `adaptive_attempts`, `adaptive_observations`, `adaptive_seen_families`, `adaptive_topic_priorities` | `engine.py` (правила), `service.py` (БД), `pack.py` (контент) |
+| `content` | проверка ввода и сверка ответа (таблиц нет) | `validation.py`, `scoring.py` |
+| `progress` | `daily_xp` (ежедневная цель) | `models.py` |
 | `gamification` | XP, уровни, стрик, гемы, жизни, лиги, магазин | `service.py` |
 | `notifications` | `notifications`, `push_tokens`, `notification_settings`, `notification_deliveries` | `service.py`, `app/push.py` |
 | `payments` | `subscriptions`, `payment_history` | `service.py`, `providers/` |
