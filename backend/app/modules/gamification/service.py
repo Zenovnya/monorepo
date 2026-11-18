@@ -37,6 +37,9 @@ class UnknownShopItemError(GamificationError):
 LEAGUES: tuple[str, ...] = ("Бронза", "Серебро", "Золото", "Мантия", "Фемида")
 
 # Каталог товаров за гемы. Ключ — идентификатор товара из клиента.
+# Сколько XP даёт сундук chest_xp (отдельно от цены в гемах).
+CHEST_XP_BONUS = 100
+
 SHOP_ITEMS: dict[str, int] = {
     "life_refill": 50,
     "streak_freeze": 200,
@@ -274,7 +277,61 @@ async def purchase_shop_item(
         raise InsufficientGemsError("Недостаточно гемов")
 
     user.gems -= price
+    effect = _apply_shop_effect(session, user, item)
     await session.flush()
     await cache_delete(_gamification_cache_key(user.id))
 
-    return {"item": item, "spent": price, "gems": user.gems}
+    return {
+        "item": item,
+        "spent": price,
+        "gems": user.gems,
+        "effect": effect,
+    }
+
+
+# Максимум жизней (совпадает с default у User.lives).
+MAX_LIVES = 5
+
+# Косметика попадает в bear_outfit под этими ключами.
+_OUTFITS = {
+    "outfit_top_hat": "top_hat",
+    "outfit_judge_robe": "judge_robe",
+}
+
+
+def _apply_shop_effect(session, user: User, item: str) -> dict:
+    """Применяет эффект купленного товара к пользователю.
+
+    До этой правки покупка только списывала гемы: пользователь платил
+    (в том числе реальными деньгами через пакеты гемов) и не получал ничего.
+    """
+    if item == "life_refill":
+        before = user.lives or 0
+        user.lives = MAX_LIVES
+        return {"kind": "lives", "lives": user.lives, "restored": user.lives - before}
+
+    if item == "chest_xp":
+        bonus = CHEST_XP_BONUS
+        user.xp += bonus
+        user.level = level_from_xp(user.xp)
+        return {"kind": "xp", "xp": user.xp, "gained": bonus}
+
+    if item in _OUTFITS:
+        key = _OUTFITS[item]
+        outfit = dict(user.bear_outfit or {})
+        already = bool(outfit.get(key))
+        outfit[key] = True
+        user.bear_outfit = outfit
+        return {"kind": "outfit", "outfit": key, "already_owned": already}
+
+    if item == "streak_freeze":
+        # Заморозки стрика кладём в то же расширяемое JSON-поле, что и одежду:
+        # миграция не нужна, структура не конфликтует с outfit-ключами.
+        outfit = dict(user.bear_outfit or {})
+        freezes = int(outfit.get("streak_freezes") or 0)
+        outfit["streak_freezes"] = freezes + 1
+        user.bear_outfit = outfit
+        return {"kind": "streak_freeze", "count": outfit["streak_freezes"]}
+
+    # Неизвестный товар отсекается выше (UnknownShopItemError), сюда не попадаем.
+    return {"kind": "none"}

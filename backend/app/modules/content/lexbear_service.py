@@ -151,6 +151,28 @@ def _serialize_case(c) -> dict:
     }
 
 
+def _serialize_case_list_item(c) -> dict:
+    """Кейс для списочного ответа — только то, что нужно карточке.
+
+    Сознательно НЕ включает ``correct`` и ``explanation``:
+    - список на клиенте их не использует (проверено в CasesScreen), это лишний
+      вес — ответ ужимается примерно втрое;
+    - правильный ответ в списке позволяет узнать его до попытки. Разбор
+      приходит в детальном ответе (``GET /lexbear/cases/{id}``) и в результате
+      проверки.
+    """
+    return {
+        "id": str(c.id),
+        "title": c.title,
+        "codex": c.codex,
+        "difficulty": c.difficulty,
+        "case_text": c.case_text,
+        "hint": c.hint,
+        "options": [{"id": o.id, "text": o.text} for o in c.options],
+        "featured": c.featured,
+    }
+
+
 async def list_cases(session: AsyncSession) -> list[dict]:
     """Возвращает кейсы для отдельной вкладки «Кейсы».
 
@@ -174,7 +196,7 @@ async def list_cases(session: AsyncSession) -> list[dict]:
         .order_by(Case.created_at)
     )
     out = [
-        _serialize_case(c)
+        _serialize_case_list_item(c)
         # Учитываем только кейсы, заполненные под вкладку «Кейсы».
         for c in result.all()
         if c.title and c.codex

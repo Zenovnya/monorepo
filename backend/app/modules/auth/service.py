@@ -3,6 +3,7 @@
 Хеширование паролей (bcrypt) и генерация JWT-токенов (python-jose).
 """
 
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +39,17 @@ class InvalidRefreshTokenError(AuthError):
 
 class UserNotFoundError(AuthError):
     """Пользователь не найден."""
+
+
+def hash_refresh_token(refresh_value: str) -> str:
+    """Хеширует refresh-токен перед сохранением в БД (SHA-256).
+
+    Значение — JWT с 256-битной энтропией, подбирать его бессмысленно, поэтому
+    достаточно быстрого детерминированного хеша (bcrypt здесь избыточен и
+    сломал бы поиск по индексу). Зато дамп БД больше не содержит рабочих
+    refresh-токенов: по хешу исходную строку не восстановить.
+    """
+    return hashlib.sha256(refresh_value.encode("utf-8")).hexdigest()
 
 
 def _password_bytes(password: str) -> bytes:
@@ -165,7 +177,7 @@ async def create_refresh_token(session: AsyncSession, user: User) -> str:
     )
     token = RefreshToken(
         user_id=user.id,
-        token=refresh_value,
+        token=hash_refresh_token(refresh_value),
         expires_at=expires_at,
     )
     session.add(token)
@@ -189,7 +201,9 @@ async def rotate_refresh_token(
 ) -> dict:
     """Обновляет пару токенов по действующему refresh-токену."""
     record = await session.scalar(
-        select(RefreshToken).where(RefreshToken.token == refresh_value)
+        select(RefreshToken).where(
+            RefreshToken.token == hash_refresh_token(refresh_value)
+        )
     )
     if record is None or record.is_expired:
         raise InvalidRefreshTokenError("Недействительный refresh-токен")
@@ -212,12 +226,22 @@ async def rotate_refresh_token(
 
 
 async def revoke_refresh_token(
-    session: AsyncSession, refresh_value: str
+    session: AsyncSession,
+    refresh_value: str,
+    user_id: uuid.UUID | None = None,
 ) -> None:
-    """Отзывает refresh-токен (выход из системы)."""
+    """Отзывает refresh-токен (выход из системы).
+
+    Если передан ``user_id``, отзывается только собственный токен — так logout
+    не может погасить чужую сессию по украденному значению.
+    """
     record = await session.scalar(
-        select(RefreshToken).where(RefreshToken.token == refresh_value)
+        select(RefreshToken).where(
+            RefreshToken.token == hash_refresh_token(refresh_value)
+        )
     )
+    if record is not None and user_id is not None and record.user_id != user_id:
+        return
     if record is not None:
         await session.delete(record)
         await session.commit()

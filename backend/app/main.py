@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -93,6 +94,12 @@ async def unhandled_exception_handler(
         content={"detail": "Внутренняя ошибка сервера"},
         headers=headers,
     )
+
+# Сжатие ответов. Список кейсов — это ~94 КБ JSON (100 кейсов с вариантами),
+# а на мобильном интернете каждый лишний килобайт заметен. GZip отдаёт его
+# в 4-5 раз меньше. minimum_size=500 — мелочь не трогаем, чтобы не тратить
+# CPU на пару сотен байт.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Настраиваем CORS только для явно разрешённых источников.
 app.add_middleware(

@@ -1,6 +1,6 @@
 """Роуты модуля аутентификации."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -97,10 +97,23 @@ async def refresh(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     data: LogoutRequest,
+    authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Выход пользователя: отзыв refresh-токена."""
-    await service.revoke_refresh_token(session, data.refresh_token)
+    """Выход пользователя: отзыв refresh-токена.
+
+    Если клиент прислал access-токен, отзываем только его собственный
+    refresh — чужую сессию погасить нельзя.
+    """
+    owner_id = None
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            owner_id = service.decode_access_token(
+                authorization.split(" ", 1)[1].strip()
+            )
+        except service.AuthError:
+            owner_id = None
+    await service.revoke_refresh_token(session, data.refresh_token, owner_id)
 
 
 @router.get("/me", response_model=UserRead)

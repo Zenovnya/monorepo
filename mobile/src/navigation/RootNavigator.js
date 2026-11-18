@@ -111,10 +111,13 @@ export default function RootNavigator() {
     if (!isHydrated) hydrate();
   }, [isHydrated, hydrate]);
 
-  // Показываем спиннер, пока идёт гидратация, либо пока по валидному токену
-  // ещё догружается профиль пользователя (иначе экраны получат user == null
-  // и могут упасть при обращении к его полям).
-  if (!isHydrated || (isAuthenticated && !user)) {
+  // Спиннер держим только на гидратации токенов из хранилища — это локальное
+  // чтение, доли миллисекунды. Раньше здесь ждали ещё и загрузку профиля
+  // (/auth/me), то есть приложение не показывало ничего до ответа сети: на
+  // медленном соединении это секунды пустого экрана на каждом холодном старте.
+  // Экраны умеют жить с user == null (все обращения идут через user?.), профиль
+  // догружается в фоне и подставляется сам.
+  if (!isHydrated) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.accent} />

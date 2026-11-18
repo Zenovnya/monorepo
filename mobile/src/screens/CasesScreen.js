@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   ScrollView,
   Pressable,
   ActivityIndicator,
@@ -70,13 +71,19 @@ export default function CasesScreen({ navigation }) {
     queryFn: lexbearApi.cases,
   });
 
-  const all = Array.isArray(cases)
-    ? cases
-    : Array.isArray(cases?.cases)
-    ? cases.cases
-    : Array.isArray(cases?.data)
-    ? cases.data
-    : [];
+  // Массив стабилен между рендерами: раньше `all` создавался заново на каждый
+  // рендер, из-за чего useMemo ниже пересчитывал фильтрацию вхолостую.
+  const all = useMemo(
+    () =>
+      Array.isArray(cases)
+        ? cases
+        : Array.isArray(cases?.cases)
+        ? cases.cases
+        : Array.isArray(cases?.data)
+        ? cases.data
+        : [],
+    [cases]
+  );
 
   const filtered = useMemo(
     () =>
@@ -123,12 +130,26 @@ export default function CasesScreen({ navigation }) {
   const listItems = filtered.slice(activeFilter === 'Все' ? 1 : 0);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
+      {/* Текстура бумаги — абсолютный слой над всем экраном, вне скролла:
+          внутри ListHeaderComponent она бы растянулась только на шапку. */}
       <PaperGrain />
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        data={listItems}
+        // 100 карточек в ScrollView рендерились целиком до первого кадра — это
+        // и ощущалось как «кейсы долго грузятся», хотя сеть уже ответила.
+        // FlatList монтирует окно и подгружает остальное по скроллу.
+        keyExtractor={(c) => String(c.id)}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews
+        // Всё, что выше списка (шапка, фильтры, «особый кейс»), едет в заголовке.
+        ListHeaderComponent={
+          <>
       <TopStats />
 
       {/* Типографическая шапка архива */}
@@ -266,8 +287,11 @@ export default function CasesScreen({ navigation }) {
             </Text>
           </View>
         )}
-
-        {listItems.map((c, idx) => {
+      </View>
+          </>
+        }
+        // Одна карточка дела. Раньше это был .map() внутри ScrollView.
+        renderItem={({ item: c, index: idx }) => {
           const isSpecial = c.difficulty === 'hard';
           const diff = diffMap[c.difficulty] || diffMap.medium;
           const sealTone = codexSealTone[c.codex] || diff.sealTone;
@@ -341,9 +365,9 @@ export default function CasesScreen({ navigation }) {
               </View>
             </Pressable>
           );
-        })}
-      </View>
-    </ScrollView>
+        }}
+      />
+    </View>
   );
 }
 
