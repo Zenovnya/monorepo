@@ -54,6 +54,7 @@ const linking = {
       ResetPassword: 'reset-password',
       // Возврат из платёжного шлюза: lapazakona://payment-return
       PaymentReturn: 'payment-return',
+      DeleteAccount: 'delete-account',
       MainTabs: '',
     },
   },

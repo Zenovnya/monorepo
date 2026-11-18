@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { progressApi } from '../api/progress';
@@ -184,18 +184,17 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}
       <View style={styles.coverBanner}>
-        <Pressable
+        <PressableScale
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Настройки"
-          style={({ pressed }) => [
+          style={[
             styles.settingsBtn,
-            pressed && styles.smallPressed,
           ]}
           onPress={() => navigation.navigate('Settings')}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>
-        </Pressable>
+        </PressableScale>
 
         <KhokhlomaMedallion size={146}>
           <AnimatedMascot
@@ -233,15 +232,14 @@ export default function ProfileScreen({ navigation }) {
                 if (nameDraft.trim()) saveName.mutate(nameDraft.trim());
               }}
             />
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Сохранить имя"
               disabled={!nameDraft.trim() || saveName.isPending}
               onPress={() => saveName.mutate(nameDraft.trim())}
-              style={({ pressed }) => [
+              style={[
                 styles.nameSaveBtn,
                 (!nameDraft.trim() || saveName.isPending) && { opacity: 0.45 },
-                pressed && styles.smallPressed,
               ]}
             >
               {saveName.isPending ? (
@@ -249,8 +247,8 @@ export default function ProfileScreen({ navigation }) {
               ) : (
                 <Text style={styles.nameSaveText}>OK</Text>
               )}
-            </Pressable>
-            <Pressable
+            </PressableScale>
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Отменить"
               onPress={() => {
@@ -258,30 +256,28 @@ export default function ProfileScreen({ navigation }) {
                 setNameDraft(user?.name ?? '');
                 setNameError(null);
               }}
-              style={({ pressed }) => [
+              style={[
                 styles.nameCancelBtn,
-                pressed && styles.smallPressed,
               ]}
             >
               <Text style={styles.nameCancelText}>✕</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         ) : (
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Изменить имя"
             onPress={() => {
               setNameDraft(user?.name ?? '');
               setEditingName(true);
             }}
-            style={({ pressed }) => [
+            style={[
               styles.nameRow,
-              pressed && styles.smallPressed,
             ]}
           >
             <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
             <Text style={styles.namePencil}>✎</Text>
-          </Pressable>
+          </PressableScale>
         )}
 
         {nameError ? (
@@ -301,10 +297,9 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Парадная лаковая карточка LexBear Plus (чернильный лак + золото и красный хохломы) */}
       {premiumRow && (
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={[
             styles.superCard,
-            pressed && styles.superPressed,
           ]}
           onPress={() => navigate(premiumRow.key)}
         >
@@ -318,7 +313,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.superCtaCircle}>
             <Text style={styles.superCtaArrow}>→</Text>
           </View>
-        </Pressable>
+        </PressableScale>
       )}
 
       {/* Чистая сетка «Обзор» 2×2 */}
@@ -374,13 +369,12 @@ export default function ProfileScreen({ navigation }) {
         {regularRows.map((r, idx) => {
           const seal = ROW_SEAL[r.key] || ROW_SEAL.bear;
           return (
-            <Pressable
+            <PressableScale
               key={r.key}
               onPress={() => navigate(r.key)}
-              style={({ pressed }) => [
+              style={[
                 styles.navRow,
                 idx < regularRows.length - 1 && styles.rowDivider,
-                pressed && styles.navRowPressed,
               ]}
             >
               <WaxSeal label={seal.label} tone={seal.tone} size={38} />
@@ -389,7 +383,7 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.navHint}>{r.hint}</Text>
               </View>
               <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>

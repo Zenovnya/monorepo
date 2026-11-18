@@ -52,3 +52,20 @@ class PetBearOut(BaseModel):
 
     bear_mood: int
     pet_count: int
+
+class DeleteAccountIn(BaseModel):
+    """Подтверждение удаления аккаунта.
+
+    Пароль обязателен: удаление необратимо, и одного украденного access-токена
+    (у него срок 15 минут) для него недостаточно.
+    """
+
+    password: str = Field(min_length=1, max_length=256)
+
+
+class DeleteAccountOut(BaseModel):
+    """Результат удаления аккаунта."""
+
+    deleted: bool = True
+    email: str
+    leftover_rows: int = 0

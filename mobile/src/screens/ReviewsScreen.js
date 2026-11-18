@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaCorners,
@@ -47,11 +47,11 @@ export default function ReviewsScreen({ navigation }) {
   };
 
   const renderItem = ({ item }) => (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel="Открыть кейс для повторения"
       onPress={() => navigation.navigate('CaseDetail', { caseId: item.case_id })}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={[styles.row]}
     >
       <KhokhlomaCorners variant="light" size="sm" inset={6} />
 
@@ -69,7 +69,7 @@ export default function ReviewsScreen({ navigation }) {
       </Text>
 
       <Text style={styles.rowAction}>Повторить →</Text>
-    </Pressable>
+    </PressableScale>
   );
 
   return (
@@ -93,18 +93,17 @@ export default function ReviewsScreen({ navigation }) {
         ListHeaderComponent={
           <View>
             <View style={styles.header}>
-              <Pressable
+              <PressableScale
                 onPress={() => navigation.goBack()}
                 hitSlop={8}
-                style={({ pressed }) => [
+                style={[
                   styles.backBtn,
-                  pressed && styles.backPressed,
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Назад"
               >
                 <Text style={styles.backText}>←</Text>
-              </Pressable>
+              </PressableScale>
               <View style={styles.headerCenter}>
                 <Text style={styles.headerKicker}>§ ПОВТОРЕНИЕ НОРМ</Text>
                 <Text style={styles.title}>Повторить</Text>
@@ -178,7 +177,6 @@ const styles = StyleSheet.create({
     borderColor: brand.rule,
     backgroundColor: colors.card,
   },
-  backPressed: { opacity: 0.7 },
   backText: {
     fontSize: 20,
     color: colors.text,
@@ -232,7 +230,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     overflow: 'hidden',
   },
-  rowPressed: { opacity: 0.85 },
   rowHead: {
     flexDirection: 'row',
     alignItems: 'center',

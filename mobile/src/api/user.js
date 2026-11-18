@@ -19,4 +19,8 @@ export const userApi = {
 
   // Погладить мишку (повышает настроение)
   petBear: () => apiClient.post('/user/bear/pet').then((r) => r.data),
+
+  // Удалить аккаунт и все данные. Пароль — подтверждение необратимого действия.
+  deleteMe: (password) =>
+    apiClient.delete('/user/me', { data: { password } }).then((r) => r.data),
 };

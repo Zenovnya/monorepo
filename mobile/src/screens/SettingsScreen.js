@@ -6,12 +6,16 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
 import { notificationsApi } from '../api/notifications';
 import { userApi } from '../api/user';
+import { AnimatedSwitch } from '../components/AnimatedSwitch';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaDivider,
@@ -120,6 +124,31 @@ export default function SettingsScreen({ navigation }) {
     await logout();
   };
 
+  /**
+   * Переход к удалению — через подтверждение.
+   *
+   * На вебе у Alert из react-native нет кнопок, поэтому там ведём сразу на
+   * экран: он сам требует галочку и пароль, так что случайно ничего не удалится.
+   */
+  const confirmDelete = () => {
+    if (Platform.OS === 'web') {
+      navigation.navigate('DeleteAccount');
+      return;
+    }
+    Alert.alert(
+      'Удалить аккаунт?',
+      'Профиль, прогресс и история платежей удалятся навсегда. На следующем шаге нужно подтвердить паролем.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Продолжить',
+          style: 'destructive',
+          onPress: () => navigation.navigate('DeleteAccount'),
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView
       style={styles.container}
@@ -130,18 +159,17 @@ export default function SettingsScreen({ navigation }) {
 
       {/* Шапка */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Назад"
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.backBtnPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={styles.title}>Настройки</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -150,15 +178,16 @@ export default function SettingsScreen({ navigation }) {
         <DocumentSectionHeader title="Аккаунт" style={styles.sectionHeader} />
         <View style={styles.groupCard}>
           {rows.map((r, idx) => {
-            const RowWrapper = r.onPress ? Pressable : View;
+            // Строка-навигация проседает пружиной; статичная — просто View,
+            // чтобы не было ложного отклика на нажатие.
+            const RowWrapper = r.onPress ? PressableScale : View;
             return (
               <RowWrapper
                 key={r.title}
                 onPress={r.onPress}
-                style={({ pressed }) => [
+                style={[
                   styles.row,
                   idx < rows.length - 1 && styles.rowDivider,
-                  pressed && styles.rowPressed,
                 ]}
               >
                 <Text style={styles.rowEmoji}>{r.icon}</Text>
@@ -183,16 +212,15 @@ export default function SettingsScreen({ navigation }) {
               {PACE_OPTIONS.map((minutes) => {
                 const isCurrent = (user?.daily_goal ?? 10) === minutes * 2;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={minutes}
                     disabled={updateGoal.isPending}
                     onPress={() => updateGoal.mutate(minutes * 2)}
                     accessibilityRole="button"
                     accessibilityLabel={`${minutes} минут в день`}
-                    style={({ pressed }) => [
+                    style={[
                       styles.paceChip,
                       isCurrent && styles.paceChipActive,
-                      pressed && styles.rowPressed,
                     ]}
                   >
                     {updateGoal.isPending &&
@@ -208,7 +236,7 @@ export default function SettingsScreen({ navigation }) {
                         {minutes} мин
                       </Text>
                     )}
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -256,12 +284,14 @@ export default function SettingsScreen({ navigation }) {
             ].map((item, idx, arr) => {
               const value = Boolean(pushSettings[item.key]);
               return (
-                <Pressable
+                <PressableScale
                   key={item.key}
                   accessibilityRole="switch"
                   accessibilityState={{ checked: value }}
                   accessibilityLabel={item.label}
                   disabled={updatePush.isPending}
+                  // Нажатие по всей строке — тоже переключение: на телефоне
+                  // попасть в тумблер 46×27 сложнее, чем в строку целиком.
                   onPress={() =>
                     updatePush.mutate({ [item.key]: !value })
                   }
@@ -275,33 +305,26 @@ export default function SettingsScreen({ navigation }) {
                     <Text style={styles.rowTitle}>{item.label}</Text>
                     <Text style={styles.pushHint}>{item.hint}</Text>
                   </View>
-                  <View
-                    style={[
-                      styles.switch,
-                      value && styles.switchOn,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.switchKnob,
-                        value && styles.switchKnobOn,
-                      ]}
-                    />
-                  </View>
-                </Pressable>
+                  <AnimatedSwitch
+                    value={value}
+                    disabled={updatePush.isPending}
+                    onValueChange={(next) =>
+                      updatePush.mutate({ [item.key]: next })
+                    }
+                  />
+                </PressableScale>
               );
             })}
           </View>
         ) : null}
 
         {pushSettings ? (
-          <Pressable
+          <PressableScale
             onPress={() => testPush.mutate()}
             disabled={testPush.isPending}
             accessibilityRole="button"
-            style={({ pressed }) => [
+            style={[
               styles.testPushBtn,
-              pressed && styles.rowPressed,
             ]}
           >
             {testPush.isPending ? (
@@ -311,7 +334,7 @@ export default function SettingsScreen({ navigation }) {
                 Отправить тестовое уведомление
               </Text>
             )}
-          </Pressable>
+          </PressableScale>
         ) : null}
 
         {pushNotice ? (
@@ -371,15 +394,28 @@ export default function SettingsScreen({ navigation }) {
         {isAuthenticated && (
           <>
             <KhokhlomaDivider style={styles.footerDivider} />
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={[
                 styles.logoutBtn,
-                pressed && styles.logoutBtnPressed,
               ]}
               onPress={handleLogout}
             >
               <Text style={styles.logoutText}>Выйти из аккаунта</Text>
-            </Pressable>
+            </PressableScale>
+
+            {/* Удаление аккаунта: требование App Store 5.1.1(v) и Google Play —
+                возможность удалить аккаунт должна быть в самом приложении.
+                Стоит отдельно и ниже выхода, чтобы не нажималось случайно. */}
+            <PressableScale
+              style={[
+                styles.deleteRow,
+              ]}
+              onPress={confirmDelete}
+              accessibilityRole="button"
+              accessibilityLabel="Удалить аккаунт"
+            >
+              <Text style={styles.deleteRowText}>Удалить аккаунт</Text>
+            </PressableScale>
           </>
         )}
       </View>
@@ -434,6 +470,17 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
   },
   rowPressed: { opacity: 0.75 },
+  deleteRow: {
+    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  deleteRowText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: brand.muted,
+    textDecorationLine: 'underline',
+  },
   rowChevron: {
     marginLeft: 8,
     fontSize: 18,

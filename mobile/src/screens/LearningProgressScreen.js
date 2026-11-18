@@ -1,7 +1,7 @@
 import React from 'react';
+import { PressableScale } from '../components/PressableScale';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -52,15 +52,14 @@ export default function LearningProgressScreen({ navigation }) {
         <View style={styles.stateCard}>
           <WaxSeal label="§" tone="red" size={48} />
           <Text style={styles.error}>Не удалось загрузить прогресс</Text>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.stateBtn,
-              pressed && styles.btnPressed,
             ]}
             onPress={() => refetch()}
           >
             <Text style={styles.buttonText}>Повторить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -223,12 +222,12 @@ export default function LearningProgressScreen({ navigation }) {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && styles.btnPressed]}
+        <PressableScale
+          style={[styles.button]}
           onPress={() => navigation.navigate('AdaptiveLearning')}
         >
           <Text style={styles.buttonText}>Продолжить обучение</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

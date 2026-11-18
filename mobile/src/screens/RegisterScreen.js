@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedInput } from '../components/AnimatedInput';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { Confetti } from '../components/Confetti';
@@ -94,18 +94,17 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topRow}>
-          <Pressable
+          <PressableScale
             onPress={() => navigation.goBack()}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Назад"
-            style={({ pressed }) => [
+            style={[
               styles.backBtn,
-              pressed && styles.backBtnPressed,
             ]}
           >
             <Text style={styles.backText}>←</Text>
-          </Pressable>
+          </PressableScale>
           <View style={styles.topTrack}>
             <View style={styles.topFill} />
           </View>

@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
+import { PressableScale } from '../components/PressableScale';
 import {
   ActivityIndicator,
-  Pressable,
+
   ScrollView,
   StyleSheet,
   Text,
@@ -77,15 +78,14 @@ export default function AssessmentScreen({ navigation }) {
         <View style={styles.stateCard}>
           <WaxSeal label="§" tone="red" size={48} />
           <Text style={styles.error}>Не удалось начать диагностику</Text>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.stateBtn,
-              pressed && styles.btnPressed,
             ]}
             onPress={() => start.refetch()}
           >
             <Text style={styles.buttonText}>Повторить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -121,15 +121,14 @@ export default function AssessmentScreen({ navigation }) {
             Мы собрали персональную программу обучения по вашим ответам.
           </Text>
           <KhokhlomaDivider />
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.stateBtn,
-              pressed && styles.btnPressed,
             ]}
             onPress={finish}
           >
             <Text style={styles.buttonText}>Перейти к обучению</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -194,16 +193,15 @@ export default function AssessmentScreen({ navigation }) {
             const isWrongSel = Boolean(result) && isSelected && !result.correct;
 
             return (
-              <Pressable
+              <PressableScale
                 key={option.id}
                 disabled={Boolean(result)}
                 onPress={() => setSelected(option.id)}
-                style={({ pressed }) => [
+                style={[
                   styles.answer,
                   isSelected && !result && styles.selected,
                   isRightSel && styles.answerSuccess,
                   isWrongSel && styles.answerFailure,
-                  pressed && !result && styles.answerPressed,
                 ]}
               >
                 <View
@@ -234,7 +232,7 @@ export default function AssessmentScreen({ navigation }) {
                 >
                   {option.text}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -275,11 +273,10 @@ export default function AssessmentScreen({ navigation }) {
               {result.explanation}
             </Text>
           ) : null}
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.button,
               result.correct ? styles.buttonPine : styles.buttonRed,
-              pressed && !next.isPending && styles.btnPressed,
             ]}
             disabled={next.isPending}
             onPress={continueAssessment}
@@ -287,19 +284,18 @@ export default function AssessmentScreen({ navigation }) {
             <Text style={styles.buttonText}>
               {next.isPending ? 'Загружаем…' : 'Следующий вопрос'}
             </Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={finish}>
+          </PressableScale>
+          <PressableScale style={styles.secondaryButton} onPress={finish}>
             <Text style={styles.secondaryButtonText}>Перейти к обучению</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <View style={styles.footer}>
-          <Pressable
+          <PressableScale
             disabled={!canAnswer}
-            style={({ pressed }) => [
+            style={[
               styles.button,
               canAnswer ? styles.buttonRed : styles.buttonDisabled,
-              pressed && canAnswer && styles.btnPressed,
             ]}
             onPress={submit}
           >
@@ -311,7 +307,7 @@ export default function AssessmentScreen({ navigation }) {
             >
               {answer.isPending ? 'Сохраняем…' : 'Ответить'}
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
       )}
     </View>

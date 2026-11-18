@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
+import { FadeInView } from '../components/motion/FadeInView';
 import {
   brand,
   serifFamily,
@@ -55,16 +56,15 @@ export default function ArticlesScreen({ navigation }) {
 
       {/* Шапка */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.backPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <View>
           <Text style={styles.kicker}>§ КОДЕКСЫ И УЛОЖЕНИЯ</Text>
           <Text style={styles.title}>Мои статьи</Text>
@@ -102,9 +102,10 @@ export default function ArticlesScreen({ navigation }) {
 
       {/* Листы статей с сургучными печатями и закладками */}
       <View style={styles.list}>
-        {all.map((a) => (
-          <View
+        {all.map((a, idx) => (
+          <FadeInView
             key={a.id}
+            index={idx}
             style={[styles.card, !a.learned && styles.cardLocked]}
           >
             {a.learned ? (
@@ -164,7 +165,7 @@ export default function ArticlesScreen({ navigation }) {
                 <Text style={styles.full}>{a.full}</Text>
               </View>
             )}
-          </View>
+          </FadeInView>
         ))}
       </View>
     </ScrollView>

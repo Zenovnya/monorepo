@@ -4,13 +4,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
   ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { TopStats } from '../components/TopStats';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import {
   brand,
@@ -88,12 +89,12 @@ export default function LearnScreen({ navigation }) {
           {error.message ? (
             <Text style={styles.errorDetail}>{error.message}</Text>
           ) : null}
-          <Pressable
+          <PressableScale
             onPress={() => refetch()}
-            style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
+            style={[styles.retryBtn]}
           >
             <Text style={styles.retryBtnText}>Повторить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -136,11 +137,10 @@ export default function LearnScreen({ navigation }) {
         </View>
 
         <View style={styles.questRow}>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.questCard,
               styles.questCardPrimary,
-              pressed && styles.questPressed,
             ]}
             onPress={() => navigation.navigate('Cases')}
           >
@@ -156,12 +156,11 @@ export default function LearnScreen({ navigation }) {
             <Text style={styles.questDesc} numberOfLines={2}>
               Подборка дел по вашим слабым темам и ошибкам
             </Text>
-          </Pressable>
+          </PressableScale>
 
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.questCard,
-              pressed && styles.questPressed,
             ]}
             onPress={() => navigation.navigate('Cases')}
           >
@@ -177,7 +176,7 @@ export default function LearnScreen({ navigation }) {
             <Text style={styles.questDesc} numberOfLines={2}>
               Полное собрание из 50 жизненных ситуаций
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
 
         {dailyGoal && dailyGoal.goal > 0 ? (
@@ -341,7 +340,7 @@ export default function LearnScreen({ navigation }) {
                             isCurrent && styles.currentHalo,
                           ]}
                         >
-                          <Pressable
+                          <PressableScale
                             disabled={isLocked}
                             onPress={() =>
                               navigation.navigate('Lesson', {
@@ -349,14 +348,13 @@ export default function LearnScreen({ navigation }) {
                                 title: lesson.title,
                               })
                             }
-                            style={({ pressed }) => [
+                            style={[
                               styles.puck,
                               lesson.completed
                                 ? styles.puckDone
                                 : isLocked
                                 ? styles.puckLocked
                                 : styles.puckCurrent,
-                              pressed && !isLocked && styles.puckPressed,
                             ]}
                           >
                             <View
@@ -375,7 +373,7 @@ export default function LearnScreen({ navigation }) {
                             >
                               {lesson.completed ? '👑' : isLocked ? '🔒' : '★'}
                             </Text>
-                          </Pressable>
+                          </PressableScale>
 
                           {/* Золотая награда +XP и хвойная отметка у пройденного урока */}
                           {lesson.completed && lesson.xp_reward ? (
@@ -392,7 +390,7 @@ export default function LearnScreen({ navigation }) {
                           ) : null}
                         </View>
 
-                        <Pressable
+                        <PressableScale
                           disabled={isLocked}
                           onPress={() =>
                             navigation.navigate('Lesson', {
@@ -415,7 +413,7 @@ export default function LearnScreen({ navigation }) {
                           >
                             {lesson.title}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       </View>
 
                       {/* Аккуратные пунктирные точки-вехи между уроками */}

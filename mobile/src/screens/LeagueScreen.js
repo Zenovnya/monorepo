@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaCorners,
@@ -69,16 +70,15 @@ export default function LeagueScreen({ navigation }) {
 
       {/* Шапка */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.backPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerKicker}>§ ТУРНИР НЕДЕЛИ</Text>
           <Text style={styles.title}>Лига</Text>

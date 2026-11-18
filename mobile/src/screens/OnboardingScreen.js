@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
   TextInput,
 } from 'react-native';
 import { userApi } from '../api/user';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaMedallion,
@@ -77,13 +78,13 @@ export default function OnboardingScreen() {
       {/* Верхняя полоса */}
       <View style={styles.topBar}>
         {step > 0 ? (
-          <Pressable
+          <PressableScale
             onPress={() => setStep((s) => s - 1)}
             hitSlop={10}
             style={styles.backArrowBtn}
           >
             <Text style={styles.backArrow}>←</Text>
-          </Pressable>
+          </PressableScale>
         ) : (
           <View style={styles.backArrowSpacer} />
         )}
@@ -141,13 +142,12 @@ export default function OnboardingScreen() {
               {goals.map((g) => {
                 const isSel = goal === g.key;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={g.key}
                     onPress={() => setGoal(g.key)}
-                    style={({ pressed }) => [
+                    style={[
                       styles.choiceRow,
                       isSel && styles.cardSelected,
-                      pressed && styles.cardPressed,
                     ]}
                   >
                     <View
@@ -168,7 +168,7 @@ export default function OnboardingScreen() {
                         <Text style={styles.checkMark}>✓</Text>
                       </View>
                     ) : null}
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -227,13 +227,12 @@ export default function OnboardingScreen() {
               {minutes.map((m) => {
                 const isSel = mins === m;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={m}
                     onPress={() => setMins(m)}
-                    style={({ pressed }) => [
+                    style={[
                       styles.minRowCard,
                       isSel && styles.cardSelected,
-                      pressed && styles.cardPressed,
                     ]}
                   >
                     <Text
@@ -256,7 +255,7 @@ export default function OnboardingScreen() {
                         {MINUTE_LABELS[m]}
                       </Text>
                     </View>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -270,11 +269,10 @@ export default function OnboardingScreen() {
 
       {/* Главная кнопка — Лаковый красный (#C9362B) */}
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={[
             styles.btnRed,
             loading && styles.btnDisabled,
-            pressed && !loading && styles.btnPressed,
           ]}
           onPress={
             step < TOTAL_STEPS - 1 ? () => setStep((s) => s + 1) : finish
@@ -290,7 +288,7 @@ export default function OnboardingScreen() {
               ? 'Готовим путь…'
               : 'Начать путь'}
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

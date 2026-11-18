@@ -4,13 +4,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
   ActivityIndicator,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { SpeechBubble } from '../components/SpeechBubble';
 import { LegalText } from '../components/LegalText';
 import {
@@ -134,16 +135,15 @@ export default function CaseDetailScreen({ route, navigation }) {
 
       {/* Шапка документа с информационным тегом кодекса (#7298BC) */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={leave}
           hitSlop={8}
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.smallPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {caseData?.title}
         </Text>
@@ -201,15 +201,14 @@ export default function CaseDetailScreen({ route, navigation }) {
         <View style={styles.questionRow}>
           <Text style={styles.questionTitle}>Правовая квалификация</Text>
           {hint && !checked && !hintShown && (
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={[
                 styles.hintBtn,
-                pressed && styles.smallPressed,
               ]}
               onPress={() => setHintShown(true)}
             >
               <Text style={styles.hintBtnText}>💡 Подсказка</Text>
-            </Pressable>
+            </PressableScale>
           )}
         </View>
 
@@ -228,16 +227,15 @@ export default function CaseDetailScreen({ route, navigation }) {
             const isWrongPick = checked === 'wrong' && isSel;
 
             return (
-              <Pressable
+              <PressableScale
                 key={String(i)}
                 disabled={Boolean(checked)}
                 onPress={() => !checked && setSel(i)}
-                style={({ pressed }) => [
+                style={[
                   styles.option,
                   isSel && !checked && styles.optionSelected,
                   isCorrect && styles.optionCorrect,
                   isWrongPick && styles.optionWrong,
-                  pressed && !checked && styles.optionPressed,
                 ]}
               >
                 <View
@@ -273,7 +271,7 @@ export default function CaseDetailScreen({ route, navigation }) {
                 >
                   {opt?.text ?? opt}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -309,24 +307,22 @@ export default function CaseDetailScreen({ route, navigation }) {
             <LegalText style={styles.explainText}>{explanation}</LegalText>
           ) : null}
 
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.btn,
               checked === 'right' ? styles.btnPine : styles.btnRed,
-              pressed && styles.btnPressed,
             ]}
             onPress={leave}
           >
             <Text style={styles.btnText}>К списку кейсов</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <View style={styles.footer}>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.btn,
               sel === null ? styles.btnDisabled : styles.btnRed,
-              pressed && sel !== null && styles.btnPressed,
             ]}
             disabled={sel === null}
             onPress={check}
@@ -336,8 +332,8 @@ export default function CaseDetailScreen({ route, navigation }) {
             >
               Проверить
             </Text>
-          </Pressable>
-          <Pressable
+          </PressableScale>
+          <PressableScale
             style={styles.saveBtn}
             onPress={() => {
               setSaved(true);
@@ -347,7 +343,7 @@ export default function CaseDetailScreen({ route, navigation }) {
             <Text style={styles.saveText}>
               {saved ? 'Сохранено' : 'Сохранить и выйти'}
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
       )}
     </View>

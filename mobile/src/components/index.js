@@ -1,10 +1,12 @@
 /**
- * РџРµСЂРµРёСЃРїРѕР»СЊР·СѓРµРјС‹Рµ UI-РєРѕРјРїРѕРЅРµРЅС‚С‹ РїСЂРёР»РѕР¶РµРЅРёСЏ.
+ * Переиспользуемые UI-компоненты приложения.
  */
 export { AnimatedButton } from './AnimatedButton';
 export { default as AuthLayout } from './AuthLayout';
 export { AnimatedCheckbox } from './AnimatedCheckbox';
 export { AnimatedInput } from './AnimatedInput';
+export { AnimatedSwitch } from './AnimatedSwitch';
+export { PressableScale } from './PressableScale';
 export { AnimatedMascot } from './AnimatedMascot';
 export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';

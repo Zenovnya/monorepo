@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { PressableScale } from '../components/PressableScale';
+import { FadeInView } from '../components/motion/FadeInView';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Linking,
 } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -133,16 +134,15 @@ export default function ShopScreen({ navigation }) {
 
       {/* Шапка лавки с золотым балансом */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.smallPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <Text style={styles.title}>Магазин</Text>
         <View style={styles.gemsChip}>
           <Text style={styles.gemsIcon}>✦</Text>
@@ -152,12 +152,12 @@ export default function ShopScreen({ navigation }) {
 
       {/* Награды и усиления */}
       {notice ? (
-        <Pressable
+        <PressableScale
           onPress={() => setNotice(null)}
-          style={({ pressed }) => [styles.notice, pressed && { opacity: 0.85 }]}
+          style={[styles.notice]}
         >
           <Text style={styles.noticeText}>{notice}</Text>
-        </Pressable>
+        </PressableScale>
       ) : null}
 
       <DocumentSectionHeader
@@ -166,8 +166,12 @@ export default function ShopScreen({ navigation }) {
       />
       <View style={styles.groupCard}>
         {items.map((it, idx) => (
-          <View
+          // Каскад: строки входят друг за другом, а не появляются все разом.
+          // Задержка ограничена в enterDelay, поэтому длинный список не «едет»
+          // секундами.
+          <FadeInView
             key={it.title}
+            index={idx}
             style={[
               styles.itemRow,
               idx < items.length - 1 && styles.rowDivider,
@@ -182,10 +186,9 @@ export default function ShopScreen({ navigation }) {
               <Text style={styles.itemIconText}>{it.icon}</Text>
             </View>
             <Text style={styles.itemTitle}>{it.title}</Text>
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={[
                 styles.buyBtn,
-                pressed && styles.smallPressed,
               ]}
               disabled={
                 buyItem.isPending ||
@@ -201,8 +204,8 @@ export default function ShopScreen({ navigation }) {
                   ? 'В гардеробе'
                   : `${it.price} ✦`}
               </Text>
-            </Pressable>
-          </View>
+            </PressableScale>
+          </FadeInView>
         ))}
       </View>
 
@@ -216,8 +219,9 @@ export default function ShopScreen({ navigation }) {
         {bundles.map((b, idx) => {
           const isBest = idx === bundles.length - 1;
           return (
-            <View
+            <FadeInView
               key={b.plan}
+              index={idx + 3}
               style={[styles.bundleCard, isBest && styles.bundleBest]}
             >
               {isBest ? (
@@ -234,11 +238,10 @@ export default function ShopScreen({ navigation }) {
                 ) : null}
                 <Text style={styles.itemTitle}>{b.title}</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [
+              <PressableScale
+                style={[
                   styles.buyRed,
                   buyGems.isPending && styles.btnDisabled,
-                  pressed && !buyGems.isPending && styles.smallPressed,
                 ]}
                 onPress={() => buyGems.mutate(b.plan)}
                 disabled={buyGems.isPending}
@@ -246,8 +249,8 @@ export default function ShopScreen({ navigation }) {
                 <Text style={styles.buyRedText}>
                   {buyGems.isPending ? '…' : b.price}
                 </Text>
-              </Pressable>
-            </View>
+              </PressableScale>
+            </FadeInView>
           );
         })}
       </View>

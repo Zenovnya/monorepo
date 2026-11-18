@@ -5,12 +5,12 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
-  Pressable,
   ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { TopStats } from '../components/TopStats';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaCorners,
@@ -113,12 +113,13 @@ export default function CasesScreen({ navigation }) {
           {error.message ? (
             <Text style={styles.errorDetail}>{error.message}</Text>
           ) : null}
-          <Pressable
+          <PressableScale
             onPress={() => refetch()}
-            style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
+            style={styles.retryBtn}
+            scale={0.95}
           >
             <Text style={styles.retryBtnText}>Повторить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -171,21 +172,19 @@ export default function CasesScreen({ navigation }) {
         {filters.map((f) => {
           const isActive = activeFilter === f;
           return (
-            <Pressable
+            <PressableScale
               key={f}
               onPress={() => setActiveFilter(f)}
-              style={({ pressed }) => [
-                styles.filterChip,
-                isActive && styles.filterActive,
-                pressed && styles.filterPressed,
-              ]}
+              style={[styles.filterChip, isActive && styles.filterActive]}
+              scale={0.94}
+              haptic
             >
               <Text
                 style={[styles.filterText, isActive && styles.filterTextActive]}
               >
                 {f}
               </Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </ScrollView>
@@ -253,15 +252,15 @@ export default function CasesScreen({ navigation }) {
               <View />
             )}
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.featuredBtn,
-                pressed && styles.btnPressed,
-              ]}
+            <PressableScale
+              style={styles.featuredBtn}
+              scale={0.95}
+              pressDepth={2}
+              haptic
               onPress={() => openCase(featured)}
             >
               <Text style={styles.featuredBtnText}>Разобрать →</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         </View>
       )}
@@ -299,13 +298,11 @@ export default function CasesScreen({ navigation }) {
             c.codex === 'Конституция' ? 'КРФ' : c.codex || '§';
 
           return (
-            <Pressable
+            <PressableScale
               key={c.id}
-              style={({ pressed }) => [
-                styles.caseCard,
-                isSpecial && styles.caseCardSpecial,
-                pressed && styles.caseCardPressed,
-              ]}
+              style={[styles.caseCard, isSpecial && styles.caseCardSpecial]}
+              scale={0.985}
+              pressDepth={2}
               onPress={() => openCase(c)}
             >
               {/* Точечные уголки хохломы только у особых (сложных) кейсов */}
@@ -363,7 +360,7 @@ export default function CasesScreen({ navigation }) {
                   →
                 </Text>
               </View>
-            </Pressable>
+            </PressableScale>
           );
         }}
       />
@@ -482,9 +479,6 @@ const styles = StyleSheet.create({
   filterActive: {
     backgroundColor: brand.red,
     borderColor: brand.redDark,
-  },
-  filterPressed: {
-    transform: [{ translateY: 1.5 }],
   },
   filterText: {
     fontSize: 13,
@@ -627,10 +621,6 @@ const styles = StyleSheet.create({
   caseCardSpecial: {
     borderColor: brand.gold,
     backgroundColor: '#FDF9F0',
-  },
-  caseCardPressed: {
-    transform: [{ translateY: 2 }],
-    borderBottomWidth: 1.5,
   },
   caseBody: {
     flex: 1,

@@ -9,6 +9,8 @@ from app.database import get_session
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
 from app.modules.user.schemas import (
+    DeleteAccountIn,
+    DeleteAccountOut,
     OnboardIn,
     OnboardOut,
     PetBearOut,
@@ -151,3 +153,32 @@ async def pet_bear(
 
     result = await service.pet_bear(session, user, pet_count)
     return result
+
+@router.delete("/me", response_model=DeleteAccountOut)
+async def delete_me(
+    data: DeleteAccountIn,
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Удаляет аккаунт и все связанные данные.
+
+    Требование сторов: если в приложении есть регистрация, удаление аккаунта
+    должно быть доступно в самом приложении. До этого был только выход из
+    системы — аккаунт и все данные оставались навсегда.
+
+    Пароль спрашиваем обязательно: операция необратима.
+    """
+    user_id = _get_current_user_id(authorization)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if not await auth_service.verify_password_async(data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Неверный пароль",
+        )
+
+    from app.modules.user import service
+
+    return await service.delete_account(session, user)

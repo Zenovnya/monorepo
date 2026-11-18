@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +10,7 @@ import {
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedInput } from '../components/AnimatedInput';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import {
@@ -81,12 +81,12 @@ export default function ResetPasswordScreen({ route, navigation }) {
             В адресе нет токена сброса. Откройте ссылку из письма целиком или
             запросите новую.
           </Text>
-          <Pressable
+          <PressableScale
             onPress={() => navigation.navigate('ForgotPassword')}
-            style={({ pressed }) => [pressed && styles.pressed]}
+            style={styles.linkHit}
           >
             <Text style={styles.footerLink}>Запросить новую ссылку</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -179,6 +179,8 @@ export default function ResetPasswordScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // Область нажатия для текстовых ссылок: сам текст тонкий, палец промахивается.
+  linkHit: { paddingVertical: 6, alignSelf: 'flex-start' },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -218,7 +220,6 @@ const styles = StyleSheet.create({
   },
   spacer: { height: 12 },
   submitBtn: { marginTop: 20 },
-  pressed: { opacity: 0.7 },
   footerLink: {
     color: colors.link,
     fontWeight: '700',

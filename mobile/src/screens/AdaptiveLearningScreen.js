@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
+import { PressableScale } from '../components/PressableScale';
 import {
   ActivityIndicator,
   ImageBackground,
   Linking,
-  Pressable,
+
   ScrollView,
   StyleSheet,
   Text,
@@ -83,15 +84,14 @@ export default function AdaptiveLearningScreen({ navigation }) {
         <View style={styles.stateCard}>
           <WaxSeal label="!" tone="red" size={48} />
           <Text style={styles.error}>Не удалось загрузить следующий кейс</Text>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.stateBtn,
-              pressed && styles.btnPressed,
             ]}
             onPress={() => refetch()}
           >
             <Text style={styles.buttonText}>Повторить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -108,15 +108,14 @@ export default function AdaptiveLearningScreen({ navigation }) {
           <WaxSeal label="★" tone="gold" size={62} />
           <Text style={styles.stateTitle}>Все доступные кейсы пройдены</Text>
           <KhokhlomaDivider />
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.stateBtn,
-              pressed && styles.btnPressed,
             ]}
             onPress={() => navigation.goBack()}
           >
             <Text style={styles.buttonText}>Вернуться</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -139,7 +138,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
 
       {/* Верхняя полоса */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={10}
           style={styles.closeBtn}
@@ -147,7 +146,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
           accessibilityLabel="Вернуться назад"
         >
           <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+        </PressableScale>
 
         <View style={styles.topTrack}>
           <View
@@ -155,15 +154,14 @@ export default function AdaptiveLearningScreen({ navigation }) {
           />
         </View>
 
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={[
             styles.statsPill,
-            pressed && styles.pillPressed,
           ]}
           onPress={() => navigation.navigate('LearningProgress')}
         >
           <Text style={styles.statsPillText}>{avgPct}%</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ScrollView
@@ -183,10 +181,9 @@ export default function AdaptiveLearningScreen({ navigation }) {
 
         {/* Компактная полоска навыков */}
         {topProgress.length > 0 ? (
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.progressCard,
-              pressed && styles.pillPressed,
             ]}
             onPress={() => navigation.navigate('LearningProgress')}
           >
@@ -222,7 +219,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
               })}
             </View>
             <Text style={styles.chevron}>›</Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
 
         {/* Карточка ситуации со шёлковой закладкой и синей ссылкой на статью (#7298BC) */}
@@ -249,25 +246,25 @@ export default function AdaptiveLearningScreen({ navigation }) {
             <Text style={styles.docEyebrow}>ФАБУЛА ДЕЛА</Text>
             <Text style={styles.situation}>{item.situation}</Text>
             {item.article_url ? (
-              <Pressable
+              <PressableScale
                 onPress={() => Linking.openURL(item.article_url)}
                 style={styles.articlePill}
               >
                 <Text style={styles.articleLinkText}>📖 Статья закона ↗</Text>
-              </Pressable>
+              </PressableScale>
             ) : null}
           </View>
         )}
 
         {item.image_url && item.article_url ? (
-          <Pressable
+          <PressableScale
             onPress={() => Linking.openURL(item.article_url)}
             style={styles.articlePill}
           >
             <Text style={styles.articleLinkText}>
               📖 Открыть статью закона ↗
             </Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
 
         <Text style={styles.prompt}>{item.prompt}</Text>
@@ -280,16 +277,15 @@ export default function AdaptiveLearningScreen({ navigation }) {
             const isWrongSel = Boolean(result) && isSelected && !result.correct;
 
             return (
-              <Pressable
+              <PressableScale
                 key={answer.id}
                 disabled={Boolean(result)}
                 onPress={() => setSelected(answer.id)}
-                style={({ pressed }) => [
+                style={[
                   styles.answer,
                   isSelected && !result && styles.selected,
                   isRightSel && styles.answerSuccess,
                   isWrongSel && styles.answerFailure,
-                  pressed && !result && styles.answerPressed,
                 ]}
               >
                 <View
@@ -320,7 +316,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
                 >
                   {answer.text}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -354,26 +350,24 @@ export default function AdaptiveLearningScreen({ navigation }) {
               {result.explanation}
             </Text>
           ) : null}
-          <Pressable
+          <PressableScale
             onPress={next}
-            style={({ pressed }) => [
+            style={[
               styles.button,
               result.correct ? styles.buttonPine : styles.buttonRed,
-              pressed && styles.btnPressed,
             ]}
           >
             <Text style={styles.buttonText}>Следующий кейс</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <View style={styles.footer}>
-          <Pressable
+          <PressableScale
             disabled={!canSubmit}
             onPress={submit}
-            style={({ pressed }) => [
+            style={[
               styles.button,
               canSubmit ? styles.buttonRed : styles.buttonDisabled,
-              pressed && canSubmit && styles.btnPressed,
             ]}
           >
             <Text
@@ -384,7 +378,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
             >
               {attempt.isPending ? 'Проверяем…' : 'Проверить'}
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
       )}
     </View>

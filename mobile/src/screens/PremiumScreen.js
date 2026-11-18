@@ -4,10 +4,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { usePremium } from '../hooks/usePremium';
 import {
@@ -75,13 +76,13 @@ export default function PremiumScreen({ navigation }) {
         <KhokhlomaCorners variant="onDark" size="md" inset={10} />
 
         <View style={styles.header}>
-          <Pressable
+          <PressableScale
             onPress={() => navigation.goBack()}
             hitSlop={8}
             style={styles.closeBtn}
           >
             <Text style={styles.closeText}>✕</Text>
-          </Pressable>
+          </PressableScale>
           <View style={styles.superPill}>
             <Text style={styles.superPillText}>LEXBEAR PLUS</Text>
           </View>
@@ -127,13 +128,12 @@ export default function PremiumScreen({ navigation }) {
           {PLANS.map((p) => {
             const isSelected = plan === p.key;
             return (
-              <Pressable
+              <PressableScale
                 key={p.key}
                 onPress={() => setPlan(p.key)}
-                style={({ pressed }) => [
+                style={[
                   styles.plan,
                   isSelected && styles.planSelected,
-                  pressed && styles.planPressed,
                 ]}
               >
                 {p.popular ? (
@@ -185,7 +185,7 @@ export default function PremiumScreen({ navigation }) {
                 >
                   {p.note}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>

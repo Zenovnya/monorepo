@@ -1,10 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { Text, StyleSheet, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 import { brand } from './KhokhlomaOrnament';
 import { colors } from '../theme/colors';
+import { duration as durations } from '../theme/motion';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 /**
  * Плашка «нет подключения».
@@ -13,10 +21,17 @@ import { colors } from '../theme/colors';
  * объяснения причины. Плашка висит внизу и исчезает, как только связь
  * возвращается (react-query сам перезапрашивает данные — см. onlineManager
  * в App.js).
+ *
+ * Появление плавное: раньше она вставлялась и выдёргивалась из дерева, то есть
+ * возникала одним кадром — при частых переключениях сети это выглядело как
+ * мигание. Теперь она выезжает снизу и растворяется, а монтирование всё равно
+ * условное: когда сети нет — плашки нет в дереве.
  */
 export function OfflineBanner() {
   const [offline, setOffline] = React.useState(false);
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  const shown = useSharedValue(0);
 
   React.useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
@@ -27,20 +42,42 @@ export function OfflineBanner() {
     return unsubscribe;
   }, []);
 
-  if (!offline) return null;
+  React.useEffect(() => {
+    if (reduced) {
+      shown.value = offline ? 1 : 0;
+      return;
+    }
+    // Плашка не размонтируется: она невидима и не перехватывает касания
+    // (pointerEvents="none"), зато анимация скрытия никогда не обрывается
+    // на середине — раньше элемент пропадал одним кадром.
+    shown.value = withTiming(offline ? 1 : 0, {
+      duration: offline ? durations.enter : durations.pressOut,
+      easing: offline ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+    });
+  }, [offline, reduced, shown]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: shown.value,
+    transform: [{ translateY: (1 - shown.value) * 16 }],
+  }));
 
   return (
-    <View
+    <Animated.View
       pointerEvents="none"
-      style={[styles.wrap, { paddingBottom: 10 + (insets.bottom || 0) }]}
+      style={[
+        styles.wrap,
+        { paddingBottom: 10 + (insets.bottom || 0) },
+        animatedStyle,
+      ]}
+      accessibilityLiveRegion="polite"
     >
-      <View style={styles.banner}>
+      <Animated.View style={styles.banner}>
         <Text style={styles.icon}>⚡</Text>
         <Text style={styles.text}>
           Нет подключения. Данные обновятся, когда сеть вернётся.
         </Text>
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 

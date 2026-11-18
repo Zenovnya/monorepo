@@ -4,13 +4,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
   ActivityIndicator,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { LegalText } from '../components/LegalText';
 import { useMascotToast } from '../components/MascotToast';
 import {
@@ -134,15 +135,14 @@ export default function LessonScreen({ route, navigation }) {
         <View style={styles.errorCard}>
           <WaxSeal label="§" tone="red" size={48} />
           <Text style={styles.errorText}>Не удалось загрузить урок</Text>
-          <Pressable
+          <PressableScale
             onPress={() => navigation.goBack()}
-            style={({ pressed }) => [
+            style={[
               styles.errorBackBtn,
-              pressed && styles.btnPressed,
             ]}
           >
             <Text style={styles.errorBackText}>Назад</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -308,16 +308,15 @@ export default function LessonScreen({ route, navigation }) {
         </View>
 
         <View style={styles.footer}>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.btn,
               styles.btnRed,
-              pressed && styles.btnPressed,
             ]}
             onPress={() => navigation.popToTop()}
           >
             <Text style={styles.btnText}>На путь</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -343,7 +342,7 @@ export default function LessonScreen({ route, navigation }) {
 
       {/* Чистая шапка урока: закрытие + золотая шкала прогресса + жизни */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={10}
           accessibilityRole="button"
@@ -351,7 +350,7 @@ export default function LessonScreen({ route, navigation }) {
           style={styles.closeBtn}
         >
           <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+        </PressableScale>
 
         <View style={styles.progressTrack}>
           <View
@@ -440,38 +439,35 @@ export default function LessonScreen({ route, navigation }) {
             </LegalText>
           ) : null}
 
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={[
               styles.btn,
               checked === 'right' ? styles.btnPine : styles.btnRed,
-              pressed && styles.btnPressed,
             ]}
             onPress={nextQuestion}
           >
             <Text style={styles.btnText}>Продолжить</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <View style={styles.footer}>
           {effectivePhase === 'theory' && (
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={[
                 styles.btn,
                 styles.btnRed,
-                pressed && styles.btnPressed,
               ]}
               onPress={nextTheory}
             >
               <Text style={styles.btnText}>Дальше</Text>
-            </Pressable>
+            </PressableScale>
           )}
 
           {effectivePhase === 'practice' && (
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={[
                 styles.btn,
                 canCheck ? styles.btnRed : styles.btnDisabled,
-                pressed && canCheck && styles.btnPressed,
               ]}
               disabled={!canCheck}
               onPress={check}
@@ -481,7 +477,7 @@ export default function LessonScreen({ route, navigation }) {
               >
                 Проверить
               </Text>
-            </Pressable>
+            </PressableScale>
           )}
         </View>
       )}
@@ -609,16 +605,15 @@ function QuestionView({
           const isWrongPick = checked === 'wrong' && isSel && !isCorrect;
 
           return (
-            <Pressable
+            <PressableScale
               key={String(i)}
               disabled={Boolean(checked)}
               onPress={() => (isMulti ? onToggleMulti(i) : onSelectSingle(i))}
-              style={({ pressed }) => [
+              style={[
                 styles.option,
                 isSel && !checked && styles.optionSelected,
                 isCorrect && styles.optionCorrect,
                 isWrongPick && styles.optionWrong,
-                pressed && !checked && styles.optionPressed,
               ]}
             >
               <View
@@ -658,7 +653,7 @@ function QuestionView({
               >
                 {opt?.text ?? opt}
               </Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>

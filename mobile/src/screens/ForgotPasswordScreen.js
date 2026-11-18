@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +10,7 @@ import {
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedInput } from '../components/AnimatedInput';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import {
@@ -73,15 +73,15 @@ export default function ForgotPasswordScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Назад"
-          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          style={[styles.backBtn]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
 
         <Animated.View entering={FadeIn.duration(220)}>
           <KhokhlomaMedallion size={132} style={styles.medallion}>
@@ -110,13 +110,13 @@ export default function ForgotPasswordScreen({ navigation }) {
               <Text style={styles.sentText}>
                 Ссылка действует 30 минут и срабатывает один раз.
               </Text>
-              <Pressable
+              <PressableScale
                 onPress={() => setSent(false)}
                 accessibilityRole="button"
-                style={({ pressed }) => [pressed && styles.pressed]}
+                style={styles.linkHit}
               >
                 <Text style={styles.retryLink}>Отправить ещё раз</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           ) : (
             <>
@@ -145,13 +145,13 @@ export default function ForgotPasswordScreen({ navigation }) {
             </>
           )}
 
-          <Pressable
+          <PressableScale
             onPress={() => navigation.navigate('Login')}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.footer, pressed && styles.pressed]}
+            style={[styles.footer]}
           >
             <Text style={styles.footerLink}>Вернуться ко входу</Text>
-          </Pressable>
+          </PressableScale>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -159,6 +159,8 @@ export default function ForgotPasswordScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // Область нажатия для текстовых ссылок: сам текст тонкий, палец промахивается.
+  linkHit: { paddingVertical: 6, alignSelf: 'flex-start' },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -184,7 +186,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
-  pressed: { opacity: 0.7 },
   medallion: {
     alignSelf: 'center',
     marginBottom: 14,
