@@ -20,6 +20,8 @@ from app.modules.content.lexbear_models import (
     Unit,
 )
 from app.modules.content.models import Case
+from app.modules.learning.models import CaseVersion, LearningCase
+from app.modules.learning.service import PUBLISHED_REVIEW_STATUS
 from app.modules.progress.models import LexBearProgress
 
 
@@ -213,6 +215,33 @@ def _serialize_case_list_item(c) -> dict:
     }
 
 
+async def reviewed_case_slugs(session: AsyncSession, slugs: list[str]) -> set[str]:
+    """Slug'и кейсов, прошедших юридическую проверку.
+
+    Вкладка «Кейсы» читает legacy-таблицу ``cases``, где поля статуса проверки
+    нет, а адаптивный банк читает ``learning_case_versions``, где оно есть.
+    Без этой связи гейт обходился: `/learning/next` не отдавал непроверенный
+    кейс, а `/lexbear/cases` показывал его в списке со всеми вариантами
+    ответов, то есть пользователь всё равно учился по непроверенному тексту.
+
+    Связь — по ``CaseVersion.source_slug``: и паки, и импорт в адаптивный банк
+    ключуются одним и тем же slug'ом.
+    """
+    if not slugs:
+        return set()
+    rows = (await session.execute(
+        select(CaseVersion.source_slug)
+        .join(LearningCase)
+        .where(
+            CaseVersion.source_slug.in_(slugs),
+            CaseVersion.status == "published",
+            LearningCase.status == "published",
+            CaseVersion.review_status == PUBLISHED_REVIEW_STATUS,
+        )
+    )).scalars().all()
+    return {slug for slug in rows if slug}
+
+
 async def list_cases(session: AsyncSession) -> list[dict]:
     """Возвращает кейсы для отдельной вкладки «Кейсы».
 
@@ -235,11 +264,15 @@ async def list_cases(session: AsyncSession) -> list[dict]:
         .where(Case.is_active.is_(True))
         .order_by(Case.created_at)
     )
+    filled = [c for c in result.all() if c.title and c.codex]
+    # Показываем только проверенные юристом кейсы — тот же гейт, что и в
+    # адаптивной ленте, иначе вкладка «Кейсы» обходила бы проверку.
+    reviewed = await reviewed_case_slugs(session, [c.slug for c in filled if c.slug])
     out = [
         _serialize_case_list_item(c)
-        # Учитываем только кейсы, заполненные под вкладку «Кейсы».
-        for c in result.all()
-        if c.title and c.codex
+        # Кейс без slug в банке не проверить, значит и показывать нельзя.
+        for c in filled
+        if c.slug in reviewed
     ]
     await cache_set(cache_key, json.dumps(out), ttl=600)
     return out
@@ -249,13 +282,22 @@ async def get_case(
     session: AsyncSession,
     case_id: uuid.UUID,
 ) -> dict:
-    """Возвращает детали отдельного кейса вкладки «Кейсы» по id."""
+    """Возвращает детали отдельного кейса вкладки «Кейсы» по id.
+
+    Непроверенный кейс тоже «не найден»: иначе прямой переход по id (он есть в
+    списке у любого, кто открыл вкладку до снятия кейса с показа, и в deep
+    link) отдавал бы текст, скрытый по решению юриста. Сообщать отдельно «есть,
+    но не проверен» нельзя — это подсказка о том, чего пользователь видеть не
+    должен.
+    """
     case = await session.scalar(
         select(Case)
         .options(selectinload(Case.options))
         .where(Case.id == case_id)
     )
     if case is None or not (case.title and case.codex):
+        raise CaseNotFoundError("Кейс не найден")
+    if not case.slug or not await reviewed_case_slugs(session, [case.slug]):
         raise CaseNotFoundError("Кейс не найден")
     return _serialize_case(case)
 

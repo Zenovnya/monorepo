@@ -236,3 +236,80 @@ async def test_review_status_for_unknown_case_fails() -> None:
     async with async_session_factory() as session:
         with pytest.raises(importer.ContentImportError, match="не найден"):
             await importer.set_review_status(session, "no-such-case", "approved")
+
+
+class TestLegacyCaseListRespectsReviewGate:
+    """Вкладка «Кейсы» читает legacy-таблицу, но обязана уважать гейт.
+
+    Дефект: гейт стоял только в адаптивном банке. `/learning/next` непроверенный
+    кейс не отдавал, а `GET /lexbear/cases` показывал его в списке вместе со
+    всеми вариантами ответов — то есть пользователь всё равно учился по тексту,
+    который юрист не смотрел. Проверено на живом сервере: 4 одобренных кейса в
+    банке и 100 в списке.
+    """
+
+    @staticmethod
+    def _legacy_case(slug: str) -> "object":
+        from app.modules.content.models import Case
+
+        return Case(
+            slug=slug,
+            title=f"Кейс {slug}",
+            codex="КоАП",
+            difficulty="medium",
+            case_text="Ситуация",
+            situation="Ситуация",
+        )
+
+    async def test_unreviewed_case_is_hidden_from_list(self) -> None:
+        from app.database import async_session_factory
+        from app.modules.content import lexbear_service
+        from app.modules.content.models import Case
+        from app.modules.learning import importer
+        from app.modules.learning.models import CaseVersion, LearningCase
+        from sqlalchemy import select
+
+        suffix = uuid.uuid4().hex[:8]
+        approved_slug = f"gate-approved-{suffix}"
+        imported_slug = f"gate-imported-{suffix}"
+
+        async with async_session_factory() as session:
+            for slug in (approved_slug, imported_slug):
+                session.add(self._legacy_case(slug))
+                case = LearningCase(title=slug, status="published")
+                session.add(case)
+                await session.flush()
+                session.add(
+                    CaseVersion(
+                        case_id=case.id,
+                        version=1,
+                        situation=slug,
+                        difficulty=0.5,
+                        status="published",
+                        review_status="imported",
+                        source_slug=slug,
+                    )
+                )
+            await session.commit()
+
+        async with async_session_factory() as session:
+            await importer.set_review_status(session, approved_slug, "approved", reviewed_by="test")
+            await session.commit()
+
+        async with async_session_factory() as session:
+            reviewed = await lexbear_service.reviewed_case_slugs(
+                session, [approved_slug, imported_slug]
+            )
+            assert reviewed == {approved_slug}
+
+            listed = await lexbear_service.list_cases(session)
+            slugs = {item["title"] for item in listed}
+            assert f"Кейс {approved_slug}" in slugs
+            assert f"Кейс {imported_slug}" not in slugs, (
+                "непроверенный кейс не должен попадать в список вкладки «Кейсы»"
+            )
+
+            # Прямой переход по id тоже не должен открывать скрытый кейс.
+            hidden = await session.scalar(select(Case).where(Case.slug == imported_slug))
+            with pytest.raises(lexbear_service.CaseNotFoundError):
+                await lexbear_service.get_case(session, hidden.id)
