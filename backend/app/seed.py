@@ -40,6 +40,23 @@ async def seed_lexbear() -> None:
         print("lexbear seed:", report)
 
 
+async def seed_all() -> None:
+    """Сид целиком в одном event loop.
+
+    Раньше было два отдельных ``asyncio.run``. Асинхронный движок SQLAlchemy
+    создаёт пул один раз на процесс, и asyncpg-соединения из него привязаны к
+    тому loop, где открылись: во втором ``asyncio.run`` они падали с
+    «got Future attached to a different loop». Локально на sqlite это не
+    воспроизводилось, а в CI на Postgres сид падал всегда — то есть прод-сид
+    (Railway: ``alembic upgrade head`` + сид контента) не работал вовсе.
+    """
+    await seed_learning()
+    await seed_lexbear()
+    # Закрываем пул, пока loop ещё жив.
+    from app.database import dispose_engine
+
+    await dispose_engine()
+
+
 if __name__ == "__main__":
-    asyncio.run(seed_learning())
-    asyncio.run(seed_lexbear())
+    asyncio.run(seed_all())

@@ -154,3 +154,26 @@ class TestCaseInValidation:
         payload[field] = value
         with pytest.raises(ValidationError):
             CaseIn(**payload)
+
+
+def test_seed_runs_in_single_event_loop() -> None:
+    """Сид контента должен выполняться в одном event loop.
+
+    Регрессия: `python -m app.seed` вызывал `asyncio.run()` дважды
+    (отдельно learning и lexbear). Асинхронный пул SQLAlchemy живёт на уровне
+    процесса, asyncpg-соединения привязаны к конкретному loop, и во втором
+    прогоне падали с «got Future attached to a different loop». На sqlite
+    (локальные тесты) не воспроизводилось, на Postgres (CI и прод) — всегда,
+    то есть сид контента в проде не работал.
+    """
+    import inspect
+
+    from app import seed
+
+    assert inspect.iscoroutinefunction(seed.seed_all)
+
+    source = inspect.getsource(seed)
+    # Внутри `if __name__ == "__main__"` ровно один asyncio.run.
+    main_block = source.split('if __name__ == "__main__":')[1]
+    assert main_block.count("asyncio.run(") == 1
+    assert "seed_all()" in main_block
