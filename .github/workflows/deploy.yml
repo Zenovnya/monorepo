@@ -91,47 +91,7 @@ jobs:
         env:
           ADMIN_TOKEN: ci-admin-token
         run: |
-          set -o pipefail
-          python -m app.seed 2>&1 | tee seed.log
-
-          # Поднимаем реальный сервер: миграции + сид + запрос проверяют связку
-          # целиком, чего не даёт ни один юнит-тест.
-          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > uvicorn.log 2>&1 &
-          ready=""
-          for i in $(seq 1 40); do
-            sleep 1
-            if curl -fsS http://127.0.0.1:8000/health -o health.json; then ready=1; break; fi
-          done
-
-          echo "--- uvicorn ---"; cat uvicorn.log
-          if [ -z "$ready" ]; then
-            echo "::error::API не поднялся за 40 секунд"
-            exit 1
-          fi
-          echo "--- health ---"; cat health.json
-
-          python -c "import json; d=json.load(open('health.json')); assert d['database']=='ok', d; print('database ok')"
-          # Контентные роуты закрыты токеном — 401 здесь и есть подтверждение,
-          # что роутер собран, а не потерян при импорте.
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/lexbear/cases)
-          echo "GET /lexbear/cases -> $code"
-          test "$code" = "401"
-
-      - name: Report smoke failure to PR
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo '### Упала smoke-проверка API'
-            echo
-            echo '```'
-            tail -c 1200 seed.log 2>/dev/null || echo 'seed.log нет'
-            echo '--- uvicorn ---'
-            tail -c 2000 uvicorn.log 2>/dev/null || echo 'uvicorn.log нет'
-            echo '```'
-          } > /tmp/smoke.md
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/smoke.md
+          bash scripts/ci-smoke.sh
 
   mobile-lint:
     name: Lint (mobile)
