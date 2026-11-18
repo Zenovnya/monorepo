@@ -52,6 +52,14 @@ class User(Base):
         nullable=False,
     )
     lives: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    # Момент последней траты жизни. От него считается восстановление:
+    # одна жизнь за LIFE_REGEN_MINUTES. Раньше жизни только уменьшались —
+    # обнулившийся счётчик не восстанавливался никогда, и единственным
+    # способом продолжить было купить «Пополнение жизней» за гемы.
+    lives_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     league: Mapped[str] = mapped_column(
         String(32),
         default="Бронза",

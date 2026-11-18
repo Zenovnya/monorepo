@@ -23,9 +23,22 @@ class GamificationRead(BaseModel):
     # остаток (раньше каждый урок начинался с локальных 3 жизней, а
     # купленное «Пополнение жизней» ни на что не влияло).
     lives: int = 5
+    max_lives: int = 5
+    # Через сколько секунд восстановится следующая жизнь (0 — запас полный).
+    next_life_in_seconds: int = 0
+    regen_minutes: int = 20
     streak_freezes: int = 0
     next_level_xp: int
     achievements: list[AchievementRead]
+
+
+class LivesRead(BaseModel):
+    """Состояние жизней: остаток и таймер восстановления."""
+
+    lives: int
+    max_lives: int = 5
+    next_life_in_seconds: int = 0
+    regen_minutes: int = 20
 
 
 class DailyGoalRead(BaseModel):

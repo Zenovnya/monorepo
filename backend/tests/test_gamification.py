@@ -395,3 +395,79 @@ class TestProfilePatch:
         assert ProfileIn().daily_goal is None
         assert ProfileIn(daily_goal=20).daily_goal == 20
         assert ProfileIn(name="Анна").name == "Анна"
+
+
+class TestLivesRegeneration:
+    """Жизни: списание за ошибки, восстановление по таймеру, блокировка урока.
+
+    До этой правки жизни были мёртвой механикой: `spend_lives` уменьшал
+    счётчик, но он нигде не проверялся и никогда не восстанавливался.
+    """
+
+    def _user(self, lives=5, updated=None) -> User:
+        user = _make_user()
+        user.lives = lives
+        user.lives_updated_at = updated
+        return user
+
+    def test_fresh_full_lives_have_no_timer(self) -> None:
+        state = service.lives_state(self._user())
+        assert state["lives"] == service.MAX_LIVES
+        assert state["next_life_in_seconds"] == 0
+
+    def test_spend_lives_sets_timestamp_only_on_first_loss(self) -> None:
+        user = self._user()
+        service.spend_lives(user, 2)
+        first = user.lives_updated_at
+        assert user.lives == 3
+        assert first is not None
+
+        # Вторая ошибка не сдвигает метку: иначе каждая ошибка отодвигала бы
+        # следующую жизнь и игрок не дождался бы восстановления никогда.
+        service.spend_lives(user, 1)
+        assert user.lives == 2
+        assert user.lives_updated_at == first
+
+    def test_regenerate_adds_one_life_per_interval(self) -> None:
+        start = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        user = self._user(lives=2, updated=start)
+
+        # Меньше интервала — ничего не восстановилось.
+        service.regenerate_lives(user, start + timedelta(minutes=5))
+        assert user.lives == 2
+
+        # Ровно интервал — одна жизнь.
+        service.regenerate_lives(user, start + timedelta(minutes=20))
+        assert user.lives == 3
+
+        # Метка сдвинута ровно на интервал, остаток времени не сгорел.
+        assert user.lives_updated_at == start + timedelta(minutes=20)
+
+    def test_regenerate_never_exceeds_max(self) -> None:
+        start = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        user = self._user(lives=1, updated=start)
+
+        # Неделя отсутствия не превращается в 500 жизней.
+        service.regenerate_lives(user, start + timedelta(days=7))
+
+        assert user.lives == service.MAX_LIVES
+        # Запас полный — таймер не нужен.
+        assert user.lives_updated_at is None
+
+    def test_next_life_countdown_counts_down(self) -> None:
+        start = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        user = self._user(lives=4, updated=start)
+
+        state = service.lives_state(user, start)
+        assert state["next_life_in_seconds"] == service.LIFE_REGEN_MINUTES * 60
+
+        state = service.lives_state(user, start + timedelta(minutes=12))
+        assert state["next_life_in_seconds"] == 8 * 60
+
+    def test_naive_timestamp_from_sqlite_is_handled(self) -> None:
+        """sqlite возвращает naive datetime — не должно падать на вычитании."""
+        start = datetime(2026, 11, 17, 12, 0)  # без tzinfo
+        user = self._user(lives=3, updated=start)
+
+        service.regenerate_lives(user, datetime(2026, 11, 17, 12, 40, tzinfo=timezone.utc))
+        assert user.lives == 5

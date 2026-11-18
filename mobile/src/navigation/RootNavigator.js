@@ -29,6 +29,7 @@ import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import PaymentReturnScreen from '../screens/PaymentReturnScreen';
 import DeleteAccountScreen from '../screens/DeleteAccountScreen';
+import NoLivesScreen from '../screens/NoLivesScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -123,6 +124,7 @@ function MainStack() {
       <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
+      <Stack.Screen name="NoLives" component={NoLivesScreen} />
     </Stack.Navigator>
   );
 }

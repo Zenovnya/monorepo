@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
@@ -53,6 +54,9 @@ export default function LessonScreen({ route, navigation }) {
   const [qIdx, setQIdx] = useState(0);
   // Стартовый запас жизней — реальный серверный (см. /gamification/me).
   // Раньше всегда было 3 локальных, не связанных с аккаунтом.
+  // Локальный счётчик живёт между ответами (чтобы не ждать сеть на каждую
+  // ошибку), но синхронизируется с сервером, когда тот присылает новое
+  // значение: счётчик в шапке не должен расходиться с реальным запасом.
   const [lives, setLives] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [selected, setSelected] = useState(null);
@@ -73,10 +77,17 @@ export default function LessonScreen({ route, navigation }) {
     queryFn: gamificationApi.me,
   });
 
-  // Пока серверные жизни не пришли, показываем 3 (исторический дефолт):
-  // урок не должен блокироваться из-за задержки сети.
+  useEffect(() => {
+    if (typeof gamification?.lives === 'number') {
+      setLives(gamification.lives);
+    }
+  }, [gamification?.lives]);
+
+  // Пока серверные жизни не пришли, показываем серверный максимум (5):
+  // урок не должен блокироваться из-за задержки сети, а «3» было выдуманным
+  // числом, не связанным с аккаунтом.
   const serverLives = gamification?.lives;
-  const displayLives = lives ?? (serverLives > 0 ? serverLives : 3);
+  const displayLives = lives ?? serverLives ?? 5;
   // Стартовый запас на момент открытия урока — для оценки «без ошибок».
   const startedLivesRef = useRef(null);
   if (startedLivesRef.current === null && serverLives !== undefined) {
@@ -89,11 +100,11 @@ export default function LessonScreen({ route, navigation }) {
   const completeMutation = useMutation({
     mutationFn: ({ answers }) => lexbearApi.completeLesson(lessonId, { answers }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries(['lexbear-learn']);
-      queryClient.invalidateQueries(['progress-overview']);
-      queryClient.invalidateQueries(['gamification-me']);
+      queryClient.invalidateQueries({ queryKey: ['lexbear-learn'] });
+      queryClient.invalidateQueries({ queryKey: ['progress-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       // Цель дня на главной должна отрасти сразу после урока.
-      queryClient.invalidateQueries(['gamification-daily-goal']);
+      queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
 
       if (data?.level_up) {
         toast.show({
@@ -129,12 +140,33 @@ export default function LessonScreen({ route, navigation }) {
     );
   }
 
+  // 409 значит «жизни закончились»: сервер отдал состояние в detail.lives.
+  // Раньше жизни не проверялись вовсе, поэтому такого ответа не было; теперь
+  // вместо вопросов нужен экран с таймером восстановления и путём в магазин.
+  const noLives =
+    error?.response?.status === 409 &&
+    error?.response?.data?.detail?.code === 'no_lives';
+
+  if (noLives) {
+    navigation.replace('NoLives', {
+      lives: error.response.data.detail.lives,
+    });
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color={brand.red} />
+      </View>
+    );
+  }
+
   if (error || !lesson) {
     return (
       <View style={styles.center}>
         <View style={styles.errorCard}>
           <WaxSeal label="§" tone="red" size={48} />
           <Text style={styles.errorText}>Не удалось загрузить урок</Text>
+          <Text style={styles.errorDetail}>
+            {describeLoadError(error, 'урок')}
+          </Text>
           <PressableScale
             onPress={() => navigation.goBack()}
             style={[
@@ -195,7 +227,25 @@ export default function LessonScreen({ route, navigation }) {
     setChecked(null);
     setSelected(null);
     setMulti([]);
-    if (qIdx + 1 < questions.length && displayLives > 0) {
+
+    // Жизни кончились посреди урока: раньше клиент просто «завершал» урок,
+    // хотя сервер такой вызов отклонит (409). Теперь показываем экран
+    // восстановления — это то, ради чего жизни вообще существуют.
+    if (displayLives <= 0) {
+      navigation.replace('NoLives', {
+        lives: {
+          lives: 0,
+          max_lives: gamification?.max_lives ?? 5,
+          next_life_in_seconds:
+            gamification?.next_life_in_seconds ??
+            (gamification?.regen_minutes ?? 20) * 60,
+          regen_minutes: gamification?.regen_minutes ?? 20,
+        },
+      });
+      return;
+    }
+
+    if (qIdx + 1 < questions.length) {
       setQIdx(qIdx + 1);
     } else {
       completeMutation.mutate({ answers: answersRef.current });
@@ -717,6 +767,15 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 12,
+  },
+  errorDetail: {
+    marginTop: 6,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: colors.subtext,
+    textAlign: 'center',
+    maxWidth: 280,
   },
   errorText: {
     fontSize: 17,

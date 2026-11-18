@@ -21,6 +21,12 @@ export const gamificationApi = {
   leaderboard: (limit = 30) =>
     apiClient.get('/gamification/leaderboard', { params: { limit } }).then((r) => r.data),
 
+  // Доначислить жизни, накопившиеся по таймеру (идемпотентно).
+  // Нужен экрану «жизни закончились»: держим его открытым и обновляем
+  // счётчик, не перезагружая всё состояние геймификации.
+  regenerateLives: () =>
+    apiClient.post('/gamification/lives/regenerate').then((r) => r.data),
+
   // Покупка товара за гемы
   purchaseShopItem: (item) =>
     apiClient.post('/gamification/shop/purchase', { item }).then((r) => r.data),

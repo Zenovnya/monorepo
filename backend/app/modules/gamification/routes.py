@@ -13,6 +13,7 @@ from app.modules.gamification import service
 from app.modules.gamification.schemas import (
     DailyGoalRead,
     GamificationRead,
+    LivesRead,
     LeaderboardRead,
     ShopPurchaseIn,
     ShopPurchaseOut,
@@ -75,6 +76,28 @@ async def gamification_add_xp(
     result = await service.add_xp(session, user, data.amount)
     await session.commit()
     return result
+
+
+@router.post("/lives/regenerate", response_model=LivesRead)
+async def regenerate_lives_endpoint(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Доначисляет жизни, накопившиеся со времени последней траты.
+
+    Отдельный роут нужен клиенту, который держит экран урока открытым: он
+    обновляет счётчик без перезагрузки состояния геймификации (и без сброса
+    кэша 120 секунд). Идемпотентно: повторный вызов ничего не добавит.
+    """
+    user_id = _get_current_user_id(authorization)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    service.regenerate_lives(user)
+    await session.commit()
+
+    return service.lives_state(user)
 
 
 @router.get("/achievements")

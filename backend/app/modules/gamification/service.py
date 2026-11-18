@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,9 +73,119 @@ def _today_utc() -> datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+# Максимум жизней (совпадает с default у User.lives).
+MAX_LIVES = 5
+
+# Сколько минут восстанавливается одна жизнь.
+LIFE_REGEN_MINUTES = 20
+
+
+def _as_aware_utc(value: datetime | None) -> datetime | None:
+    """Приводит дату из БД к aware-UTC (sqlite отдаёт naive)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def regenerate_lives(user: User, now: datetime | None = None) -> int:
+    """Доначисляет жизни, накопившиеся с момента последней траты.
+
+    Зачем это нужно: жизни списывались за ошибки, но не восстанавливались
+    никогда и нигде не проверялись. То есть ограничения не было вовсе, а
+    купленное «Пополнение жизней» возвращало счётчик, который ни на что не
+    влиял. Теперь жизнь стоит 20 минут ожидания — это и есть смысл механики:
+    мягкая пауза после серии ошибок, а не блокировка навсегда.
+
+    Заодно закрывается дыра с копящимся запасом: если пользователь не заходил
+    неделю, при следующем входе он получит максимум, а не 500 жизней.
+    """
+    if (user.lives or 0) >= MAX_LIVES:
+        user.lives = MAX_LIVES
+        user.lives_updated_at = None
+        return user.lives
+
+    now = now or datetime.now(timezone.utc)
+    updated = _as_aware_utc(user.lives_updated_at)
+
+    # Метки нет — либо жизни никогда не тратились, либо пользователь из
+    # версии до миграции 0023. Жизни не трогаем, но ставим метку, чтобы
+    # следующее восстановление было предсказуемым.
+    if updated is None:
+        user.lives_updated_at = now
+        return user.lives
+
+    elapsed_minutes = int((now - updated).total_seconds() // 60)
+    restored = elapsed_minutes // LIFE_REGEN_MINUTES
+    if restored <= 0:
+        return user.lives
+
+    before = user.lives or 0
+    user.lives = min(MAX_LIVES, before + restored)
+    if user.lives >= MAX_LIVES:
+        user.lives_updated_at = None
+    else:
+        # Сдвигаем метку ровно на потраченные интервалы, чтобы остаток времени
+        # до следующей жизни не сгорал.
+        user.lives_updated_at = updated + timedelta(
+            minutes=restored * LIFE_REGEN_MINUTES
+        )
+    return user.lives
+
+
+def lives_state(user: User, now: datetime | None = None) -> dict:
+    """Сколько жизней и через сколько восстановится следующая.
+
+    Клиент показывает это в шапке урока: «3 ❤️ · +1 через 12 мин». Без
+    обратного отсчёта механика выглядит как поломка — непонятно, ждать или
+    покупать.
+    """
+    now = now or datetime.now(timezone.utc)
+    lives = user.lives or 0
+
+    if lives >= MAX_LIVES:
+        return {
+            "lives": MAX_LIVES,
+            "max_lives": MAX_LIVES,
+            "next_life_in_seconds": 0,
+            "regen_minutes": LIFE_REGEN_MINUTES,
+        }
+
+    updated = _as_aware_utc(user.lives_updated_at)
+    if updated is None:
+        return {
+            "lives": lives,
+            "max_lives": MAX_LIVES,
+            "next_life_in_seconds": LIFE_REGEN_MINUTES * 60,
+            "regen_minutes": LIFE_REGEN_MINUTES,
+        }
+
+    elapsed = max(0, int((now - updated).total_seconds()))
+    remaining = LIFE_REGEN_MINUTES * 60 - (elapsed % (LIFE_REGEN_MINUTES * 60))
+    return {
+        "lives": lives,
+        "max_lives": MAX_LIVES,
+        "next_life_in_seconds": remaining,
+        "regen_minutes": LIFE_REGEN_MINUTES,
+    }
+
+
 def spend_lives(user: User, amount: int) -> int:
-    """Списывает жизни за ошибки, не уходя ниже нуля."""
-    user.lives = max(0, (user.lives or 0) - max(0, amount))
+    """Списывает жизни за ошибки, не уходя ниже нуля.
+
+    Метка времени ставится при первой трате из полного запаса: от неё
+    считается восстановление. Если трата идёт при уже неполном счёте,
+    метку не сдвигаем — иначе каждая ошибка отодвигала бы следующую жизнь.
+    """
+    amount = max(0, amount)
+    if not amount:
+        return user.lives or 0
+
+    had_full = (user.lives or 0) >= MAX_LIVES
+    user.lives = max(0, (user.lives or 0) - amount)
+    if had_full or user.lives_updated_at is None:
+        user.lives_updated_at = datetime.now(timezone.utc)
     return user.lives
 
 
@@ -270,15 +380,20 @@ async def get_gamification_state(
     if user is None:
         raise GamificationError("Пользователь не найден")
 
+    # Доначисляем жизни до выдачи состояния: иначе клиент показывал бы старый
+    # счётчик, хотя время восстановления уже прошло.
+    if regenerate_lives(user):
+        await session.flush()
+
     achievements = await list_achievements(session, user_id)
     state = {
         "xp": user.xp,
         "level": user.level,
         "streak": user.streak,
         "gems": user.gems,
-        "lives": user.lives,
         "streak_freezes": _streak_freezes(user),
         "next_level_xp": xp_for_next_level(user.level),
+        **lives_state(user),
         "achievements": [
             {
                 "code": a.code,
@@ -391,9 +506,6 @@ async def purchase_shop_item(
         "effect": effect,
     }
 
-
-# Максимум жизней (совпадает с default у User.lives).
-MAX_LIVES = 5
 
 # Косметика попадает в bear_outfit под этими ключами.
 _OUTFITS = {

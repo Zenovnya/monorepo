@@ -55,7 +55,7 @@ export default function ProfileScreen({ navigation }) {
     mutationFn: (value) => userApi.updateMe(value),
     onSuccess: (profile) => {
       setUser({ name: profile.name });
-      queryClient.invalidateQueries(['gamification-me']);
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       setEditingName(false);
       setNameError(null);
     },

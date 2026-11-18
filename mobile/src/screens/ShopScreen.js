@@ -72,7 +72,15 @@ export default function ShopScreen({ navigation }) {
     onSuccess: (data, it) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       analyticsApi.track('shop_item_purchased', { item: it.item }).catch(() => {});
-      setUser({ gems: data.gems });
+      // Жизни тоже пишем в стор: до этого «Пополнить жизни» восстанавливало
+      // серверный счётчик, но чип «❤️» в шапке оставался прежним до
+      // перезапуска приложения.
+      setUser({
+        gems: data.gems,
+        ...(typeof data.effect?.lives === 'number'
+          ? { lives: data.effect.lives }
+          : {}),
+      });
       const effect = data.effect || {};
       const messages = {
         lives: `Жизни восстановлены: ${effect.lives ?? ''}`.trim(),

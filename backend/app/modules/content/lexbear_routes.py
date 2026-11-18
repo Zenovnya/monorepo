@@ -114,7 +114,31 @@ async def lesson_detail(
     authorization: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Возвращает детали урока (теория + вопросы)."""
+    """Возвращает детали урока (теория + вопросы).
+
+    Отдаёт 409, если жизней нет: экран урока показывает таймер восстановления
+    и кнопку магазина вместо вопросов. Проверка до начала, а не после ответов.
+    """
+    user_id = _get_current_user_id(authorization)
+    try:
+        await lexbear_service.ensure_can_start_lesson(session, user_id)
+    except lexbear_service.NoLivesError as exc:
+        # Состояние жизней отдаём в detail: клиенту нужен таймер до
+        # следующей жизни, иначе экран блокировки нечего показать.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "no_lives",
+                "message": str(exc),
+                "lives": exc.lives,
+            },
+        ) from exc
+    except lexbear_service.LexBearContentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
     try:
         return await lexbear_service.get_lesson_detail(session, lesson_id)
     except lexbear_service.LessonNotFoundError as exc:
@@ -156,6 +180,11 @@ async def complete_lesson(
             lesson_id,
             answers=data.answers,
         )
+    except lexbear_service.NoLivesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "no_lives", "message": str(exc), "lives": exc.lives},
+        ) from exc
     except lexbear_service.LessonNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

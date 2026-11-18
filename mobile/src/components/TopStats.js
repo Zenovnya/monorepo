@@ -1,17 +1,45 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+
+import { gamificationApi } from '../api/gamification';
 import { useAuthStore } from '../store';
 import { colors } from '../theme/colors';
 
 /**
  * Верхняя панель статистики: стрик, XP, гемы, жизни.
+ *
+ * Жизни берём из `/gamification/me`, а не из auth-store: стор заполняется
+ * один раз при гидратации сессии и после первого же неправильного ответа
+ * показывал устаревшее «5». Тот же ключ запроса используют урок, магазин и
+ * экран «жизни закончились», поэтому любая инвалидация обновляет и шапку.
  */
 export function TopStats() {
   const user = useAuthStore((s) => s.user);
-  const streak = user?.streak ?? 0;
-  const xp = user?.xp ?? 0;
-  const gems = user?.gems ?? 0;
-  const lives = user?.lives ?? 5;
+  const setUser = useAuthStore((s) => s.setUser);
+
+  const { data } = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+    // Пока запас не полный, раз в минуту подтягиваем восстановленную жизнь.
+    refetchInterval: (query) => {
+      const lives = query.state.data?.lives;
+      const max = query.state.data?.max_lives ?? 5;
+      return typeof lives === 'number' && lives < max ? 60 * 1000 : false;
+    },
+  });
+
+  const lives = data?.lives ?? user?.lives ?? 5;
+  const streak = data?.streak ?? user?.streak ?? 0;
+  const xp = data?.xp ?? user?.xp ?? 0;
+  const gems = data?.gems ?? user?.gems ?? 0;
+
+  // Держим стор в согласии с сервером — на него опираются другие экраны.
+  useEffect(() => {
+    if (typeof data?.lives !== 'number') return;
+    if (user?.lives === data.lives) return;
+    setUser({ lives: data.lives });
+  }, [data?.lives, user?.lives, setUser]);
 
   return (
     <View style={styles.row}>

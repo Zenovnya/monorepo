@@ -35,6 +35,46 @@ class CaseNotFoundError(LexBearContentError):
     """Кейс LexBear не найден."""
 
 
+class NoLivesError(LexBearContentError):
+    """Жизни закончились: урок недоступен до восстановления.
+
+    Жизни списывались за ошибки, но нигде не проверялись — урок можно было
+    начинать с нулём жизней, то есть ограничения не существовало, а покупка
+    «Пополнение жизней» ничего не меняла. Проверка стоит перед началом урока
+    (а не после ответов): пользователь не должен пройти пять вопросов и узнать
+    о блокировке на экране результата.
+    """
+
+    def __init__(self, message: str, lives: dict | None = None) -> None:
+        super().__init__(message)
+        self.lives = lives or {}
+
+
+async def ensure_can_start_lesson(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> dict:
+    """Проверяет, что у пользователя есть жизни на урок.
+
+    Возвращает состояние жизней. Бросает ``NoLivesError``, если запас пуст и
+    следующая жизнь ещё не восстановилась.
+    """
+    from app.modules.auth.models import User
+    from app.modules.gamification import service as gamification_service
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise LexBearContentError("Пользователь не найден")
+
+    gamification_service.regenerate_lives(user)
+    await session.commit()
+
+    state = gamification_service.lives_state(user)
+    if state["lives"] <= 0:
+        raise NoLivesError("Жизни закончились", state)
+    return state
+
+
 async def list_units(
     session: AsyncSession,
 ) -> list[Unit]:
@@ -351,6 +391,12 @@ async def complete_lesson(
     lesson = await session.get(LexBearLesson, lesson_id)
     if lesson is None:
         raise LessonNotFoundError("Урок не найден")
+
+    # Проверка жизней и здесь: `GET /lessons/{id}` отдаёт 409, но обойти это
+    # прямым вызовом complete — один curl, и ограничение перестало бы работать.
+    # Жизни при этом ещё не списаны (списание ниже, по числу ошибок), так что
+    # при нуле блокировка возвращается до любых изменений прогресса.
+    await ensure_can_start_lesson(session, user_id)
 
     # Вопросы берём из БД, а не из запроса: клиент не должен влиять ни на
     # знаменатель, ни на то, какие ответы считаются правильными.
