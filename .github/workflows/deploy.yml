@@ -68,7 +68,24 @@ jobs:
       # миграции, ни тесты. Проверка перед MVP была формальностью: 8 прогонов
       # подряд упали за 0 секунд ещё до первого шага.
       - name: Run tests
-        run: python -m pytest -p no:cacheprovider
+        run: python -m pytest -p no:cacheprovider -q 2>&1 | tee pytest.log
+
+      # Падение теста должно быть видно там, где его читают. Логи воркфлоу
+      # скачиваются только из веб-интерфейса и недоступны из скриптов, поэтому
+      # причину пишем прямо в PR: иначе «Tests ✗» — это загадка без деталей.
+      - name: Report test failures to PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo '### Упали тесты (`pytest`)'
+            echo
+            echo '```'
+            tail -c 3000 pytest.log || echo 'лог недоступен'
+            echo '```'
+          } > /tmp/failure.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/failure.md
 
       - name: Seed content and smoke-check API
         env:
