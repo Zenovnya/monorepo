@@ -205,9 +205,17 @@ async def _get_or_create_review_state(
         )
     )
     if state is None:
+        # Счётчики задаём явно. Python-side `default=` применяется только при
+        # INSERT, поэтому до flush они остаются None — а sm2() сразу читает их
+        # и падал с TypeError: unsupported operand type(s) for +: 'NoneType'
+        # and 'int'. Это был первый же ответ на кейс у нового пользователя:
+        # вкладка «Кейсы» открывалась, но разбор любого дела отдавал 500.
         state = ReviewState(
             user_id=user_id,
             case_id=case_id,
+            repetitions=0,
+            interval_days=0,
+            ease_factor=2.5,
             due_at=datetime.now(timezone.utc),
         )
         session.add(state)

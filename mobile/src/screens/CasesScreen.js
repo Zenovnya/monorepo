@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { describeLoadError } from '../api/client';
 import { TopStats } from '../components/TopStats';
 import { PressableScale } from '../components/PressableScale';
 import {
@@ -110,9 +111,9 @@ export default function CasesScreen({ navigation }) {
         <View style={styles.stateCard}>
           <WaxSeal label="!" tone="red" size={48} />
           <Text style={styles.errorText}>Не удалось загрузить кейсы</Text>
-          {error.message ? (
-            <Text style={styles.errorDetail}>{error.message}</Text>
-          ) : null}
+          <Text style={styles.errorDetail}>
+            {describeLoadError(error, 'кейсы')}
+          </Text>
           <PressableScale
             onPress={() => refetch()}
             style={styles.retryBtn}
@@ -282,8 +283,22 @@ export default function CasesScreen({ navigation }) {
         {filtered.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>
-              Кейсы не найдены. Попробуйте выбрать другой кодекс.
+              {activeFilter === 'Все'
+                ? // Пустой архив — это не «выберите другой кодекс»: фильтр уже
+                  // «Все», и совет вводит в заблуждение. Такое состояние бывает
+                  // при первом запуске без сида контента.
+                  'Архив пока пуст. Кейсы появятся, как только мы загрузим практику.'
+                : `В разделе «${activeFilter}» пока нет дел. Попробуйте другой кодекс.`}
             </Text>
+            {activeFilter !== 'Все' ? (
+              <PressableScale
+                onPress={() => setActiveFilter('Все')}
+                style={styles.emptyReset}
+                scale={0.94}
+              >
+                <Text style={styles.emptyResetText}>Показать все кейсы</Text>
+              </PressableScale>
+            ) : null}
           </View>
         )}
       </View>
@@ -405,6 +420,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
     textAlign: 'center',
+  },
+  emptyReset: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    backgroundColor: colors.card,
+  },
+  emptyResetText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: brand.red,
   },
   errorDetail: {
     fontSize: 13,

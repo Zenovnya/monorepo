@@ -20,7 +20,7 @@ import {
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 import { authApi } from '../api/auth';
-import { describeNetworkError } from '../api/client';
+import { describeLoadError } from '../api/client';
 
 /**
  * Экран установки нового пароля по ссылке из письма.
@@ -62,7 +62,7 @@ export default function ResetPasswordScreen({ route, navigation }) {
       // он понятный («Срок действия ссылки истёк»).
       const detail = err?.response?.data?.detail;
       setErrors({
-        password: detail || describeNetworkError(err),
+        password: detail || describeLoadError(err, 'новый пароль'),
       });
       passwordRef.current?.shake();
     } finally {

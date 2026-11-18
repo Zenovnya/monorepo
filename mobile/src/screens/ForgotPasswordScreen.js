@@ -21,7 +21,7 @@ import {
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 import { authApi } from '../api/auth';
-import { describeNetworkError } from '../api/client';
+import { describeLoadError } from '../api/client';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,7 +55,8 @@ export default function ForgotPasswordScreen({ navigation }) {
       ).catch(() => {});
       setSent(true);
     } catch (err) {
-      setError(describeNetworkError(err));
+      // 429 (частые запросы) раньше давал `null`, и кнопка просто «не работала».
+      setError(describeLoadError(err, 'письмо'));
       emailRef.current?.shake();
     } finally {
       setLoading(false);

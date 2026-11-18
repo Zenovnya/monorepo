@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { TopStats } from '../components/TopStats';
 import { PressableScale } from '../components/PressableScale';
@@ -86,9 +87,9 @@ export default function LearnScreen({ navigation }) {
         <View style={styles.stateCard}>
           <AnimatedMascot size={104} emotion="sad" error />
           <Text style={styles.errorText}>Не удалось загрузить программу</Text>
-          {error.message ? (
-            <Text style={styles.errorDetail}>{error.message}</Text>
-          ) : null}
+          <Text style={styles.errorDetail}>
+            {describeLoadError(error, 'программу')}
+          </Text>
           <PressableScale
             onPress={() => refetch()}
             style={[styles.retryBtn]}

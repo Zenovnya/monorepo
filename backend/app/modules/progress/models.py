@@ -183,6 +183,17 @@ class ReviewState(Base):
     interval_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ease_factor: Mapped[float] = mapped_column(default=2.5, nullable=False)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def __init__(self, **kwargs):
+        # `default=` на колонке применяется только при INSERT, поэтому до
+        # flush поля остаются None. SM-2 читает их сразу после создания
+        # («первый ответ на кейс») и падал на `None + 1`. Дефолты дублируем
+        # здесь, чтобы любая новая точка создания состояния была безопасной.
+        kwargs.setdefault("repetitions", 0)
+        kwargs.setdefault("interval_days", 0)
+        kwargs.setdefault("ease_factor", 2.5)
+        super().__init__(**kwargs)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

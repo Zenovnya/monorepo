@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { describeLoadError } from '../api/client';
 import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
@@ -42,6 +43,7 @@ export default function CaseDetailScreen({ route, navigation }) {
     data: caseData,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ['lexbear-case', caseId],
     queryFn: () => lexbearApi.getCase(caseId),
@@ -106,10 +108,29 @@ export default function CaseDetailScreen({ route, navigation }) {
   }
 
   if (error || !caseData) {
+    // Раньше здесь был только текст без единого действия: пользователь упирался
+    // в тупик и мог лишь вернуться назад. Теперь есть повтор и понятная причина.
     return (
       <View style={styles.center}>
         <AnimatedMascot size={124} emotion="sad" networkError />
         <Text style={styles.errorText}>Не удалось загрузить кейс</Text>
+        <Text style={styles.errorDetail}>
+          {describeLoadError(error, 'кейс')}
+        </Text>
+        <PressableScale
+          onPress={() => refetch()}
+          style={styles.retryBtn}
+          scale={0.95}
+        >
+          <Text style={styles.retryBtnText}>Повторить</Text>
+        </PressableScale>
+        <PressableScale
+          onPress={() => navigation.goBack()}
+          style={styles.backLink}
+          scale={0.95}
+        >
+          <Text style={styles.backLinkText}>К списку кейсов</Text>
+        </PressableScale>
       </View>
     );
   }
@@ -373,6 +394,35 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
     textAlign: 'center',
+  },
+  errorDetail: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    color: colors.subtext,
+    textAlign: 'center',
+    maxWidth: 300,
+  },
+  retryBtn: {
+    marginTop: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+    backgroundColor: brand.red,
+    borderBottomWidth: 3.5,
+    borderBottomColor: brand.redDark,
+  },
+  retryBtnText: {
+    color: brand.creamText || '#FCF8F0',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  backLink: { paddingVertical: 6 },
+  backLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.subtext,
+    textDecorationLine: 'underline',
   },
 
   header: {
