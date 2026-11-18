@@ -26,6 +26,7 @@ from app.modules.admin.security import require_admin
 from app.modules.content import content_loader
 from app.modules.content.content_schemas import CaseIn, LessonIn
 from app.modules.content.lexbear_models import LexBearLesson, Question, TheoryCard, Unit
+from app.modules.content import review_gate
 from app.modules.content.models import Case
 from app.modules.learning import importer as learning_importer
 from app.modules.learning.models import CaseVersion, LearningCase
@@ -280,13 +281,23 @@ async def admin_delete_case(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Кейс не найден"
         )
+    retired_versions = 0
     if hard:
         await session.delete(case)
     else:
         case.is_active = False
+        # Мягкое удаление должно убирать кейс и из адаптивной ленты: раньше он
+        # исчезал из вкладки «Кейсы», но продолжал приходить в
+        # `/learning/next` и в диагностику.
+        retired_versions = await review_gate.retire_legacy_case(session, slug)
     await session.commit()
     await bump_content_version()
-    return {"ok": True, "slug": slug, "hard": hard}
+    return {
+        "ok": True,
+        "slug": slug,
+        "hard": hard,
+        "retired_versions": retired_versions,
+    }
 
 
 # ---------------------------------------------------------------------------

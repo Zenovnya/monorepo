@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.content.review_gate import is_legacy_case_reviewed
 from app.modules.content.models import Case, CaseOption, Lesson
 from app.modules.progress.models import Progress, ReviewLog, ReviewState
 
@@ -60,6 +61,11 @@ async def get_reviews_for_user(
     for state in states:
         case = await session.get(Case, state.case_id)
         if case is None:
+            # Кейс удалён или снят с показа после того, как попал в повторения.
+            continue
+        # Снятый с показа кейс не должен всплывать в «Повторении»: иначе
+        # юрпроверка обходится через старую историю повторений.
+        if not await is_legacy_case_reviewed(session, case):
             continue
         reviews.append(
             {
@@ -115,10 +121,19 @@ async def answer_case(
     case = await session.get(Case, case_id)
     if case is None:
         raise CaseNotFoundError("Кейс не найден")
+    # Тот же гейт, что в ленте и вкладке «Кейсы»: иначе ответ на скрытый кейс
+    # отдавал бы разбор и текст нормы в обход юридической проверки.
+    if not await is_legacy_case_reviewed(session, case):
+        raise CaseNotFoundError("Кейс не найден")
 
     option = await session.get(CaseOption, option_id)
     if option is None:
         raise OptionNotFoundError("Вариант ответа не найден")
+    # Вариант из другого кейса — это не «верный ответ по ошибке», а повод
+    # отказать: сервер отвечал `correct: true` за вариант другого кейса и
+    # начислял за него SRS-прогресс.
+    if option.case_id != case_id:
+        raise OptionNotFoundError("Вариант ответа не относится к этому кейсу")
 
     correct = option.is_correct
 

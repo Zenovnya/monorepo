@@ -313,3 +313,194 @@ class TestLegacyCaseListRespectsReviewGate:
             hidden = await session.scalar(select(Case).where(Case.slug == imported_slug))
             with pytest.raises(lexbear_service.CaseNotFoundError):
                 await lexbear_service.get_case(session, hidden.id)
+
+
+class TestProgressRespectsReviewGate:
+    """Ответ и повторения не должны обходить юрпроверку.
+
+    Проверено на живом сервере до правки: `POST /progress/answer` по id
+    непроверенного кейса отдавал `200`, правильный ответ, разбор со ссылкой на
+    норму и записывал SRS-состояние. То есть весь гейт обходился одной ручкой,
+    которая читает legacy-таблицу `cases`.
+    """
+
+    async def test_hidden_case_cannot_be_answered(self) -> None:
+        from app.database import async_session_factory
+        from app.modules.content.models import Case, CaseOption
+        from app.modules.learning.models import CaseVersion, LearningCase
+        from app.modules.progress import service as progress_service
+
+        suffix = uuid.uuid4().hex[:8]
+        slug = f"progress-hidden-{suffix}"
+
+        async with async_session_factory() as session:
+            case = Case(
+                slug=slug,
+                title="Скрытый кейс",
+                codex="КоАП",
+                difficulty="medium",
+                case_text="Ситуация",
+                situation="Ситуация",
+            )
+            session.add(case)
+            await session.flush()
+            session.add(
+                CaseOption(
+                    case_id=case.id, text="Верно", is_correct=True, explanation="Разбор"
+                )
+            )
+            bank = LearningCase(title=slug, status="published")
+            session.add(bank)
+            await session.flush()
+            session.add(
+                CaseVersion(
+                    case_id=bank.id,
+                    version=1,
+                    situation=slug,
+                    difficulty=0.5,
+                    status="published",
+                    review_status="imported",
+                    source_slug=slug,
+                )
+            )
+            await session.commit()
+            case_id = case.id
+
+        async with async_session_factory() as session:
+            option = await session.scalar(
+                select(CaseOption.id).where(CaseOption.case_id == case_id)
+            )
+            with pytest.raises(progress_service.CaseNotFoundError):
+                await progress_service.answer_case(
+                    session, uuid.uuid4(), case_id, option
+                )
+
+    async def test_option_from_another_case_is_rejected(self) -> None:
+        """Чужой вариант раньше давал `correct: true` и SRS-прогресс."""
+        from app.database import async_session_factory
+        from app.modules.content.models import Case, CaseOption
+        from app.modules.content.review_gate import reviewed_case_slugs
+        from app.modules.learning import importer
+        from app.modules.learning.models import CaseVersion, LearningCase
+        from app.modules.progress import service as progress_service
+
+        suffix = uuid.uuid4().hex[:8]
+        slug_a = f"progress-a-{suffix}"
+        slug_b = f"progress-b-{suffix}"
+
+        async with async_session_factory() as session:
+            ids = {}
+            for slug in (slug_a, slug_b):
+                case = Case(
+                    slug=slug,
+                    title=slug,
+                    codex="КоАП",
+                    difficulty="medium",
+                    case_text="Ситуация",
+                    situation="Ситуация",
+                )
+                session.add(case)
+                await session.flush()
+                ids[slug] = case.id
+                session.add(
+                    CaseOption(
+                        case_id=case.id, text="Верно", is_correct=True, explanation="Разбор"
+                    )
+                )
+                bank = LearningCase(title=slug, status="published")
+                session.add(bank)
+                await session.flush()
+                session.add(
+                    CaseVersion(
+                        case_id=bank.id,
+                        version=1,
+                        situation=slug,
+                        difficulty=0.5,
+                        status="published",
+                        review_status="imported",
+                        source_slug=slug,
+                    )
+                )
+            await session.commit()
+
+        async with async_session_factory() as session:
+            for slug in (slug_a, slug_b):
+                await importer.set_review_status(session, slug, "approved", reviewed_by="test")
+            await session.commit()
+
+        async with async_session_factory() as session:
+            assert await reviewed_case_slugs(session, [slug_a, slug_b]) == {slug_a, slug_b}
+            foreign_option = await session.scalar(
+                select(CaseOption.id).where(CaseOption.case_id == ids[slug_b])
+            )
+            with pytest.raises(progress_service.OptionNotFoundError):
+                await progress_service.answer_case(
+                    session, uuid.uuid4(), ids[slug_a], foreign_option
+                )
+
+
+class TestSoftDeleteRetiresAdaptiveVersions:
+    """Мягкое удаление в админке должно действовать и на адаптивную ленту.
+
+    Проверено на живом сервере до правки: `DELETE /admin/content/cases/{slug}`
+    убирал кейс из вкладки «Кейсы», но `/learning/next` продолжал его отдавать
+    — решение «больше не показываем» действовало только на одном из двух
+    путей. Причина: адаптивный банк хранит свою копию версии и о флаге
+    `cases.is_active` не знает.
+    """
+
+    async def test_retire_hides_version_from_bank(self) -> None:
+        from app.database import async_session_factory
+        from app.modules.content import review_gate
+        from app.modules.content.models import Case
+        from app.modules.learning import importer
+        from app.modules.learning.models import CaseVersion, LearningCase
+        from sqlalchemy import select
+
+        suffix = uuid.uuid4().hex[:8]
+        slug = f"retire-{suffix}"
+
+        async with async_session_factory() as session:
+            session.add(
+                Case(
+                    slug=slug,
+                    title=slug,
+                    codex="КоАП",
+                    difficulty="medium",
+                    case_text="Ситуация",
+                    situation="Ситуация",
+                )
+            )
+            bank = LearningCase(title=slug, status="published")
+            session.add(bank)
+            await session.flush()
+            session.add(
+                CaseVersion(
+                    case_id=bank.id,
+                    version=1,
+                    situation=slug,
+                    difficulty=0.5,
+                    status="published",
+                    review_status="imported",
+                    source_slug=slug,
+                )
+            )
+            await session.commit()
+
+        async with async_session_factory() as session:
+            await importer.set_review_status(session, slug, "approved", reviewed_by="test")
+            await session.commit()
+
+        async with async_session_factory() as session:
+            assert await review_gate.reviewed_case_slugs(session, [slug]) == {slug}
+
+            retired = await review_gate.retire_legacy_case(session, slug)
+            await session.commit()
+            assert retired == 1
+
+        async with async_session_factory() as session:
+            version = await session.scalar(
+                select(CaseVersion).where(CaseVersion.source_slug == slug)
+            )
+            assert version.status == "retired"
+            assert await review_gate.reviewed_case_slugs(session, [slug]) == set()

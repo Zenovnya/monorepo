@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from app.modules.content.models import Case, CaseOption, Lesson
+from app.modules.learning.models import CaseVersion, LearningCase
 from app.modules.progress import service
 from app.modules.progress.models import Progress, ReviewState
 
@@ -21,6 +22,10 @@ class FakeScalarResult:
 
     def first(self) -> Any:
         return self._items[0] if self._items else None
+
+    def scalars(self) -> "FakeScalarResult":
+        """``session.execute(...).scalars().all()`` — тот же набор записей."""
+        return self
 
 
 class FakeSession:
@@ -68,6 +73,14 @@ class FakeSession:
         entity = statement.column_descriptions[0]["entity"]
         return FakeScalarResult(self._all_of(entity))
 
+    async def execute(self, statement: Any) -> FakeScalarResult:
+        """Аналог ``session.execute``: фильтры WHERE не разбираются.
+
+        Фейк отдаёт все записи сущности, поэтому тесты на гейт проверки
+        строятся так, чтобы в наборе была только нужная версия.
+        """
+        return await self.scalars(statement)
+
     async def scalar(self, statement: Any) -> Any:
         """Возвращает первую запись сущности (аналог session.scalar)."""
         result = await self.scalars(statement)
@@ -88,7 +101,20 @@ def lesson(session: FakeSession) -> Lesson:
 
 @pytest.fixture()
 def case(session: FakeSession, lesson: Lesson) -> Case:
-    c = Case(id=uuid.uuid4(), lesson_id=lesson.id, situation="Остановка", case_type="simple")
+    """Кейс, который прошёл юридическую проверку.
+
+    Гейт проверки стоит и на `answer_case`: без записи в адаптивном банке кейс
+    считается непроверенным и отвечать на него нельзя. Фейковая сессия не
+    разбирает WHERE, поэтому достаточно положить одну версию со статусом
+    `approved` и тем же slug.
+    """
+    c = Case(
+        id=uuid.uuid4(),
+        slug="stopping",
+        lesson_id=lesson.id,
+        situation="Остановка",
+        case_type="simple",
+    )
     opt_correct = CaseOption(id=1, case_id=c.id, text="Да", is_correct=True, explanation="Правильно")
     opt_wrong = CaseOption(id=2, case_id=c.id, text="Нет", is_correct=False)
     c.options.append(opt_correct)
@@ -96,6 +122,20 @@ def case(session: FakeSession, lesson: Lesson) -> Case:
     session.add_model(c)
     session.add_model(opt_correct)
     session.add_model(opt_wrong)
+    bank = LearningCase(id=uuid.uuid4(), title="stopping", status="published")
+    session.add_model(bank)
+    session.add_model(
+        CaseVersion(
+            id=uuid.uuid4(),
+            case_id=bank.id,
+            version=1,
+            situation="Остановка",
+            difficulty=0.5,
+            status="published",
+            review_status="approved",
+            source_slug="stopping",
+        )
+    )
     return c
 
 

@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.learning.constants import (
+    PUBLISHED_REVIEW_STATUS as _PUBLISHED_REVIEW_STATUS,
+)
 from app.modules.learning.models import (
     AssessmentSession, Attempt, CaseAnswer, CaseCompetency, CaseStep,
     CaseVersion, LearningCase, UserCompetencyState,
@@ -31,16 +34,17 @@ def new_competency_state(
 
 # Кейс попадает пользователю только с этим статусом юридической проверки.
 # Импорт из JSON-паков или админки ставит ``imported`` — то есть «загружено,
-# но юристом не проверено». До этой проверки непроверенный кейс отдавался
-# в ``/learning/next`` и в диагностику наравне с проверенным: студент учился
-# по тексту, который никто не валидировал, а продукт при этом обещал
-# обратное («review_status остаётся imported до approved»).
-PUBLISHED_REVIEW_STATUS = "approved"
-
+# но юристом не проверено». Значение живёт в ``learning/constants.py``, чтобы
+# его могли импортировать ``content.review_gate`` и ``progress.service`` без
+# циклического импорта.
+#
 # Почему гейт, а не фильтр «показывать всё, кроме отклонённого»: статусов три
 # (imported / in_review / approved), и по умолчанию кейс именно ``imported``.
 # Белый список означает, что новая стадия проверки по умолчанию не пропускает
 # контент, а не наоборот.
+PUBLISHED_REVIEW_STATUS = _PUBLISHED_REVIEW_STATUS
+
+
 def is_user_visible(version: CaseVersion) -> bool:
     """Можно ли показывать версию кейса пользователю."""
     return version.review_status == PUBLISHED_REVIEW_STATUS
