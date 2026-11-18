@@ -158,7 +158,20 @@ async def adaptive_set_review(
     reviewed_by: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Меняет статус юридической проверки кейса: ``in_review`` или ``approved``."""
+    """Меняет статус юридической проверки кейса: ``in_review`` или ``approved``.
+
+    Недопустимый статус — это ошибка запроса (``422``), а не «кейс не найден».
+    Раньше оба случая отдавали ``404``, и модератор с опечаткой в статусе шёл
+    искать несуществующий кейс вместо того, чтобы исправить параметр.
+    """
+    if review_status not in learning_importer.REVIEW_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Недопустимый статус проверки. Допустимые: "
+                + ", ".join(learning_importer.REVIEW_STATUSES)
+            ),
+        )
     try:
         version = await learning_importer.set_review_status(
             session, slug, review_status, reviewed_by=reviewed_by

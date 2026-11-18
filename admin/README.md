@@ -51,6 +51,25 @@ ADMIN_TOKEN=<длинная-случайная-строка>
 задеплой, затем на вкладке «Загрузка из JSON» нажми **Запустить загрузку**.
 Опция **prune** деактивирует то, чего больше нет в файлах.
 
+## Вкладка «Юрпроверка»
+
+Пользователю показываются **только кейсы со статусом `approved`** (гейт в
+`learning/service.py`). Импорт из JSON или сохранение в админке ставит
+`imported` — «загружено, юристом не смотрели». Поэтому сразу после массовой
+загрузки лента «Следующий кейс» и диагностика пусты, пока кейсы не проверены:
+это ожидаемое поведение, а не сбой.
+
+Вкладка показывает сводку (`видно пользователю` / `скрыто проверкой`), список
+с фильтром по статусу и две операции:
+
+- **В проверку** (`in_review`) — кейс взят в работу;
+- **Одобрить** (`approved`) — требует указать, кто проверил; имя и дата
+  сохраняются в `reviewed_by` / `reviewed_at`;
+- **Снять с показа** (`imported`) — кейс мгновенно пропадает из выдачи, если
+  в тексте нашлась ошибка.
+
+Порядок проверки и требования к содержанию кейса — `docs/legal-content-policy.md`.
+
 ## API (для скриптов/CI)
 
 ```
@@ -62,6 +81,13 @@ GET    /admin/content/units
 GET    /admin/content/lessons
 PUT    /admin/content/units/{unit_code}/lessons  # upsert урока (по slug)
 DELETE /admin/content/lessons/{slug}
+
+GET    /admin/content/adaptive/review?review_status=imported   # очередь проверки
+GET    /admin/content/adaptive/review/summary                  # видимость для пользователей
+POST   /admin/content/adaptive/review/{slug}?review_status=approved&reviewed_by=...
 ```
+
+`review_status` вне списка `imported / in_review / approved` — `422`
+с перечнем допустимых; несуществующий slug — `404`.
 
 Все требуют заголовок `X-Admin-Token`.
