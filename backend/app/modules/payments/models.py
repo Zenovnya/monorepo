@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,17 @@ class Subscription(Base):
     """
 
     __tablename__ = "subscriptions"
+
+    def __init__(self, **kwargs) -> None:
+        """Проставляет автопродление сразу, не дожидаясь flush.
+
+        ``default=`` в SQLAlchemy применяется при вставке, поэтому свежая
+        подписка имела ``auto_renew = None``, а проверки вида
+        ``if subscription.auto_renew`` считали бы её выключенной. Та же ловушка
+        уже была в ``NotificationSettings``, поэтому дублируем на уровне модели.
+        """
+        kwargs.setdefault("auto_renew", True)
+        super().__init__(**kwargs)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -34,6 +45,17 @@ class Subscription(Base):
     plan: Mapped[str] = mapped_column(String(32), default="monthly", nullable=False)
     # Внешний идентификатор платежа в ЮKassa.
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Сохранённый шлюзом способ оплаты (ЮKassa: payment_method.id). Пока он
+    # есть и auto_renew включён, магазин может списать деньги без участия
+    # пользователя. У ЮKassa нет API удаления способа оплаты: отключение
+    # автосписаний — это удаление идентификатора у себя, поэтому колонка
+    # обнуляется при отмене подписки и при удалении аккаунта.
+    payment_method_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Разрешены ли автосписания. Пользователь может отключить продление, не
+    # теряя оплаченный доступ до expires_at.
+    auto_renew: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
     starts_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

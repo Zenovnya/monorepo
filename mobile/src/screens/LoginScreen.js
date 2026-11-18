@@ -25,6 +25,7 @@ import {
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 import { useLogin } from '../hooks/useAuth';
+import { useAuthStore } from '../store';
 import { useNavigation } from '@react-navigation/native';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,6 +40,11 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState({});
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [hasError, setHasError] = useState(false);
+  // Одноразовое уведомление (например, «автоплатёж не отменён» после удаления
+  // аккаунта). Alert на вебе не показывается, поэтому сообщение приходит
+  // через стор и живёт на экране входа.
+  const notice = useAuthStore((s) => s.notice);
+  const clearNotice = useAuthStore((s) => s.clearNotice);
 
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
@@ -112,6 +118,25 @@ export default function LoginScreen() {
 
         <Text style={styles.title}>Здравствуйте!</Text>
         <Text style={styles.subtitle}>Войдите, чтобы продолжить обучение</Text>
+
+        {notice ? (
+          <Animated.View
+            entering={FadeInDown.duration(240).easing(Easing.out(Easing.cubic))}
+            style={styles.noticeCard}
+            accessibilityRole="alert"
+          >
+            <Text style={styles.noticeTitle}>{notice.title}</Text>
+            <Text style={styles.noticeText}>{notice.text}</Text>
+            <Pressable
+              onPress={clearNotice}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Скрыть уведомление"
+            >
+              <Text style={styles.noticeDismiss}>Понятно</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
 
         <Animated.View
           entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
@@ -231,6 +256,31 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  noticeCard: {
+    backgroundColor: '#FDECEA',
+    borderColor: brand.red,
+    borderWidth: 2,
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+    marginTop: 8,
+  },
+  noticeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.red,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text,
+  },
+  noticeDismiss: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '800',
+    color: brand.red,
+  },
   root: {
     flex: 1,
     backgroundColor: colors.background,

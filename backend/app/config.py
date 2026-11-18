@@ -66,10 +66,14 @@ class Settings(BaseSettings):
     # странице шлюза. Схема совпадает с app.json (mobile/app.json scheme).
     payments_return_url: str = "lapazakona://payment-return"
 
-    # --- ЮKassa (наследие; используется провайдером yookassa, если включён) ---
+    # --- ЮKassa (используется провайдером yookassa при PAYMENT_PROVIDER=yookassa) ---
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_webhook_secret: str = ""
+    # Разрешать шлюзу сохранять способ оплаты. Без этого автопродление
+    # подписки невозможно: ЮKassa не сможет списать деньги без пользователя.
+    # Выключайте, если автосписания не планируются.
+    payments_save_payment_method: bool = True
 
     # --- Почта (Resend) ---
     # Сброс пароля и другие письма. Без ключа письма не отправляются,

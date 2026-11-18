@@ -113,7 +113,10 @@ async def payment_webhook(
 
     try:
         await service.confirm_payment(
-            session, event.external_id, paid=event.paid
+            session,
+            event.external_id,
+            paid=event.paid,
+            payment_method_id=event.payment_method_id,
         )
     except service.PaymentsError as exc:
         raise _to_http_error(exc) from exc

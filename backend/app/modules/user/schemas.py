@@ -69,3 +69,10 @@ class DeleteAccountOut(BaseModel):
     deleted: bool = True
     email: str
     leftover_rows: int = 0
+    # Отключены ли автосписания. ``False`` значит, что подписки не было или
+    # шлюз не подтвердил отмену — это важно не скрывать: пользователь должен
+    # знать, если платёж придётся отменять через поддержку.
+    had_subscription: bool = False
+    autopayment_stopped: bool = False
+    # Сколько незавершённых платежей удалось отменить.
+    canceled_payments: int = 0

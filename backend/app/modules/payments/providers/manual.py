@@ -59,6 +59,10 @@ class ManualProvider(PaymentProvider):
         url = f"https://checkout.invalid/pay/{order_id}"
         return CheckoutResult(confirmation_url=url, provider_payment_id=None)
 
+    async def cancel_payment(self, payment_id: str) -> bool:
+        """Отменять нечего: заглушка не создаёт реальных платежей."""
+        return False
+
     async def parse_webhook(self, *, body: bytes, headers) -> WebhookEvent:
         secret = (
             settings.payments_webhook_secret or settings.yookassa_webhook_secret
@@ -100,4 +104,21 @@ class ManualProvider(PaymentProvider):
         )
         status = str(payload.get("status") or payload.get("event") or "").lower()
         paid = status in _PAID_STATUSES
-        return WebhookEvent(external_id=str(external_id), paid=paid, raw=payload)
+
+        # Сохранённый способ оплаты: у ЮKassa он лежит в object.payment_method.
+        # Нужен для отключения автосписаний (см. payments.service.record_payment_method).
+        payment_method_id = None
+        saved = False
+        if isinstance(obj, dict):
+            method = obj.get("payment_method")
+            if isinstance(method, dict):
+                payment_method_id = method.get("id") or None
+                saved = bool(method.get("saved"))
+
+        return WebhookEvent(
+            external_id=str(external_id),
+            paid=paid,
+            payment_method_id=payment_method_id,
+            saved=saved,
+            raw=payload,
+        )

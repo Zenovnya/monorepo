@@ -60,13 +60,22 @@ export default function DeleteAccountScreen({ navigation }) {
 
   const deleteAccount = useMutation({
     mutationFn: () => userApi.deleteMe(password),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
         () => {}
       );
       // Кэш чистим до выхода: иначе экраны успеют показать данные удалённого
       // пользователя из памяти при следующем входе под другим аккаунтом.
       queryClient.clear();
+      // Шлюз мог не подтвердить отмену автоплатежа. Alert не годится: на вебе
+      // он молчит, а аккаунта к этому моменту уже нет. Кладём предупреждение
+      // в стор — экран входа покажет его после выхода.
+      if (data?.had_subscription && data?.autopayment_stopped === false) {
+        useAuthStore.getState().setNotice({
+          title: 'Автоплатёж не отменён',
+          text: 'Спишитесь с поддержкой, чтобы остановить списания: аккаунт удалён, но подписка у платёжного шлюза могла остаться активной.',
+        });
+      }
       await logout();
     },
     onError: (err) => {

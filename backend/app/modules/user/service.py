@@ -74,6 +74,9 @@ async def delete_account(session: AsyncSession, user: User) -> dict:
 
     Как удаляем:
 
+    0. Отключаем автосписания и отменяем незавершённые платежи
+       (``payments.stop_autopayments``). Это делается до удаления, потому что
+       способ оплаты хранится в подписке.
     1. Удаляем строку пользователя. У 20 таблиц внешний ключ объявлен с
        ``ON DELETE CASCADE``, поэтому Postgres чистит прогресс, токены,
        подписки, достижения, уведомления одним запросом.
@@ -86,6 +89,17 @@ async def delete_account(session: AsyncSession, user: User) -> dict:
     user_id = user.id
     email = user.email
 
+    # Автоплатёж отключаем ДО удаления строк: подписка — единственное место,
+    # где хранится сохранённый способ оплаты. Если удалить пользователя
+    # первым, каскад унесёт подписку и магазин навсегда потеряет связь со
+    # способом, по которому продолжают списываться деньги.
+    from app.modules.payments import service as payments_service
+
+    from app.modules.payments import service as _payments
+
+    had_subscription = await _payments.get_subscription(session, user_id) is not None
+    payments = await payments_service.stop_autopayments(session, user_id)
+
     await session.delete(user)
     await session.flush()
 
@@ -95,4 +109,11 @@ async def delete_account(session: AsyncSession, user: User) -> dict:
         leftover += result.rowcount or 0
 
     await session.commit()
-    return {"deleted": True, "email": email, "leftover_rows": leftover}
+    return {
+        "deleted": True,
+        "email": email,
+        "leftover_rows": leftover,
+        "had_subscription": had_subscription,
+        "autopayment_stopped": payments["stopped"],
+        "canceled_payments": payments["canceled_payments"],
+    }
