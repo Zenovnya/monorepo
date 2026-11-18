@@ -5,11 +5,11 @@ import {
   StyleSheet,
   ScrollView,
 
-  ActivityIndicator,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { describeLoadError } from '../api/client';
+import { ErrorState, LoadingState } from '../components/StateViews';
 import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
@@ -99,11 +99,10 @@ export default function CaseDetailScreen({ route, navigation }) {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={114} emotion="thinking" />
-        <ActivityIndicator size="small" color={brand.red} />
-        <Text style={styles.loadingHint}>Изучаем материалы дела…</Text>
-      </View>
+      <LoadingState
+        label="Изучаем материалы дела…"
+        illustration={<AnimatedMascot size={114} emotion="thinking" />}
+      />
     );
   }
 
@@ -111,27 +110,21 @@ export default function CaseDetailScreen({ route, navigation }) {
     // Раньше здесь был только текст без единого действия: пользователь упирался
     // в тупик и мог лишь вернуться назад. Теперь есть повтор и понятная причина.
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={124} emotion="sad" networkError />
-        <Text style={styles.errorText}>Не удалось загрузить кейс</Text>
-        <Text style={styles.errorDetail}>
-          {describeLoadError(error, 'кейс')}
-        </Text>
-        <PressableScale
-          onPress={() => refetch()}
-          style={styles.retryBtn}
-          scale={0.95}
-        >
-          <Text style={styles.retryBtnText}>Повторить</Text>
-        </PressableScale>
-        <PressableScale
-          onPress={() => navigation.goBack()}
-          style={styles.backLink}
-          scale={0.95}
-        >
-          <Text style={styles.backLinkText}>К списку кейсов</Text>
-        </PressableScale>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить кейс"
+        message={describeLoadError(error, 'кейс')}
+        onRetry={() => refetch()}
+        illustration={<AnimatedMascot size={124} emotion="sad" networkError />}
+        action={
+          <PressableScale
+            onPress={() => navigation.goBack()}
+            style={styles.backLink}
+            scale={0.95}
+          >
+            <Text style={styles.backLinkText}>К списку кейсов</Text>
+          </PressableScale>
+        }
+      />
     );
   }
 

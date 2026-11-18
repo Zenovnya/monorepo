@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import { PressableScale } from '../components/PressableScale';
 import {
   brand,
@@ -28,7 +29,7 @@ import { colors } from '../theme/colors';
  * просроченные повторения копились и ни на что не влияли.
  */
 export default function ReviewsScreen({ navigation }) {
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['srs-reviews'],
     queryFn: progressApi.reviews,
   });
@@ -131,20 +132,22 @@ export default function ReviewsScreen({ navigation }) {
         }
         ListEmptyComponent={
           isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="small" color={brand.red} />
-            </View>
+            <LoadingState compact label="Смотрим, что пора повторить…" />
+          ) : isError ? (
+            // Ошибка — не «всё повторено»: раньше оба состояния выглядели
+            // одинаково, и пользователь думал, что повторять нечего.
+            <ErrorState
+              compact
+              title="Не удалось загрузить повторения"
+              message={describeLoadError(error, 'повторения')}
+              onRetry={() => refetch()}
+            />
           ) : (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>
-                {isError ? 'Не удалось загрузить повторения' : 'Всё повторено'}
-              </Text>
-              <Text style={styles.emptyText}>
-                {isError
-                  ? 'Проверьте соединение и потяните список вниз, чтобы обновить.'
-                  : 'На сегодня просроченных кейсов нет. Разбирайте новые кейсы — они появятся здесь по расписанию.'}
-              </Text>
-            </View>
+            <EmptyState
+              compact
+              title="Всё повторено"
+              message="На сегодня просроченных кейсов нет. Разбирайте новые кейсы — они появятся здесь по расписанию."
+            />
           )
         }
       />

@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { PressableScale } from '../components/PressableScale';
+import { ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import {
-  ActivityIndicator,
   ImageBackground,
   Linking,
 
@@ -70,30 +71,18 @@ export default function AdaptiveLearningScreen({ navigation }) {
   };
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={brand.red} />
-        <Text style={styles.stateHint}>Подбираем следующий кейс…</Text>
-      </View>
-    );
+    return <LoadingState label="Подбираем следующий кейс…" />;
   }
 
   if (error) {
+    // Текст ошибки — человеческий (офлайн/таймаут/5xx), а не error.message.
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <WaxSeal label="!" tone="red" size={48} />
-          <Text style={styles.error}>Не удалось загрузить следующий кейс</Text>
-          <PressableScale
-            style={[
-              styles.stateBtn,
-            ]}
-            onPress={() => refetch()}
-          >
-            <Text style={styles.buttonText}>Повторить</Text>
-          </PressableScale>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить следующий кейс"
+        message={describeLoadError(error, 'кейс')}
+        onRetry={() => refetch()}
+        illustration={<WaxSeal label="!" tone="red" size={48} />}
+      />
     );
   }
 

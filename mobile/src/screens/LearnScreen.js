@@ -5,13 +5,13 @@ import {
   StyleSheet,
   ScrollView,
 
-  ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { TopStats } from '../components/TopStats';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { PressableScale } from '../components/PressableScale';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import {
@@ -73,31 +73,21 @@ export default function LearnScreen({ navigation }) {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={112} emotion="thinking" />
-        <ActivityIndicator size="small" color={brand.red} />
-        <Text style={styles.stateHint}>Открываем свод уроков…</Text>
-      </View>
+      <LoadingState
+        label="Открываем свод уроков…"
+        illustration={<AnimatedMascot size={112} emotion="thinking" />}
+      />
     );
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <AnimatedMascot size={104} emotion="sad" error />
-          <Text style={styles.errorText}>Не удалось загрузить программу</Text>
-          <Text style={styles.errorDetail}>
-            {describeLoadError(error, 'программу')}
-          </Text>
-          <PressableScale
-            onPress={() => refetch()}
-            style={[styles.retryBtn]}
-          >
-            <Text style={styles.retryBtnText}>Повторить</Text>
-          </PressableScale>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить программу"
+        message={describeLoadError(error, 'программу')}
+        onRetry={() => refetch()}
+        illustration={<AnimatedMascot size={104} emotion="sad" error />}
+      />
     );
   }
 
@@ -212,10 +202,11 @@ export default function LearnScreen({ navigation }) {
       </View>
 
       {units.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptySign}>§</Text>
-          <Text style={styles.emptyText}>Программа скоро появится</Text>
-        </View>
+        <EmptyState
+          compact
+          title="Программа скоро появится"
+          message="Свод уроков ещё не загружен. Загляните в кейсы — практика доступна уже сейчас."
+        />
       ) : (
         units.map((unit, uIdx) => {
           const theme = CHAPTER_THEMES[uIdx % CHAPTER_THEMES.length];

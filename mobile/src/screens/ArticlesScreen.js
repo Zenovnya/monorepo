@@ -4,11 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import { PressableScale } from '../components/PressableScale';
 import { FadeInView } from '../components/motion/FadeInView';
 import {
@@ -28,20 +29,29 @@ import { colors } from '../theme/colors';
  * хвойный статус «✓ открыто» (#315B46) и приглушённо-синие ссылки на кодексы (#7298BC).
  */
 export default function ArticlesScreen({ navigation }) {
-  const { data: articles, isLoading } = useQuery({
+  const { data: articles, isLoading, error, refetch } = useQuery({
     queryKey: ['lexbear-articles'],
     queryFn: lexbearApi.articles,
   });
 
   if (isLoading) {
+    return <LoadingState label="Открываем свод статей…" />;
+  }
+
+  // Раньше ошибка не обрабатывалась вообще: при сбое список приходил пустым,
+  // и экран показывал «Изучено: 0 из 0» — то есть врал про прогресс.
+  if (error) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={brand.red} />
-      </View>
+      <ErrorState
+        title="Не удалось загрузить статьи"
+        message={describeLoadError(error, 'статьи')}
+        onRetry={() => refetch()}
+        illustration={<WaxSeal label="§" tone="red" size={48} />}
+      />
     );
   }
 
-  const all = articles ?? [];
+  const all = Array.isArray(articles) ? articles : [];
   const learned = all.filter((a) => a.learned);
   const pct =
     all.length > 0 ? Math.round((learned.length / all.length) * 100) : 0;
@@ -99,6 +109,15 @@ export default function ArticlesScreen({ navigation }) {
           </View>
         </View>
       </View>
+
+      {/* Пустой свод: без сида контента экран выглядел как «всё изучено» */}
+      {all.length === 0 ? (
+        <EmptyState
+          compact
+          title="Свод пока пуст"
+          message="Статьи появятся здесь, как только мы загрузим кодексы. Начните с уроков — они уже доступны."
+        />
+      ) : null}
 
       {/* Листы статей с сургучными печатями и закладками */}
       <View style={styles.list}>

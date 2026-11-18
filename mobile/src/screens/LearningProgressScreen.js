@@ -1,7 +1,8 @@
 import React from 'react';
 import { PressableScale } from '../components/PressableScale';
+import { ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,30 +39,19 @@ export default function LearningProgressScreen({ navigation }) {
   });
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={brand.red} />
-        <Text style={styles.stateHint}>Загружаем ведомость…</Text>
-      </View>
-    );
+    return <LoadingState label="Загружаем ведомость…" />;
   }
 
   if (error) {
+    // Раньше здесь был только заголовок без причины: пользователь не понимал,
+    // это офлайн, истёкшая сессия или сбой сервера.
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <WaxSeal label="§" tone="red" size={48} />
-          <Text style={styles.error}>Не удалось загрузить прогресс</Text>
-          <PressableScale
-            style={[
-              styles.stateBtn,
-            ]}
-            onPress={() => refetch()}
-          >
-            <Text style={styles.buttonText}>Повторить</Text>
-          </PressableScale>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить прогресс"
+        message={describeLoadError(error, 'прогресс')}
+        onRetry={() => refetch()}
+        illustration={<WaxSeal label="§" tone="red" size={48} />}
+      />
     );
   }
 

@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { PressableScale } from '../components/PressableScale';
+import { ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import {
-  ActivityIndicator,
-
   ScrollView,
   StyleSheet,
   Text,
@@ -64,30 +64,23 @@ export default function AssessmentScreen({ navigation }) {
   const data = session || start.data;
 
   if (start.isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={brand.red} />
-        <Text style={styles.stateHint}>Подготавливаем диагностику…</Text>
-      </View>
-    );
+    return <LoadingState label="Подготавливаем диагностику…" />;
   }
 
   if (start.error || !data?.case) {
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <WaxSeal label="§" tone="red" size={48} />
-          <Text style={styles.error}>Не удалось начать диагностику</Text>
-          <PressableScale
-            style={[
-              styles.stateBtn,
-            ]}
-            onPress={() => start.refetch()}
-          >
-            <Text style={styles.buttonText}>Повторить</Text>
-          </PressableScale>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось начать диагностику"
+        // Без серверного case причина почти всегда одна: пустая база контента
+        // или сбой загрузки. Говорим это словами, а не «ошибка».
+        message={
+          start.error
+            ? describeLoadError(start.error, 'диагностику')
+            : 'Кейсы диагностики не загрузились. Попробуйте ещё раз через минуту.'
+        }
+        onRetry={() => start.refetch()}
+        illustration={<WaxSeal label="§" tone="red" size={48} />}
+      />
     );
   }
 

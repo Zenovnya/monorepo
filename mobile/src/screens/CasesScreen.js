@@ -5,11 +5,11 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
 import { describeLoadError } from '../api/client';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TopStats } from '../components/TopStats';
 import { PressableScale } from '../components/PressableScale';
 import {
@@ -97,32 +97,17 @@ export default function CasesScreen({ navigation }) {
   );
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={brand.red} />
-        <Text style={styles.stateHint}>Подбираем архив дел…</Text>
-      </View>
-    );
+    return <LoadingState label="Подбираем архив дел…" />;
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <WaxSeal label="!" tone="red" size={48} />
-          <Text style={styles.errorText}>Не удалось загрузить кейсы</Text>
-          <Text style={styles.errorDetail}>
-            {describeLoadError(error, 'кейсы')}
-          </Text>
-          <PressableScale
-            onPress={() => refetch()}
-            style={styles.retryBtn}
-            scale={0.95}
-          >
-            <Text style={styles.retryBtnText}>Повторить</Text>
-          </PressableScale>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить кейсы"
+        message={describeLoadError(error, 'кейсы')}
+        onRetry={() => refetch()}
+        illustration={<WaxSeal label="!" tone="red" size={48} />}
+      />
     );
   }
 
@@ -281,25 +266,24 @@ export default function CasesScreen({ navigation }) {
 
       <View style={styles.list}>
         {filtered.length === 0 && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>
-              {activeFilter === 'Все'
-                ? // Пустой архив — это не «выберите другой кодекс»: фильтр уже
-                  // «Все», и совет вводит в заблуждение. Такое состояние бывает
-                  // при первом запуске без сида контента.
-                  'Архив пока пуст. Кейсы появятся, как только мы загрузим практику.'
-                : `В разделе «${activeFilter}» пока нет дел. Попробуйте другой кодекс.`}
-            </Text>
-            {activeFilter !== 'Все' ? (
-              <PressableScale
-                onPress={() => setActiveFilter('Все')}
-                style={styles.emptyReset}
-                scale={0.94}
-              >
-                <Text style={styles.emptyResetText}>Показать все кейсы</Text>
-              </PressableScale>
-            ) : null}
-          </View>
+          <EmptyState
+            compact
+            title={
+              activeFilter === 'Все'
+                ? 'Архив пока пуст'
+                : `В разделе «${activeFilter}» пока нет дел`
+            }
+            // Пустой архив — это не «выберите другой кодекс»: фильтр уже
+            // «Все», и такой совет вводит в заблуждение. Такое состояние
+            // бывает при первом запуске без сида контента.
+            message={
+              activeFilter === 'Все'
+                ? 'Кейсы появятся здесь, как только мы загрузим практику.'
+                : 'Попробуйте другой кодекс — в остальных дела уже есть.'
+            }
+            actionTitle={activeFilter !== 'Все' ? 'Показать все кейсы' : undefined}
+            onAction={activeFilter !== 'Все' ? () => setActiveFilter('Все') : undefined}
+          />
         )}
       </View>
           </>

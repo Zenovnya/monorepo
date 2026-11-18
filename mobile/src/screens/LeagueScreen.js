@@ -10,6 +10,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
 import { PressableScale } from '../components/PressableScale';
 import {
   brand,
@@ -43,7 +45,7 @@ export default function LeagueScreen({ navigation }) {
 
   // Реальная ведомость лиги с бэкенда. Раньше здесь был захардкоженный
   // список выдуманных людей, и «Ты» с 0 XP стоял посреди чужих результатов.
-  const { data: leaderboard, isLoading } = useQuery({
+  const { data: leaderboard, isLoading, error, refetch } = useQuery({
     queryKey: ['gamification-leaderboard'],
     queryFn: () => gamificationApi.leaderboard(30),
   });
@@ -150,18 +152,26 @@ export default function LeagueScreen({ navigation }) {
       {/* Чистая ведомость участников */}
       <View style={styles.list}>
         {isLoading && board.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>Загружаем ведомость лиги…</Text>
-          </View>
+          <LoadingState compact label="Загружаем ведомость лиги…" />
         ) : null}
 
-        {!isLoading && board.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>
-              В вашей лиге пока никого нет. Пройдите урок — и возглавите
-              ведомость.
-            </Text>
-          </View>
+        {/* Раньше ошибка загрузки выглядела как «в лиге никого нет»: пустая
+            ведомость вместо причины. */}
+        {!isLoading && error && board.length === 0 ? (
+          <ErrorState
+            compact
+            title="Не удалось загрузить ведомость"
+            message={describeLoadError(error, 'лигу')}
+            onRetry={() => refetch()}
+          />
+        ) : null}
+
+        {!isLoading && !error && board.length === 0 ? (
+          <EmptyState
+            compact
+            title="В лиге пока никого нет"
+            message="Пройдите урок — и возглавите ведомость."
+          />
         ) : null}
 
         {board.map((r, i) => {
