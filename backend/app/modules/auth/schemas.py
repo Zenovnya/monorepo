@@ -71,3 +71,23 @@ class AccessToken(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Запрос на письмо со ссылкой сброса пароля."""
+
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Ответ всегда одинаковый — он не раскрывает, есть ли такой аккаунт."""
+
+    ok: bool = True
+    detail: str = "Если аккаунт с таким email существует, письмо отправлено"
+
+
+class ResetPasswordRequest(BaseModel):
+    """Установка нового пароля по одноразовому токену."""
+
+    token: str = Field(min_length=10, max_length=512)
+    password: str = Field(min_length=8, max_length=128)

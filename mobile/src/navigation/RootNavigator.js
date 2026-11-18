@@ -24,6 +24,8 @@ import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
 import AssessmentScreen from '../screens/AssessmentScreen';
 import LearningProgressScreen from '../screens/LearningProgressScreen';
 import ReviewsScreen from '../screens/ReviewsScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -83,6 +85,11 @@ function AuthStack() {
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+      />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
     </Stack.Navigator>
   );
 }

@@ -6,6 +6,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -149,7 +150,14 @@ export default function LoginScreen() {
               onChange={setRemember}
               label="Запомнить меня"
             />
-            <Text style={styles.link}>Забыли?</Text>
+            <Pressable
+              onPress={() => navigation.navigate('ForgotPassword')}
+              accessibilityRole="button"
+              accessibilityLabel="Забыли пароль"
+              hitSlop={8}
+            >
+              <Text style={styles.link}>Забыли?</Text>
+            </Pressable>
           </View>
 
           <AnimatedButton

@@ -38,6 +38,25 @@ onlineManager.setEventListener((setOnline) =>
   })
 );
 
+/**
+ * Deep links. Ссылка из письма о сбросе пароля приходит в виде
+ * ``lapazakona://reset-password?token=...`` (в вебе — ``/reset-password?token=``).
+ * Без этой настройки NavigationContainer не знает, какой экран открыть,
+ * и токен терялся бы.
+ */
+const linking = {
+  prefixes: ['lapazakona://', 'https://lapazakona.app'],
+  config: {
+    screens: {
+      Login: 'login',
+      Register: 'register',
+      ForgotPassword: 'forgot-password',
+      ResetPassword: 'reset-password',
+      MainTabs: '',
+    },
+  },
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -57,7 +76,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <NavigationContainer>
+          <NavigationContainer linking={linking}>
             <MascotToastProvider>
               <RootNavigator />
               <OfflineBanner />

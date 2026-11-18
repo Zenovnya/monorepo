@@ -68,6 +68,10 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       # За обратным прокси (nginx) включите, чтобы rate-limit видел реальный IP.
       TRUST_PROXY_HEADERS: "false"
+      # Почта (Resend) для сброса пароля. Пустой ключ = письма не отправляются.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-LexBear <onboarding@resend.dev>}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:19006}
     # Миграции Alembic перед запуском, затем Uvicorn.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
     ports:

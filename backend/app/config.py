@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     yookassa_secret_key: str = ""
     yookassa_webhook_secret: str = ""
 
+    # --- Почта (Resend) ---
+    # Сброс пароля и другие письма. Без ключа письма не отправляются,
+    # а /auth/forgot-password отвечает успешно (не раскрывая, есть ли email).
+    resend_api_key: str = ""
+    # Адрес отправителя. Домен должен быть подтверждён в Resend.
+    # Для тестов Resend разрешает onboarding@resend.dev.
+    email_from: str = "LexBear <onboarding@resend.dev>"
+    # Базовый адрес приложения для ссылок в письмах.
+    app_base_url: str = "http://localhost:19006"
+    # Сколько живёт ссылка сброса пароля.
+    password_reset_ttl_minutes: int = 30
+
     # --- Аналитика ---
     amplitude_api_key: str = ""
 
