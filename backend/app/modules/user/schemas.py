@@ -21,9 +21,15 @@ class OnboardOut(BaseModel):
 
 
 class ProfileIn(BaseModel):
-    """Смена отображаемого имени профиля."""
+    """Частичное обновление профиля.
 
-    name: str = Field(min_length=1, max_length=40)
+    Оба поля необязательны: клиент присылает только то, что меняет.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    # Цель XP в день. Раньше задавалась только в онбординге (минуты × 2),
+    # хотя и онбординг, и настройки обещали «темп можно изменить».
+    daily_goal: int | None = Field(default=None, ge=1, le=500)
 
 
 class ProfileOut(BaseModel):

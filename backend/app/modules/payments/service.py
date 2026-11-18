@@ -121,11 +121,19 @@ async def create_payment(
     from app.modules.payments.providers import get_payment_provider
 
     provider = get_payment_provider()
+
+    # Ссылка возврата после оплаты. Раньше значение бралось из настройки,
+    # которая по умолчанию пуста: пользователь после оплаты оставался на
+    # странице шлюза без пути назад в приложение.
+    return_url = (settings.payments_return_url or "").strip() or (
+        f"{settings.app_base_url.rstrip('/')}/payment-return"
+    )
+
     checkout = await provider.create_checkout(
         order_id=order_id,
         amount_cents=plan_cfg["amount_cents"],
         description=description,
-        return_url=settings.payments_return_url,
+        return_url=return_url,
     )
 
     return {

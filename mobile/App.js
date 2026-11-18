@@ -52,6 +52,8 @@ const linking = {
       Register: 'register',
       ForgotPassword: 'forgot-password',
       ResetPassword: 'reset-password',
+      // Возврат из платёжного шлюза: lapazakona://payment-return
+      PaymentReturn: 'payment-return',
       MainTabs: '',
     },
   },

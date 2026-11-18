@@ -61,7 +61,10 @@ class Settings(BaseSettings):
     # Общий секрет для проверки HMAC-подписи webhook платёжного шлюза.
     payments_webhook_secret: str = ""
     # URL возврата пользователя после оплаты (в приложение/на страницу).
-    payments_return_url: str = ""
+    # По умолчанию ведём в deep link приложения: после оплаты в браузере
+    # пользователь должен вернуться в приложение, а не остаться на пустой
+    # странице шлюза. Схема совпадает с app.json (mobile/app.json scheme).
+    payments_return_url: str = "lapazakona://payment-return"
 
     # --- ЮKassa (наследие; используется провайдером yookassa, если включён) ---
     yookassa_shop_id: str = ""

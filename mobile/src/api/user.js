@@ -11,9 +11,11 @@ export const userApi = {
   // Профиль текущего пользователя
   getMe: () => apiClient.get('/user/me').then((r) => r.data),
 
-  // Сменить отображаемое имя
-  updateMe: (name) =>
-    apiClient.patch('/user/me', { name }).then((r) => r.data),
+  // Обновить профиль: имя и/или цель XP в день
+  updateMe: (patch) =>
+    apiClient
+      .patch('/user/me', typeof patch === 'string' ? { name: patch } : patch)
+      .then((r) => r.data),
 
   // Погладить мишку (повышает настроение)
   petBear: () => apiClient.post('/user/bear/pet').then((r) => r.data),

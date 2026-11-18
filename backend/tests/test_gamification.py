@@ -369,3 +369,29 @@ class TestDailyGoal:
         assert result["done"] == 15
         assert result["remaining"] == 5
         assert result["completed"] is False
+
+
+class TestProfilePatch:
+    """PATCH /user/me меняет имя и ежедневную цель.
+
+    Цель дня раньше задавалась только в онбординге, хотя и онбординг, и
+    настройки обещали «темп можно изменить в настройках».
+    """
+
+    def test_daily_goal_validation_rejects_out_of_range(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.user.schemas import ProfileIn
+
+        with pytest.raises(ValidationError):
+            ProfileIn(daily_goal=0)
+        with pytest.raises(ValidationError):
+            ProfileIn(daily_goal=10_000)
+
+    def test_profile_patch_fields_are_optional(self) -> None:
+        from app.modules.user.schemas import ProfileIn
+
+        assert ProfileIn().name is None
+        assert ProfileIn().daily_goal is None
+        assert ProfileIn(daily_goal=20).daily_goal == 20
+        assert ProfileIn(name="Анна").name == "Анна"

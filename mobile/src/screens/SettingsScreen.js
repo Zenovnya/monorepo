@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
 import { notificationsApi } from '../api/notifications';
+import { userApi } from '../api/user';
 import {
   brand,
   KhokhlomaDivider,
@@ -23,8 +26,34 @@ import { colors } from '../theme/colors';
  * заголовки разделов с «§», приглушённо-синий счётчик уведомлений (#7298BC)
  * и лаково-красный акцент выхода (#C9362B) — без визуального шума.
  */
+/** Варианты темпа: минуты в день (как в онбординге) → XP-цель = минуты × 2. */
+const PACE_OPTIONS = [5, 10, 20, 30];
+
 export default function SettingsScreen({ navigation }) {
   const { isAuthenticated, logout, user } = useAuthStore();
+  const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
+
+  const [pacePickerOpen, setPacePickerOpen] = useState(false);
+  const [notice, setNotice] = useState(null);
+
+  /**
+   * Смена темпа. До этого строки настроек были декоративными: значение
+   * «Цель XP в день» нельзя было изменить, хотя онбординг обещал обратное.
+   */
+  const updateGoal = useMutation({
+    mutationFn: (dailyGoal) => userApi.updateMe({ daily_goal: dailyGoal }),
+    onSuccess: (profile) => {
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success
+      ).catch(() => {});
+      setUser({ daily_goal: profile.daily_goal });
+      queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
+      setPacePickerOpen(false);
+      setNotice('Темп обновлён');
+    },
+    onError: () => setNotice('Не удалось сохранить темп. Попробуйте ещё раз.'),
+  });
 
   const { data } = useQuery({
     queryKey: ['notifications'],
@@ -34,12 +63,23 @@ export default function SettingsScreen({ navigation }) {
   const notifications = data?.notifications ?? [];
 
   const rows = [
-    { icon: '👤', title: 'Имя', value: user?.name || 'Юрист' },
-    { icon: '✦', title: 'Цель XP в день', value: `${user?.daily_goal ?? 10} XP` },
-    { icon: '🔔', title: 'Уведомления', value: 'Включены' },
-    { icon: '📜', title: 'Аккаунт', value: 'Демо-режим' },
-    { icon: '🇷🇺', title: 'Язык', value: 'Русский' },
-    { icon: '⚖️', title: 'О приложении', value: 'v0.1 · LexBear' },
+    {
+      icon: '👤',
+      title: 'Имя',
+      value: user?.name || 'Юрист',
+      onPress: () => navigation.navigate('Profile'),
+    },
+    {
+      icon: '✦',
+      title: 'Цель XP в день',
+      value: `${user?.daily_goal ?? 10} XP`,
+      onPress: () => setPacePickerOpen((v) => !v),
+    },
+    {
+      icon: '⚖️',
+      title: 'О приложении',
+      value: 'v0.1 · LexBear',
+    },
   ];
 
   const handleLogout = async () => {
@@ -75,19 +115,77 @@ export default function SettingsScreen({ navigation }) {
       <View style={styles.body}>
         <DocumentSectionHeader title="Аккаунт" style={styles.sectionHeader} />
         <View style={styles.groupCard}>
-          {rows.map((r, idx) => (
-            <View
-              key={r.title}
-              style={[styles.row, idx < rows.length - 1 && styles.rowDivider]}
-            >
-              <Text style={styles.rowEmoji}>{r.icon}</Text>
-              <Text style={styles.rowTitle}>{r.title}</Text>
-              <Text style={styles.rowValue} numberOfLines={2}>
-                {r.value}
-              </Text>
-            </View>
-          ))}
+          {rows.map((r, idx) => {
+            const RowWrapper = r.onPress ? Pressable : View;
+            return (
+              <RowWrapper
+                key={r.title}
+                onPress={r.onPress}
+                style={({ pressed }) => [
+                  styles.row,
+                  idx < rows.length - 1 && styles.rowDivider,
+                  pressed && styles.rowPressed,
+                ]}
+              >
+                <Text style={styles.rowEmoji}>{r.icon}</Text>
+                <Text style={styles.rowTitle}>{r.title}</Text>
+                <Text style={styles.rowValue} numberOfLines={2}>
+                  {r.value}
+                </Text>
+                {r.onPress ? <Text style={styles.rowChevron}>›</Text> : null}
+              </RowWrapper>
+            );
+          })}
         </View>
+
+        {pacePickerOpen ? (
+          <View style={styles.paceCard}>
+            <Text style={styles.paceKicker}>§ ТЕМП ЗАНЯТИЙ</Text>
+            <Text style={styles.paceHint}>
+              Сколько минут в день готовы уделять праву? Цель считается как
+              минуты × 2 XP.
+            </Text>
+            <View style={styles.paceRow}>
+              {PACE_OPTIONS.map((minutes) => {
+                const isCurrent = (user?.daily_goal ?? 10) === minutes * 2;
+                return (
+                  <Pressable
+                    key={minutes}
+                    disabled={updateGoal.isPending}
+                    onPress={() => updateGoal.mutate(minutes * 2)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${minutes} минут в день`}
+                    style={({ pressed }) => [
+                      styles.paceChip,
+                      isCurrent && styles.paceChipActive,
+                      pressed && styles.rowPressed,
+                    ]}
+                  >
+                    {updateGoal.isPending &&
+                    updateGoal.variables === minutes * 2 ? (
+                      <ActivityIndicator size="small" color={brand.red} />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.paceChipText,
+                          isCurrent && styles.paceChipTextActive,
+                        ]}
+                      >
+                        {minutes} мин
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {notice ? (
+          <Pressable onPress={() => setNotice(null)} style={styles.notice}>
+            <Text style={styles.noticeText}>{notice}</Text>
+          </Pressable>
+        ) : null}
 
         <DocumentSectionHeader
           title="Уведомления"
@@ -168,6 +266,75 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  rowPressed: { opacity: 0.75 },
+  rowChevron: {
+    marginLeft: 8,
+    fontSize: 18,
+    color: colors.locked,
+    fontWeight: '700',
+  },
+  paceCard: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    backgroundColor: colors.paper,
+  },
+  paceKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    color: colors.subtext,
+    marginBottom: 6,
+  },
+  paceHint: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: colors.subtext,
+    marginBottom: 12,
+  },
+  paceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  paceChip: {
+    minWidth: 74,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+  },
+  paceChipActive: {
+    borderColor: brand.red,
+    backgroundColor: brand.redSoft,
+  },
+  paceChipText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  paceChipTextActive: {
+    color: brand.red,
+  },
+  notice: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: brand.pineBorder,
+    backgroundColor: brand.pineSoft,
+  },
+  noticeText: {
+    color: brand.pineDark,
+    fontWeight: '700',
+    fontSize: 12.5,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

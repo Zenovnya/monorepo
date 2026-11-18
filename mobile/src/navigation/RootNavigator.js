@@ -26,6 +26,7 @@ import LearningProgressScreen from '../screens/LearningProgressScreen';
 import ReviewsScreen from '../screens/ReviewsScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import PaymentReturnScreen from '../screens/PaymentReturnScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -105,6 +106,7 @@ function MainStack() {
       <Stack.Screen name="Shop" component={ShopScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Premium" component={PremiumScreen} />
+      <Stack.Screen name="PaymentReturn" component={PaymentReturnScreen} />
       <Stack.Screen name="AdaptiveLearning" component={AdaptiveLearningScreen} />
       <Stack.Screen name="Assessment" component={AssessmentScreen} />
       <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />

@@ -67,23 +67,40 @@ async def update_me(
     authorization: str = Depends(auth_service.get_bearer_token),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Меняет отображаемое имя профиля.
+    """Обновляет профиль: отображаемое имя и/или ежедневную цель.
 
-    До этого эндпоинта у пользователя вообще не было способа изменить имя:
-    после регистрации везде показывался дефолт модели («Юрист»).
+    Имя: до появления эндпоинта пользователь не мог его изменить вообще —
+    везде оставался дефолт модели («Юрист»).
+    Цель дня: задавалась только в онбординге, хотя интерфейс обещал
+    «темп можно изменить в настройках».
     """
     user_id = _get_current_user_id(authorization)
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    name = data.name.strip()
-    if not name:
+    changes = []
+
+    if data.name is not None:
+        name = data.name.strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Имя не может быть пустым",
+            )
+        user.name = name[:40]
+        changes.append("name")
+
+    if data.daily_goal is not None:
+        user.daily_goal = data.daily_goal
+        changes.append("daily_goal")
+
+    if not changes:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Имя не может быть пустым",
+            detail="Нечего обновлять: передайте name или daily_goal",
         )
-    user.name = name[:40]
+
     await session.commit()
     await session.refresh(user)
     return _profile_dict(user)
