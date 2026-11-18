@@ -177,3 +177,75 @@ def test_seed_runs_in_single_event_loop() -> None:
     main_block = source.split('if __name__ == "__main__":')[1]
     assert main_block.count("asyncio.run(") == 1
     assert "seed_all()" in main_block
+
+
+class TestCurriculumPackCompleteness:
+    """Юнит без уроков и урок без вопросов — дыра, которую видит пользователь.
+
+    Раньше `КоАП: дорога` и `Трудовой кодекс` были объявлены неактивными с
+    нулём уроков, а `uk-159-3-krupny` существовал как урок без карточек и
+    вопросов: открыть его было можно, пройти — нельзя. Тест держит пак
+    целым, чтобы это не вернулось при добавлении контента.
+    """
+
+    @staticmethod
+    def _pack() -> dict:
+        path = Path(__file__).resolve().parents[1] / "app" / "content_packs" / "curriculum.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_every_active_unit_has_lessons(self) -> None:
+        pack = self._pack()
+        empty = [
+            unit["code"]
+            for unit in pack["units"]
+            if unit.get("is_active") and not unit.get("lessons")
+        ]
+        assert empty == [], f"активные юниты без уроков: {empty}"
+
+    def test_every_lesson_has_cards_and_questions(self) -> None:
+        pack = self._pack()
+        broken = [
+            lesson["slug"]
+            for unit in pack["units"]
+            for lesson in unit.get("lessons", [])
+            if not lesson.get("cards") or not lesson.get("questions")
+        ]
+        assert broken == [], f"уроки без содержимого: {broken}"
+
+    def test_question_correct_index_is_within_options(self) -> None:
+        """`correct` указывает на индекс варианта: иначе вопрос нельзя решить."""
+        pack = self._pack()
+        problems = []
+        for unit in pack["units"]:
+            for lesson in unit.get("lessons", []):
+                for question in lesson.get("questions", []):
+                    options = question.get("options") or []
+                    correct = question.get("correct")
+                    if question.get("kind") in ("choice", "case", "truefalse"):
+                        if not isinstance(correct, int) or not 0 <= correct < len(options):
+                            problems.append((lesson["slug"], question.get("prompt")))
+                    if not question.get("explanation"):
+                        problems.append((lesson["slug"], "без разбора"))
+        assert problems == []
+
+    def test_lesson_slugs_are_unique(self) -> None:
+        """Slug — ключ идемпотентного upsert: дубль молча перезапишет урок."""
+        pack = self._pack()
+        slugs = [
+            lesson["slug"] for unit in pack["units"] for lesson in unit.get("lessons", [])
+        ]
+        assert len(slugs) == len(set(slugs))
+
+    def test_content_matches_sections_in_unit_titles(self) -> None:
+        """Каждый объявленный кодекс действительно наполнен."""
+        pack = self._pack()
+        totals = {
+            unit["codex"]: sum(
+                len(lesson.get("questions", [])) for lesson in unit.get("lessons", [])
+            )
+            for unit in pack["units"]
+        }
+        # КоАП и ТК раньше были пустыми — это была самая заметная дыра в
+        # «карте обучения»: пользователь видел юнит и не мог ничего пройти.
+        assert totals.get("КоАП", 0) >= 12
+        assert totals.get("ТК", 0) >= 10

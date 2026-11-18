@@ -112,9 +112,14 @@ powershell -ExecutionPolicy Bypass -File scripts\dev-mobile.ps1
 
 Контент описан JSON-паками в `backend/app/content_packs/`:
 
-- `curriculum.json` — юниты, уроки, теория, вопросы;
-- `cases.json` — кейсы с вариантами и разбором;
+- `curriculum.json` — юниты, уроки, теория, вопросы (6 юнитов, 40 уроков,
+  162 вопроса);
+- `cases.json` — кейсы с вариантами и разбором (100 кейсов);
 - `articles.json` — справочные статьи кодексов.
+
+Целостность пака проверяется тестами (`tests/test_content_import.py`):
+у каждого активного юнита есть уроки, у каждого урока — карточки и вопросы,
+`correct` попадает в список вариантов, slugs уникальны.
 
 `content_loader.py` делает идемпотентный upsert в legacy-таблицы (`units`,
 `lexbear_lessons`, `cases`). `learning/importer.py` переносит те же кейсы в
