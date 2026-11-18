@@ -180,9 +180,11 @@
 |---|---|---|
 | GET | `/health` | Проверка живости и доступности БД |
 | POST | `/lexbear/seed` | Сид контента |
-| GET/PUT/DELETE | `/admin/content/cases` | CRUD кейсов (по `slug`) |
+| GET/PUT | `/admin/content/cases` | Список кейсов / upsert кейса по `slug` |
+| DELETE | `/admin/content/cases/{slug}` | Удаление: `?hard=false` — мягкое (`is_active=false`), иначе физическое |
 | GET/PUT/DELETE | `/admin/content/units`, `/admin/content/units/{unit_code}/lessons` | Юниты и уроки |
-| GET/DELETE | `/admin/content/lessons` | Уроки |
+| GET | `/admin/content/lessons` | Уроки (список) |
+| DELETE | `/admin/content/lessons/{slug}` | Мягкое удаление урока |
 | GET | `/admin/content/adaptive/review` | Очередь юридической проверки (`?review_status=imported`) |
 | GET | `/admin/content/adaptive/review/summary` | Сколько кейсов видит пользователь (`visible_to_users`) и почему остальные скрыты |
 | POST | `/admin/content/adaptive/review/{slug}` | Поставить статус `in_review` / `approved` (фиксирует кто и когда) |
@@ -200,6 +202,6 @@
 | 403 | Неверный пароль при удалении аккаунта; админ-эндпоинт без токена |
 | 404 | Объект не найден |
 | 409 | Кончились жизни (`code: "no_lives"`), недостаточно гемов |
-| 422 | Ошибка валидации тела запроса |
+| 422 | Ошибка валидации тела запроса; недопустимый `review_status` (перечисляет допустимые) |
 | 429 | Превышен лимит запросов (сброс пароля) |
 | 503 | Не настроен приём webhook платёжного шлюза |
