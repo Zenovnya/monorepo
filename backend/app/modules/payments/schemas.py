@@ -30,6 +30,10 @@ class PaymentCreateOut(BaseModel):
     payment_id: str
     confirmation_url: str
     status: str
+    # Настроен ли реальный платёжный провайдер. При заглушке ссылка ведёт на
+    # несуществующий checkout.invalid, и клиент должен честно об этом сказать,
+    # а не открывать «мёртвый» адрес.
+    checkout_configured: bool = True
 
 
 class PaymentHistoryRead(BaseModel):

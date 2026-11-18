@@ -185,3 +185,101 @@ class TestRepeatCosmeticPurchase:
             await gam.purchase_shop_item(_Session(), user.id, "outfit_top_hat")
 
         assert user.gems == 1000
+
+
+class TestStreakFreeze:
+    """Купленная «Заморозка стрика» реально закрывает пропуски.
+
+    До правки ``update_streak`` не смотрел на купленные заморозки: товар за
+    200 гемов списывал валюту и не влиял ни на что.
+    """
+
+    def _user(self, streak, last_day, freezes):
+        import uuid
+
+        from app.modules.auth.models import User
+
+        return User(
+            id=uuid.uuid4(),
+            email="streak@example.com",
+            hashed_password="x",
+            streak=streak,
+            last_active_day=last_day,
+            bear_outfit={"streak_freezes": freezes} if freezes else {},
+        )
+
+    def test_one_day_gap_keeps_streak_with_freeze(self) -> None:
+        from datetime import datetime, timezone
+
+        from app.modules.gamification.service import update_streak
+
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        # Активность была 15-го, сегодня 17-е → пропущено 16-е.
+        user = self._user(5, now - timedelta(days=2), freezes=2)
+
+        assert update_streak(user, now) == 6
+        assert user.bear_outfit["streak_freezes"] == 1
+
+    def test_gap_without_freeze_resets_streak(self) -> None:
+        from datetime import datetime, timezone
+
+        from app.modules.gamification.service import update_streak
+
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        user = self._user(5, now - timedelta(days=2), freezes=0)
+
+        assert update_streak(user, now) == 1
+
+    def test_not_enough_freezes_resets_streak(self) -> None:
+        from datetime import datetime, timezone
+
+        from app.modules.gamification.service import update_streak
+
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        # Пропущено 3 дня, заморозка одна.
+        user = self._user(7, now - timedelta(days=4), freezes=1)
+
+        assert update_streak(user, now) == 1
+        assert user.bear_outfit["streak_freezes"] == 0
+
+    def test_same_day_does_not_consume_freeze(self) -> None:
+        from datetime import datetime, timezone
+
+        from app.modules.gamification.service import update_streak
+
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        user = self._user(4, now, freezes=3)
+
+        assert update_streak(user, now) == 4
+        assert user.bear_outfit["streak_freezes"] == 3
+
+
+class TestLives:
+    """Жизни тратятся на сервере и восстанавливаются покупкой."""
+
+    def test_spend_lives_never_goes_negative(self) -> None:
+        import uuid
+
+        from app.modules.auth.models import User
+        from app.modules.gamification.service import spend_lives
+
+        user = User(
+            id=uuid.uuid4(), email="lives@example.com", hashed_password="x", lives=2
+        )
+
+        assert spend_lives(user, 5) == 0
+        assert user.lives == 0
+
+    def test_life_refill_restores_to_max(self) -> None:
+        import uuid
+
+        from app.modules.auth.models import User
+        from app.modules.gamification.service import MAX_LIVES, _apply_shop_effect
+
+        user = User(
+            id=uuid.uuid4(), email="refill@example.com", hashed_password="x", lives=1
+        )
+
+        effect = _apply_shop_effect(None, user, "life_refill")
+        assert user.lives == MAX_LIVES
+        assert effect["restored"] == MAX_LIVES - 1

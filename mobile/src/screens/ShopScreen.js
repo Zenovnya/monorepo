@@ -97,11 +97,29 @@ export default function ShopScreen({ navigation }) {
   const buyGems = useMutation({
     mutationFn: (plan) => paymentsApi.createPayment(plan),
     onSuccess: (data, plan) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       analyticsApi.track('gems_purchased', { plan }).catch(() => {});
-      if (data.confirmation_url) {
-        Linking.openURL(data.confirmation_url).catch(() => {});
+
+      // Платёжный шлюз не настроен: ссылка ведёт на несуществующий
+      // checkout.invalid. Раньше клиент молча открывал мёртвый адрес и
+      // пользователь не понимал, почему гемы не пришли.
+      if (data.checkout_configured === false) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setNotice(
+          'Оплата пока недоступна: платёжный шлюз не подключён. Гемы можно заработать за уроки.'
+        );
+        return;
       }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (data.confirmation_url) {
+        Linking.openURL(data.confirmation_url).catch(() => {
+          setNotice('Не удалось открыть страницу оплаты');
+        });
+      }
+    },
+    onError: (error) => {
+      const detail = error?.response?.data?.detail;
+      setNotice(detail || 'Не удалось создать платёж');
     },
   });
 

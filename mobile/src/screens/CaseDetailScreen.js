@@ -7,8 +7,9 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { progressApi } from '../api/progress';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { SpeechBubble } from '../components/SpeechBubble';
 import { LegalText } from '../components/LegalText';
@@ -30,6 +31,7 @@ import { colors } from '../theme/colors';
  */
 export default function CaseDetailScreen({ route, navigation }) {
   const { caseId } = route.params || {};
+  const queryClient = useQueryClient();
   const [sel, setSel] = useState(null);
   const [checked, setChecked] = useState(null);
   const [hintShown, setHintShown] = useState(false);
@@ -45,6 +47,16 @@ export default function CaseDetailScreen({ route, navigation }) {
   });
 
   const options = Array.isArray(caseData?.options) ? caseData.options : [];
+
+  const answerMutation = useMutation({
+    mutationFn: ({ optionId }) =>
+      progressApi.answer({ case_id: String(caseId), option_id: optionId }),
+    onSuccess: () => {
+      // Обновляем список повторений и сводку прогресса.
+      queryClient.invalidateQueries({ queryKey: ['srs-reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['progress-overview'] });
+    },
+  });
   const correctIndex = caseData?.correct;
   const explanation = caseData?.explanation;
   const hint = caseData?.hint;
@@ -104,6 +116,14 @@ export default function CaseDetailScreen({ route, navigation }) {
   const check = () => {
     if (sel === null) return;
     setChecked(sel === correctIndex ? 'right' : 'wrong');
+
+    // Отправляем ответ на сервер: только так обновляется расписание SM-2
+    // и статистика. Раньше разбор кейса был полностью локальным — ответ
+    // нигде не сохранялся, и повторения (GET /srs/reviews) не появлялись.
+    const optionId = options[sel]?.id;
+    if (optionId !== undefined && optionId !== null) {
+      answerMutation.mutate({ optionId });
+    }
   };
 
   const leave = () => navigation.goBack();

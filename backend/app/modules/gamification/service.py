@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,18 +73,55 @@ def _today_utc() -> datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def spend_lives(user: User, amount: int) -> int:
+    """Списывает жизни за ошибки, не уходя ниже нуля."""
+    user.lives = max(0, (user.lives or 0) - max(0, amount))
+    return user.lives
+
+
+def _streak_freezes(user: User) -> int:
+    """Возвращает число купленных заморозок стрика."""
+    return int((user.bear_outfit or {}).get("streak_freezes") or 0)
+
+
+def _consume_streak_freeze(user: User, count: int) -> int:
+    """Списывает заморозки стрика (не больше, чем есть)."""
+    outfit = dict(user.bear_outfit or {})
+    freezes = int(outfit.get("streak_freezes") or 0)
+    spent = max(0, min(freezes, count))
+    if spent:
+        outfit["streak_freezes"] = freezes - spent
+        user.bear_outfit = outfit
+    return spent
+
+
 def update_streak(user: User, now: datetime | None = None) -> int:
-    """Обновляет стрик пользователя при активности в новый день."""
+    """Обновляет стрик пользователя при активности в новый день.
+
+    Если день (или несколько) пропущен, а у пользователя куплены заморозки
+    стрика, пропуски закрываются ими: серия сохраняется, заморозки списываются.
+    """
     now = now or datetime.now(timezone.utc)
     today = now.date()
     if user.last_active_day is not None:
         last = user.last_active_day
         if last.date() == today:
             return user.streak  # уже отмечали сегодня
-        if last.date() == today - timedelta(days=1):
+        gap = (today - last.date()).days
+        if gap == 1:
             user.streak += 1
         else:
-            user.streak = 1
+            # gap - 1 пропущенных дней (сегодняшний не в счёт).
+            # Раньше стрик просто сбрасывался в 1, а купленная за 200 гемов
+            # «Заморозка стрика» не использовалась ни при каких условиях.
+            missed = gap - 1
+            covered = _consume_streak_freeze(user, missed)
+            if covered >= missed:
+                # Все пропуски закрыты заморозками — серия продолжается.
+                user.streak += 1
+            else:
+                # Заморозок не хватило (или их нет) — серия начинается заново.
+                user.streak = 1
     else:
         user.streak = 1
     user.last_active_day = now
@@ -184,6 +221,8 @@ async def get_gamification_state(
         "level": user.level,
         "streak": user.streak,
         "gems": user.gems,
+        "lives": user.lives,
+        "streak_freezes": _streak_freezes(user),
         "next_level_xp": xp_for_next_level(user.level),
         "achievements": [
             {

@@ -19,6 +19,11 @@ class GamificationRead(BaseModel):
     level: int
     streak: int
     gems: int
+    # Жизни и запас заморозок нужны клиенту, чтобы показывать реальный
+    # остаток (раньше каждый урок начинался с локальных 3 жизней, а
+    # купленное «Пополнение жизней» ни на что не влияло).
+    lives: int = 5
+    streak_freezes: int = 0
     next_level_xp: int
     achievements: list[AchievementRead]
 

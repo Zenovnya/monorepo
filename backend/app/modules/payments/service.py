@@ -132,6 +132,7 @@ async def create_payment(
         "payment_id": order_id,
         "confirmation_url": checkout.confirmation_url,
         "status": "pending",
+        "checkout_configured": bool(provider.is_configured()),
     }
 
 

@@ -413,6 +413,11 @@ async def complete_lesson(
 
     if user is not None:
         await gamification_service.add_xp(session, user, xp_gain)
+        # Жизни тратятся и на сервере: иначе купленное «Пополнение жизней»
+        # ничего не восстанавливало — серверное значение оставалось прежним.
+        wrong = max(0, total - correct)
+        if wrong:
+            gamification_service.spend_lives(user, wrong)
 
     # Разблокировка статей по номеру в заголовке урока.
     unlocked = await unlock_articles_for_lesson(session, user_id, lesson.title)
@@ -490,6 +495,7 @@ async def complete_lesson(
         # Гемы за урок и новый баланс — клиент обновляет чип «💎» по этому полю.
         "gems_gain": gems_gain,
         "gems": user.gems if user else 0,
+        "lives": user.lives if user else 0,
     }
 
 

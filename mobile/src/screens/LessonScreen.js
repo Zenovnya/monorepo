@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lexbearApi } from '../api/lexbear';
+import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LegalText } from '../components/LegalText';
 import { useMascotToast } from '../components/MascotToast';
@@ -49,7 +50,9 @@ export default function LessonScreen({ route, navigation }) {
   const [phase, setPhase] = useState('theory'); // theory | practice | done
   const [tIdx, setTIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
-  const [lives, setLives] = useState(3);
+  // Стартовый запас жизней — реальный серверный (см. /gamification/me).
+  // Раньше всегда было 3 локальных, не связанных с аккаунтом.
+  const [lives, setLives] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [selected, setSelected] = useState(null);
   const [multi, setMulti] = useState([]);
@@ -63,6 +66,22 @@ export default function LessonScreen({ route, navigation }) {
     queryKey: ['lexbear-lesson', lessonId],
     queryFn: () => lexbearApi.getLesson(lessonId),
   });
+
+  const { data: gamification } = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+  });
+
+  // Пока серверные жизни не пришли, показываем 3 (исторический дефолт):
+  // урок не должен блокироваться из-за задержки сети.
+  const serverLives = gamification?.lives;
+  const displayLives = lives ?? (serverLives > 0 ? serverLives : 3);
+  // Стартовый запас на момент открытия урока — для оценки «без ошибок».
+  const startedLivesRef = useRef(null);
+  if (startedLivesRef.current === null && serverLives !== undefined) {
+    startedLivesRef.current = displayLives;
+  }
+  const startedLives = startedLivesRef.current ?? 3;
 
   const toast = useMascotToast();
 
@@ -174,7 +193,7 @@ export default function LessonScreen({ route, navigation }) {
     setChecked(null);
     setSelected(null);
     setMulti([]);
-    if (qIdx + 1 < questions.length && lives > 0) {
+    if (qIdx + 1 < questions.length && displayLives > 0) {
       setQIdx(qIdx + 1);
     } else {
       completeMutation.mutate({ answers: answersRef.current });
@@ -193,7 +212,8 @@ export default function LessonScreen({ route, navigation }) {
       : 0;
     const gemsGain = serverResult?.gems_gain ?? 0;
 
-    const isPerfect = accuracy === 100 && lives === 3 && questions.length > 0;
+    const isPerfect =
+      accuracy === 100 && displayLives === startedLives && questions.length > 0;
     const isGreat = !isPerfect && accuracy >= 80;
     const isPassed = !isPerfect && !isGreat && accuracy >= 60;
     const isFailed = !isPerfect && !isGreat && !isPassed;
@@ -263,7 +283,7 @@ export default function LessonScreen({ route, navigation }) {
               />
               <StatCard
                 label="Жизни"
-                value={`❤️ ${lives}`}
+                value={`❤️ ${displayLives}`}
                 frameColor={brand.red}
                 textColor={brand.red}
               />
@@ -344,7 +364,7 @@ export default function LessonScreen({ route, navigation }) {
 
         <View style={styles.livesWrap}>
           <Text style={styles.livesHeart}>❤️</Text>
-          <Text style={styles.livesCount}>{lives}</Text>
+          <Text style={styles.livesCount}>{displayLives}</Text>
         </View>
       </View>
 
