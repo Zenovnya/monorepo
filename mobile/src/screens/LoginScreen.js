@@ -7,7 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Animated, { SlideInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -94,7 +94,7 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
-          entering={ZoomIn.duration(600).springify().damping(8)}
+          entering={FadeIn.duration(220).easing(Easing.out(Easing.quad))}
           style={styles.mascotWrap}
         >
           <KhokhlomaMedallion size={138}>
@@ -109,21 +109,11 @@ export default function LoginScreen() {
 
         <Text style={styles.brandWordmark}>§ LEXBEAR</Text>
 
-        <Animated.Text
-          entering={SlideInUp.delay(200).springify().damping(9).mass(0.6)}
-          style={styles.title}
-        >
-          Здравствуйте!
-        </Animated.Text>
-        <Animated.Text
-          entering={SlideInUp.delay(280).springify().damping(9).mass(0.6)}
-          style={styles.subtitle}
-        >
-          Войдите, чтобы продолжить обучение
-        </Animated.Text>
+        <Text style={styles.title}>Здравствуйте!</Text>
+        <Text style={styles.subtitle}>Войдите, чтобы продолжить обучение</Text>
 
         <Animated.View
-          entering={SlideInUp.delay(350).springify().damping(11).mass(0.8)}
+          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
           style={styles.formBlock}
         >
           <AnimatedInput
@@ -171,7 +161,6 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View
-          entering={SlideInUp.delay(500).springify().damping(11)}
           style={styles.dividerWrap}
         >
           <KhokhlomaDivider label="или" />
@@ -179,7 +168,6 @@ export default function LoginScreen() {
 
         <View style={styles.socialRow}>
           <Animated.View
-            entering={ZoomIn.delay(600).springify().damping(8)}
             style={styles.socialItem}
           >
             <SocialButton
@@ -195,7 +183,6 @@ export default function LoginScreen() {
             />
           </Animated.View>
           <Animated.View
-            entering={ZoomIn.delay(680).springify().damping(8)}
             style={styles.socialItem}
           >
             <SocialButton
@@ -211,7 +198,7 @@ export default function LoginScreen() {
         </View>
 
         <Animated.View
-          entering={SlideInUp.delay(780).springify().damping(11)}
+          entering={FadeIn.duration(240).easing(Easing.out(Easing.quad))}
           style={styles.footerBlock}
         >
           <View style={styles.switchCard}>

@@ -60,23 +60,35 @@ async def reload_adaptive(
     publish: bool = True,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Переносит кейсы ``cases.json`` в адаптивный банк (идемпотентно).
+    """Переносит кейсы в адаптивный банк (идемпотентно).
 
-    Дополняет ``/reload`` (legacy-таблицы). После вызова ``GET /learning/next``
-    выбирает из полного набора кейсов, а не из одного стартового.
+    Импортирует ДВА источника:
+    1. ``cases.json`` — контент из репозитория;
+    2. legacy-таблицу ``cases`` — то, что редактируется в веб-админке.
+
+    Раньше импортировался только файл, поэтому кейс, созданный в админке, в
+    адаптивный банк не попадал никогда.
 
     :param publish: публиковать ли кейсы. Юридическая проверка не меняется —
         ``review_status`` остаётся ``imported``.
     """
     try:
-        report = await learning_importer.import_cases(session, publish=publish)
+        pack_report = await learning_importer.import_cases(session, publish=publish)
+        legacy_report = await learning_importer.import_legacy_cases(
+            session, publish=publish
+        )
     except learning_importer.ContentImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
     await session.commit()
     await bump_content_version()
-    return {"ok": True, "publish": publish, "report": report}
+    return {
+        "ok": True,
+        "publish": publish,
+        "report": pack_report,
+        "report_legacy": legacy_report,
+    }
 
 
 @router.get("/adaptive/review")
@@ -181,12 +193,33 @@ async def admin_upsert_case(
     case_in: CaseIn,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Создаёт или обновляет кейс по ``slug`` (upsert)."""
+    """Создаёт или обновляет кейс по ``slug`` (upsert).
+
+    Кроме legacy-таблицы (вкладка «Кейсы») кейс сразу зеркалится в адаптивный
+    банк. Раньше это требовало отдельного вызова ``/reload-adaptive``, который
+    к тому же перечитывал только ``cases.json`` с диска — сохранённый в админке
+    кейс не попадал в ``/learning/next`` и диагностику никогда.
+    """
     case = await content_loader.upsert_case(session, case_in)
     await session.commit()
     await bump_content_version()
+
+    adaptive_report: dict | None = None
+    try:
+        adaptive_report = await learning_importer.import_legacy_cases(
+            session, publish=True
+        )
+        await session.commit()
+    except learning_importer.ContentImportError as exc:
+        # Кейс уже сохранён в legacy — не откатываем его из-за проблем
+        # адаптивного импорта, но сообщаем клиенту, что банк не обновлён.
+        await session.rollback()
+        adaptive_report = {"error": str(exc)}
+
     await session.refresh(case, attribute_names=["options"])
-    return _serialize_case_admin(case)
+    payload = _serialize_case_admin(case)
+    payload["adaptive"] = adaptive_report
+    return payload
 
 
 @router.delete("/cases/{slug}")

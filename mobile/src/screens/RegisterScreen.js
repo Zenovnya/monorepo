@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Animated, { SlideInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -112,7 +112,7 @@ export default function RegisterScreen() {
         </View>
 
         <Animated.View
-          entering={ZoomIn.duration(500).springify().damping(8)}
+          entering={FadeIn.duration(220).easing(Easing.out(Easing.quad))}
           style={styles.heroRow}
         >
           <View style={styles.mascotCircle}>
@@ -135,7 +135,7 @@ export default function RegisterScreen() {
         </Animated.View>
 
         <Animated.View
-          entering={SlideInUp.delay(300).springify().damping(11).mass(0.8)}
+          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
           style={styles.formBlock}
         >
           <AnimatedInput
@@ -199,7 +199,7 @@ export default function RegisterScreen() {
         </Animated.View>
 
         <Animated.View
-          entering={SlideInUp.delay(550).springify().damping(11)}
+          entering={FadeIn.duration(240).easing(Easing.out(Easing.quad))}
           style={styles.footerBlock}
         >
           <View style={styles.switchCard}>

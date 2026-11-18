@@ -43,8 +43,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.content.models import Case as LegacyCase
 from app.modules.learning.models import (
     CaseAnswer,
     CaseCompetency,
@@ -269,6 +271,93 @@ async def _sync_competency_link(
             )
         )
         await session.flush()
+
+
+def _legacy_case_to_pack(case: LegacyCase) -> dict:
+    """Преобразует кейс из legacy-таблицы ``cases`` в формат пака.
+
+    Legacy-таблица — то, что редактируется в веб-админке (``PUT /admin/content/cases``).
+    Адаптивный банк читал ТОЛЬКО ``cases.json`` с диска, поэтому кейс, созданный в
+    админке, навсегда оставался невидимым для ``/learning/next`` и диагностики.
+    """
+    return {
+        "slug": case.slug,
+        "title": case.title or "",
+        "codex": case.codex or "Разное",
+        "difficulty": case.difficulty or "easy",
+        "case_text": case.case_text or case.situation or "",
+        "options": [
+            {
+                "text": opt.text,
+                "is_correct": bool(opt.is_correct),
+                "explanation": opt.explanation,
+            }
+            for opt in case.options
+        ],
+    }
+
+
+async def import_legacy_cases(
+    session: AsyncSession,
+    *,
+    publish: bool = True,
+) -> dict[str, int]:
+    """Переносит кейсы из legacy-таблицы ``cases`` в адаптивный банк.
+
+    Дополняет ``import_cases`` (JSON-пак): после сохранения кейса в админке
+    достаточно вызвать этот импорт, чтобы он появился в ``/learning/next``.
+    Идемпотентно — повторный вызов обновляет существующую версию по
+    ``source_slug``, а не создаёт дубликат.
+
+    :param publish: помечать ли кейсы ``published``.
+    :return: отчёт ``{"created": n, "updated": n, "skipped": n}``.
+    """
+    report = {"created": 0, "updated": 0, "skipped": 0}
+
+    result = await session.scalars(
+        select(LegacyCase)
+        .options(selectinload(LegacyCase.options))
+        .where(LegacyCase.is_active.is_(True))
+        .where(LegacyCase.slug.is_not(None))
+        .order_by(LegacyCase.created_at)
+    )
+
+    for legacy in result.all():
+        pack_case = _legacy_case_to_pack(legacy)
+        # Без slug/заголовка/текста и хотя бы двух вариантов кейс в банк не
+        # принимается: validate_case выдал бы ошибку и уронил весь импорт.
+        if not pack_case["slug"] or not pack_case["title"] or not pack_case["case_text"]:
+            report["skipped"] += 1
+            continue
+        if len(pack_case["options"]) < 2:
+            report["skipped"] += 1
+            continue
+
+        difficulty = difficulty_to_float(pack_case.get("difficulty"))
+        learning_case, version, created = await _get_or_create_version(
+            session, pack_case, pack_case["slug"], difficulty
+        )
+
+        learning_case.title = pack_case["title"][:255]
+        if publish:
+            learning_case.status = "published"
+            version.status = "published"
+        version.situation = pack_case["case_text"]
+        version.difficulty = difficulty
+
+        codex = str(pack_case.get("codex") or "Разное").strip() or "Разное"
+        domain = await _get_or_create_domain(session, codex[:128])
+        topic = await _get_or_create_topic(session, domain, codex)
+        competency = await _get_or_create_competency(
+            session, topic, pack_case["slug"][:128], pack_case["title"]
+        )
+
+        await _sync_step_and_answers(session, version, pack_case["options"])
+        await _sync_competency_link(session, version, competency)
+
+        report["created" if created else "updated"] += 1
+
+    return report
 
 
 async def import_cases(

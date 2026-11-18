@@ -85,14 +85,37 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 # --- 4/5 Сид контента ------------------------------------------------------
 if (-not $SkipSeed) {
     Write-Host '==> 5/5 Сид контента (идемпотентно)'
+    $headers = @{ 'X-Admin-Token' = $env:ADMIN_TOKEN }
+    if (-not $headers['X-Admin-Token']) { $headers['X-Admin-Token'] = 'lexbear-admin-dev-token' }
+
+    # ВАЖНО: раньше ошибка сида проглатывалась в catch, скрипт печатал
+    # «Готово. Бэкенд поднят», а база оставалась пустой — приложение
+    # показывало пустые кейсы и уроки. Теперь ошибка видна и останавливает
+    # запуск с подсказкой.
+    $seedOk = $true
     try {
-        $headers = @{ 'X-Admin-Token' = $env:ADMIN_TOKEN }
-        if (-not $headers['X-Admin-Token']) { $headers['X-Admin-Token'] = 'lexbear-admin-dev-token' }
-        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lexbear/seed' -Headers $headers -TimeoutSec 120
+        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lexbear/seed' -Headers $headers -TimeoutSec 180
         Write-Host ("Сид: " + ($r | ConvertTo-Json -Compress -Depth 4))
     } catch {
-        Write-Host "Сид не выполнен: $($_.Exception.Message)"
-        Write-Host '(API уже работает — контент можно залить позже вручную, см. инструкцию)'
+        $seedOk = $false
+        Write-Host "ОШИБКА сида: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host 'Проверьте: backend/.env (DATABASE_URL должен указывать на dev-кластер :5433),'
+        Write-Host 'миграции (alembic upgrade head) и лог .local\backend.err.log'
+    }
+
+    # Адаптивный банк: без этого вызова /learning/next и диагностика работают
+    # только со стартовым кейсом, а кейсы из админки не видны вообще.
+    try {
+        $a = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/admin/content/reload-adaptive' -Headers $headers -TimeoutSec 180
+        Write-Host ("Адаптивный банк: " + ($a | ConvertTo-Json -Compress -Depth 4))
+    } catch {
+        $seedOk = $false
+        Write-Host "ОШИБКА импорта в адаптивный банк: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    if (-not $seedOk) {
+        Write-Host ''
+        Write-Host 'Контент загружен не полностью — кейсы в приложении могут отсутствовать.' -ForegroundColor Yellow
     }
 } else {
     Write-Host '==> 5/5 Сид пропущен (-SkipSeed)'

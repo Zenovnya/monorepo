@@ -7,7 +7,7 @@
 import uuid
 
 import pytest
-from jose import jwt
+import jwt
 
 from app.config import get_settings
 from app.modules.auth import service

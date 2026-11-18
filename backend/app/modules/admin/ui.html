@@ -289,6 +289,10 @@ async function saveCase() {
     options,
   };
   if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  // codex обязателен: GET /lexbear/cases отбрасывает кейсы без него
+  // (условие `if c.title and c.codex`), и кейс молча исчезает из приложения.
+  if (!body.codex) return toast('Укажите кодекс — без него кейс не покажется в приложении');
+  if (!body.case_text) return toast('Текст дела обязателен');
   try { await api('/admin/content/cases', { method: 'PUT', body: JSON.stringify(body) });
     toast('Сохранено'); hide('caseForm'); loadCases();
   } catch (e) { toast('Ошибка: ' + e.message); }
@@ -348,6 +352,7 @@ async function saveLesson() {
     cards, questions,
   };
   if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  if (!cards.length) return toast('Добавьте хотя бы одну карточку теории');
   try { await api('/admin/content/units/' + encodeURIComponent(unitCode) + '/lessons',
       { method: 'PUT', body: JSON.stringify(body) });
     toast('Урок сохранён'); hide('lessonForm'); loadLessons();

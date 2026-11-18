@@ -185,3 +185,46 @@ if ((Invoke-Psql "SELECT 1 FROM pg_database WHERE datname='lexbear'") -ne '1') {
 }
 
 Write-Host "DB ready on port $Port (pgdata: $dataDir)"
+
+# --- Согласование с приложением: backend/.env ------------------------------
+# Раньше скрипт создавал роль lexbear / базу lexbear / пароль lexbear_dev_pass
+# на порту 5433, а приложение по умолчанию (app/config.py) ходит на
+# postgres:postgres@localhost:5432/sourcecraft. Итог: миграции и сид падали
+# либо наполняли «не ту» базу, и в приложении не было кейсов.
+# Теперь .env пишется здесь, если его ещё нет.
+$backendDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'backend'
+$envFile = Join-Path $backendDir '.env'
+$dbUrl = "postgresql+asyncpg://lexbear:lexbear_dev_pass@localhost:$Port/lexbear"
+
+if (Test-Path $envFile) {
+    $existing = Get-Content $envFile -ErrorAction SilentlyContinue |
+        Where-Object { $_ -match '^\s*DATABASE_URL\s*=' } |
+        Select-Object -First 1
+    if ($existing) {
+        $current = ($existing -split '=', 2)[1].Trim()
+        if ($current -ne $dbUrl) {
+            Write-Host "ВНИМАНИЕ: backend/.env указывает на другую БД:"
+            Write-Host "  сейчас:  $current"
+            Write-Host "  кластер: $dbUrl"
+            Write-Host '  Если кейсы «не подгружаются» — приложение смотрит не в этот кластер.'
+        } else {
+            Write-Host "backend/.env согласован с dev-кластером ($dbUrl)"
+        }
+    } else {
+        Add-Content -Path $envFile -Value "DATABASE_URL=$dbUrl" -Encoding UTF8
+        Write-Host "backend/.env: добавлен DATABASE_URL=$dbUrl"
+    }
+} else {
+    # JWT_SECRET_KEY >= 32 символов обязателен вне DEBUG.
+    $secret = -join ((1..48) | ForEach-Object { [char](Get-Random -Minimum 97 -Maximum 123) })
+    $lines = @(
+        '# Создано scripts/dev-db.ps1 для локального dev-кластера.',
+        'DEBUG=true',
+        "DATABASE_URL=$dbUrl",
+        "JWT_SECRET_KEY=$secret",
+        'ADMIN_TOKEN=lexbear-admin-dev-token',
+        'REDIS_URL=redis://127.0.0.1:6379/0'
+    )
+    Set-Content -Path $envFile -Value $lines -Encoding UTF8
+    Write-Host "Создан backend/.env → $dbUrl"
+}
