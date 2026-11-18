@@ -56,7 +56,7 @@ assert data["database"] == "ok", data
 print("database ok")
 PY
 
-echo "=== 3. Контент доступен ==="
+echo "=== 3. Контент доступен и НАПОЛНЕН ==="
 # Контентные роуты закрыты токеном: 401 подтверждает, что роутер собран,
 # а не потерян при импорте (именно так ломается регистрация роутеров).
 code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/lexbear/cases)
@@ -66,5 +66,55 @@ if [ "$code" != "401" ]; then
   fail "GET /lexbear/cases вернул $code вместо 401"
   exit 1
 fi
+
+# Проверка наполнения, а не только роутеров. Дефект, который это ловит:
+# юнит объявлен в curriculum.json, но уроков в нём нет — пользователь видит
+# «остров», который нельзя пройти. Такой контент проходит и тесты схемы, и
+# сид без ошибок, поэтому проверять надо в БД, после настоящего импорта.
+python - <<'PY' || { fail "контент в БД пуст или неполон"; exit 1; }
+import asyncio
+import sys
+
+sys.path.insert(0, ".")
+
+from sqlalchemy import func, select
+
+from app.database import async_session_factory
+from app.modules.content.lexbear_models import LexBearLesson, Question, Unit
+
+
+async def main() -> int:
+    async with async_session_factory() as session:
+        units = (await session.execute(
+            select(Unit.code, func.count(LexBearLesson.id))
+            .outerjoin(LexBearLesson, LexBearLesson.unit_id == Unit.id)
+            .where(Unit.is_active.is_(True))
+            .group_by(Unit.code)
+        )).all()
+        lessons = await session.scalar(
+            select(func.count(LexBearLesson.id)).where(LexBearLesson.is_active.is_(True))
+        )
+        questions = await session.scalar(
+            select(func.count(Question.id))
+            .join(LexBearLesson, Question.lesson_id == LexBearLesson.id)
+            .where(LexBearLesson.is_active.is_(True))
+        )
+
+    print(f"юнитов: {len(units)}, уроков: {lessons}, вопросов: {questions}")
+    empty = [code for code, count in units if count == 0]
+    if not units:
+        print("нет ни одного активного юнита")
+        return 1
+    if empty:
+        print("активные юниты без уроков: " + ", ".join(empty))
+        return 1
+    if (lessons or 0) < 25 or (questions or 0) < 125:
+        print(f"контента меньше минимума MVP: уроков {lessons}/25, вопросов {questions}/125")
+        return 1
+    return 0
+
+
+raise SystemExit(asyncio.run(main()))
+PY
 
 echo "SMOKE OK"
