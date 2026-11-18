@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.modules.admin.security import require_admin
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
 from app.modules.gamification import service
@@ -50,7 +51,15 @@ async def gamification_me(
         ) from exc
 
 
-@router.post("/add-xp", response_model=XpAddOut)
+@router.post(
+    "/add-xp",
+    response_model=XpAddOut,
+    # XP за уроки начисляется только сервером (content/lexbear_service.complete_lesson)
+    # по ответам пользователя. Публичный роут позволял любому авторизованному
+    # накрутить себе XP и обнулить смысл лиг и лидерборда, поэтому он доступен
+    # только служебным клиентам с X-Admin-Token.
+    dependencies=[Depends(require_admin)],
+)
 async def gamification_add_xp(
     data: XpAddIn,
     authorization: str = Depends(auth_service.get_bearer_token),

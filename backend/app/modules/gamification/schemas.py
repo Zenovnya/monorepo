@@ -69,3 +69,5 @@ class ShopPurchaseOut(BaseModel):
     item: str
     spent: int
     gems: int
+    # Что именно выдано за гемы: жизни, XP, предмет гардероба, заморозка стрика.
+    effect: dict = Field(default_factory=dict)

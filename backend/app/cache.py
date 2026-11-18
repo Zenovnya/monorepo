@@ -22,10 +22,17 @@ def get_redis() -> aioredis.Redis:
     """
     global _client
     if _client is None:
+        # Таймауты обязательны. Без них redis-py ждёт ответа бесконечно: если
+        # Redis доступен по сети, но молчит (cloud-firewall, спящий инстанс,
+        # контейнер в другом namespace), запрос висит до TCP-таймаута ОС —
+        # минутами, занимая воркер. С короткими таймаутами кэш просто
+        # «выключается» за доли секунды, и приложение работает как без него.
         _client = aioredis.from_url(
             _REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
+            socket_connect_timeout=0.25,
+            socket_timeout=0.5,
         )
     return _client
 

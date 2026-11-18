@@ -29,6 +29,20 @@ services:
       timeout: 5s
       retries: 20
 
+  # Redis нужен кэшу контента и rate-limit'у. Без него приложение работает,
+  # но каждый запрос: (1) делает неудачную попытку подключения, (2) не
+  # кэширует ничего — списки кейсов и состояние геймификации считаются заново
+  # на каждый экран. Именно из-за отсутствия Redis контент грузился медленно.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   backend:
     build:
       context: ../../backend
@@ -36,12 +50,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       # Асинхронный драйвер asyncpg + внутренний хост db из compose-сети.
       DATABASE_URL: postgresql+asyncpg://lexbear:${POSTGRES_PASSWORD}@db:5432/lexbear
       # Обязательно ≥32 символов (в проде проверяется).
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
       DEBUG: "false"
+      # Кэш и rate-limit (общее состояние для всех воркеров).
+      REDIS_URL: redis://redis:6379/0
       # Токен для служебных эндпоинтов (сид/админка контента).
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       # За обратным прокси (nginx) включите, чтобы rate-limit видел реальный IP.

@@ -24,7 +24,11 @@ async def require_admin(
     """
     configured = settings.admin_token
     if not configured:
-        if settings.debug:
+        # Раньше в debug доступ открывался полностью — и любой, кто скопировал
+        # .env.example с DEBUG=true на сервер, получал публичную админку
+        # контента (перезапись уроков, удаление кейсов). Теперь «удобный режим»
+        # включается только явным флагом ADMIN_ALLOW_UNAUTHENTICATED.
+        if settings.debug and settings.admin_allow_unauthenticated:
             return
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

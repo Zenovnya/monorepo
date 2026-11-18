@@ -3,7 +3,6 @@
 import json
 from functools import lru_cache
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +33,9 @@ class Settings(BaseSettings):
     # Передаётся клиентом в заголовке ``X-Admin-Token``. Если не задан —
     # админ-эндпоинты недоступны в production (в debug разрешены для удобства).
     admin_token: str = ""
+    # Осознанный флаг: разрешить /admin/* без токена даже в debug.
+    # Нужен только локальным скриптам; в проде не включать.
+    admin_allow_unauthenticated: bool = False
 
     # --- CORS ---
     cors_origins: list[str] = ["http://localhost:19006", "http://localhost:8081"]
