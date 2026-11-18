@@ -1,5 +1,11 @@
-"""Модуль прогресса обучения пользователя."""
+"""Модуль прогресса.
 
-from app.modules.progress.routes import router
+От него осталась одна таблица — дневной счётчик XP (``daily_xp``), который
+нужен ежедневной цели. Остальное (прогресс по урокам, разборы кейсов, SRS)
+относилось к старому контенту и удалено вместе с ним: новый прогресс живёт в
+``app/modules/adaptive``.
+"""
 
-__all__ = ["router"]
+from app.modules.progress.models import DailyXp
+
+__all__ = ["DailyXp"]

@@ -117,35 +117,23 @@ def test_award_achievement_idempotent() -> None:
 
     asyncio.run(run())
 
-class TestLessonGems:
-    """Гемы за урок.
+class TestShopAffordability:
+    """Магазин достижим без платежей.
 
-    До этого гемы начислялись только после оплаты через платёжный шлюз,
-    которого в MVP нет (ManualProvider → checkout.invalid). Новый игрок
-    навсегда оставался с нулём гемов и не мог ничего купить в магазине.
+    Гемы за урок начислялись в старой серверной логике уроков, которой больше
+    нет: новый контент начисляет XP через геймификацию. Проверка «дешёвый
+    товар достижим за разумное время» остаётся — она про цены магазина, а не
+    про конкретный способ начисления, и ловит ситуацию «награда не покрывает
+    даже самый дешёвый товар».
     """
 
-    def test_first_completion_gives_full_reward(self) -> None:
-        from app.modules.content.lexbear_service import _gems_for_lesson
-
-        assert _gems_for_lesson(0.5, is_new=True) == 10
-        assert _gems_for_lesson(1.0, is_new=True) == 15
-
-    def test_repeat_completion_gives_reduced_reward(self) -> None:
-        """Повторное прохождение нельзя «фармить» на полную награду."""
-        from app.modules.content.lexbear_service import _gems_for_lesson
-
-        assert _gems_for_lesson(0.5, is_new=False) == 2
-        assert _gems_for_lesson(1.0, is_new=False) == 4
-        assert _gems_for_lesson(0.0, is_new=False) >= 1
-
-    def test_shop_items_affordable_with_lesson_gems(self) -> None:
-        """Дешёвый товар достижим за разумное число уроков."""
+    def test_cheapest_item_needs_few_sessions(self) -> None:
         from app.modules.gamification.service import SHOP_ITEMS
 
         cheapest = min(SHOP_ITEMS.values())
-        lessons_needed = -(-cheapest // 10)  # ceil
-        assert lessons_needed <= 10
+        # 10 гемов — консервативная оценка одной практики.
+        sessions_needed = -(-cheapest // 10)  # округление вверх
+        assert sessions_needed <= 10
 
 
 class TestRepeatCosmeticPurchase:

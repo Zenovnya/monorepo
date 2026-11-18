@@ -1,27 +1,24 @@
-"""Pydantic-схемы валидации контент-паков (JSON) и админ-CRUD.
+"""Проверки ввода админки: кейс и вопрос урока.
 
-Схемы гарантируют, что перед записью в БД данные корректны: отсутствующее
-обязательное поле или неверный тип дадут понятную ошибку валидации, а не
-частично записанный контент.
+Эти схемы валидируют то, что редактор сохраняет руками. Правило одно и то же
+для всех путей: **нерешаемый контент не должен сохраняться**. Кейс без
+правильного варианта, кейс с двумя правильными, вопрос с `correct` вне списка
+вариантов и вопрос с неизвестным `kind` («choise») выглядят безобидно в форме
+и превращаются в задание, которое нельзя засчитать ни при каком ответе.
+
+Записывать в БД здесь нечего: контент нового пака поставляется файлом
+(``app/content_packs/themes.json``) и проверяется на импорте
+(``app/modules/adaptive/pack.py``). Схемы остались потому, что админка
+принимает правки и должна отвечать понятной ошибкой, а не 500.
 """
+
+from __future__ import annotations
 
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
-class TheoryCardIn(BaseModel):
-    """Карточка теории."""
-
-    order: int = 0
-    title: str
-    definition: str
-    practical: str = ""
-    chips: list[str] = Field(default_factory=list)
-    bear_line: str = ""
-
-
-# Типы вопросов, формат `correct` у которых описан в lexbear_scoring.
+# Типы вопросов, формат `correct` у которых описан ниже.
 QUESTION_KINDS = ("choice", "multi", "truefalse", "case")
 
 
@@ -45,8 +42,9 @@ class QuestionIn(BaseModel):
     def _known_kind(cls, value: str) -> str:
         """Неизвестный тип вопроса не будет проверен ни одним путём.
 
-        `lexbear_scoring` знает четыре формата `correct`; опечатка в `kind`
-        («choise») давала вопрос, который нельзя засчитать ни при каком ответе.
+        ``normalize_correct`` знает четыре формата ``correct``; опечатка в
+        ``kind`` («choise») давала вопрос, который нельзя засчитать ни при
+        каком ответе.
         """
         if value not in QUESTION_KINDS:
             raise ValueError(
@@ -56,34 +54,31 @@ class QuestionIn(BaseModel):
 
 
 class LessonIn(BaseModel):
-    """Урок LexBear со вложенной теорией и вопросами."""
+    """Урок со вложенными вопросами."""
 
     slug: str = Field(min_length=1, max_length=96)
     title: str
     order: int = 0
     xp_reward: int = 10
-    cards: list[TheoryCardIn] = Field(default_factory=list)
     questions: list[QuestionIn] = Field(default_factory=list)
 
     @field_validator("questions")
     @classmethod
     def _correct_matches_options(cls, questions: list[QuestionIn]):
-        """`correct` обязан указывать внутрь списка вариантов.
+        """``correct`` обязан указывать внутрь списка вариантов.
 
-        Раньше `PUT /admin/content/units/{unit}/lessons` принимал вопрос с
-        `options: ["А","Б"], correct: 5` — вопрос сохранялся, а верный ответ
-        выбрать было невозможно. Отдельно проверяются вырожденные случаи
-        множественного выбора (пустой список или все варианты сразу).
+        Раньше админка принимала вопрос с ``options: ["А","Б"], correct: 5`` —
+        вопрос сохранялся, а верный ответ выбрать было невозможно. Отдельно
+        проверяются вырожденные случаи множественного выбора (пустой список или
+        все варианты сразу).
         """
         for index, question in enumerate(questions, start=1):
             count = len(question.options)
             if question.kind == "truefalse":
-                # Формат true/false: `correct` — булево, вариантов нет.
+                # Формат true/false: ``correct`` — булево, вариантов нет.
                 continue
             if count < 2:
-                raise ValueError(
-                    f"Вопрос №{index}: нужно минимум два варианта ответа"
-                )
+                raise ValueError(f"Вопрос №{index}: нужно минимум два варианта ответа")
             indices = _correct_indices(question.correct)
             if not indices:
                 raise ValueError(
@@ -110,7 +105,7 @@ class LessonIn(BaseModel):
 
 
 def _correct_indices(correct: Any) -> list[int]:
-    """Индексы из поля `correct` (число, список или булево)."""
+    """Индексы из поля ``correct`` (число, список или булево)."""
     if isinstance(correct, bool):
         return [0 if correct else 1]
     if isinstance(correct, int):
@@ -128,46 +123,6 @@ def _correct_indices(correct: Any) -> list[int]:
     return []
 
 
-class UnitIn(BaseModel):
-    """Юнит/остров обучения со вложенными уроками."""
-
-    code: str = Field(min_length=1, max_length=64)
-    codex: str
-    title: str
-    subtitle: str = ""
-    order: int = 0
-    color: str = "#C9A227"
-    locked: bool = False
-    why_practical: str = ""
-    # False — юнит остаётся в паках, но не отдаётся клиенту и деактивируется в БД
-    # (мягкое удаление: прогресс и FK сохраняются).
-    is_active: bool = True
-    lessons: list[LessonIn] = Field(default_factory=list)
-
-
-class CurriculumPack(BaseModel):
-    """Пак учебного плана: юниты → уроки → теория/вопросы."""
-
-    units: list[UnitIn] = Field(default_factory=list)
-
-
-class ArticleIn(BaseModel):
-    """Справочная статья кодекса."""
-
-    code: str = Field(min_length=1, max_length=64)
-    codex: str
-    number: str
-    title: str
-    plain: str
-    full: str
-
-
-class ArticlesPack(BaseModel):
-    """Пак справочных статей."""
-
-    articles: list[ArticleIn] = Field(default_factory=list)
-
-
 class CaseOptionIn(BaseModel):
     """Вариант ответа кейса."""
 
@@ -177,19 +132,14 @@ class CaseOptionIn(BaseModel):
 
 
 class CaseIn(BaseModel):
-    """Кейс вкладки «Кейсы» с вариантами ответов."""
+    """Кейс с вариантами ответов (ввод админки)."""
 
     slug: str = Field(min_length=1, max_length=96)
     title: str
-    # min_length=1: пустой кодекс проходил схему, и такой кейс молча исчезал
-    # из GET /lexbear/cases (там пустой codex отфильтровывается) — кейс
-    # сохранялся в админке, но до пользователя не доходил.
     codex: str = Field(min_length=1, max_length=128)
     difficulty: str = "easy"
     case_text: str = Field(min_length=1)
     featured: bool = False
-    # Опциональная подсказка для кнопки «Подсказка» на экране кейса —
-    # ссылка на статью/закон, не раскрывающая правильный ответ.
     hint: str | None = None
     options: list[CaseOptionIn] = Field(min_length=2)
 
@@ -209,11 +159,9 @@ class CaseIn(BaseModel):
     def _exactly_one_correct(cls, options: list[CaseOptionIn]):
         """Ровно один правильный вариант — иначе кейс нерешаем.
 
-        Импорт из JSON-паков это проверяет (`importer.validate_case`), а
-        админка — нет: кейс без правильного ответа и кейс с двумя правильными
-        сохранялись с кодом 200. Дальше он попадал в адаптивный банк и в
-        диагностику, где `evaluate` не мог выставить вердикт, а пользователь
-        получал XP за ответ, который невозможно выбрать правильно.
+        Кейс без правильного ответа и кейс с двумя правильными сохранялись с
+        кодом 200: дальше пользователь получал задание, в котором верный ответ
+        невозможно выбрать.
         """
         correct = sum(1 for option in options if option.is_correct)
         if correct != 1:
@@ -222,9 +170,3 @@ class CaseIn(BaseModel):
                 f"(сейчас отмечено {correct})"
             )
         return options
-
-
-class CasesPack(BaseModel):
-    """Пак самостоятельных кейсов."""
-
-    cases: list[CaseIn] = Field(default_factory=list)

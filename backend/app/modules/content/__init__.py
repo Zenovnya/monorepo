@@ -1,6 +1,16 @@
-"""Модуль контента: ветки, уроки, кейсы и материалы."""
+"""Модуль контента: проверки ввода и сверка ответов.
 
-from app.modules.content.models import Branch, Case, CaseOption, Lesson
-from app.modules.content.routes import router
+Здесь остались только правила, не зависящие от старых таблиц:
 
-__all__ = ["Branch", "Case", "CaseOption", "Lesson", "router"]
+* ``validation`` — админка не сохраняет нерешаемый кейс или вопрос;
+* ``scoring`` — единственное место, где ответ сравнивается с эталоном.
+
+Раньше модуль содержал ещё и хранение контента (``branches/lessons/cases``,
+``lexbear_*``) и загрузчик JSON-паков. Этот контент заменён пакетом тем
+(``app/content_packs/themes.json``): его проверяет ``app/modules/adaptive/pack.py``,
+а отбор кейсов — ``app/modules/adaptive/engine.py``.
+"""
+
+from app.modules.content.validation import CaseIn, LessonIn, QuestionIn
+
+__all__ = ["CaseIn", "LessonIn", "QuestionIn"]

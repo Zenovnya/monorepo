@@ -42,11 +42,18 @@ def test_user_owned_models_cover_progress_and_tokens() -> None:
 
     assert "users" not in tables
     # Личные данные и сессии
-    assert {"progress", "daily_xp", "refresh_tokens", "password_reset_tokens"} <= tables
+    assert {"daily_xp", "refresh_tokens", "password_reset_tokens"} <= tables
     assert {"push_tokens", "notification_settings", "notification_deliveries"} <= tables
     assert {"user_achievements", "subscriptions", "payment_history"} <= tables
-    # Контентные таблицы (уроки, статьи, вопросы) трогать нельзя
-    assert not {"lexbear_lessons", "questions", "articles", "units"} & tables
+    # Состояние адаптивного обучения — это персональные данные и прогресс,
+    # поэтому оно тоже должно попадать в очистку.
+    assert {
+        "adaptive_states",
+        "adaptive_attempts",
+        "adaptive_observations",
+        "adaptive_seen_families",
+        "adaptive_topic_priorities",
+    } <= tables
 
 
 def test_delete_account_removes_rows_on_sqlite() -> None:

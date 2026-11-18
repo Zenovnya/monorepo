@@ -11,7 +11,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
-import { lexbearApi } from '../api/lexbear';
 import { gamificationApi } from '../api/gamification';
 import { progressApi } from '../api/progress';
 import { userApi } from '../api/user';
@@ -29,7 +28,6 @@ import { colors } from '../theme/colors';
 const ROW_SEAL = {
   bear: { label: '§', tone: 'red' },
   league: { label: 'I', tone: 'gold' },
-  articles: { label: 'ст', tone: 'red' },
   reviews: { label: '↻', tone: 'gold' },
   shop: { label: '✦', tone: 'gold' },
 };
@@ -62,11 +60,6 @@ export default function ProfileScreen({ navigation }) {
     onError: () => setNameError('Не удалось сохранить имя. Попробуйте ещё раз.'),
   });
 
-  const { data: articles } = useQuery({
-    queryKey: ['lexbear-articles'],
-    queryFn: lexbearApi.articles,
-  });
-
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
@@ -83,7 +76,6 @@ export default function ProfileScreen({ navigation }) {
   });
   const achievements = achData?.achievements ?? [];
 
-  const learnedCount = (articles ?? []).filter((a) => a.learned).length;
   const totalCrowns = progress?.total_crowns ?? 0;
   const level = gamification?.level ?? user?.level ?? 1;
 
@@ -118,9 +110,9 @@ export default function ProfileScreen({ navigation }) {
       accent: brand.goldInk,
     },
     {
-      icon: '📖',
-      value: learnedCount,
-      label: 'Статьи',
+      icon: '⚖️',
+      value: progress?.total_completed ?? 0,
+      label: 'Уроки',
       accent: brand.pine,
     },
   ];
@@ -135,11 +127,6 @@ export default function ProfileScreen({ navigation }) {
       key: 'league',
       title: 'Лига',
       hint: 'Рейтинг и награды недели',
-    },
-    {
-      key: 'articles',
-      title: 'Мои статьи',
-      hint: `Изучено статей: ${learnedCount}`,
     },
     {
       key: 'reviews',
@@ -163,7 +150,6 @@ export default function ProfileScreen({ navigation }) {
     const map = {
       bear: 'Bear',
       league: 'League',
-      articles: 'Articles',
       reviews: 'Reviews',
       shop: 'Shop',
       premium: 'Premium',

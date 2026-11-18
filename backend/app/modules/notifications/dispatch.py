@@ -33,7 +33,8 @@ from app.modules.notifications.models import (
     NotificationSettings,
     PushToken,
 )
-from app.modules.progress.models import DailyXp, ReviewState
+from app.modules.adaptive.models import AdaptiveObservation
+from app.modules.progress.models import DailyXp
 
 logger = logging.getLogger(__name__)
 
@@ -155,22 +156,30 @@ async def _plan_for_user(
                 )
             )
 
-    # 3) Повторения: есть кейсы, срок которых наступил.
+    # 3) Повторение: есть ошибки, которые стоит перепройти.
+    #
+    # Раньше здесь читалось расписание SM-2 по старым кейсам. Старый контент
+    # удалён, а новый движок ведёт окно наблюдений, а не интервалы: поэтому
+    # сигналом служит **недавняя ошибка**, а не дата повторения. Напоминание
+    # само по себе полезно ровно тогда, когда человек ошибался и с тех пор не
+    # возвращался к теме.
     if settings.review_reminders:
-        due = await session.scalar(
-            select(ReviewState.id)
+        mistake = await session.scalar(
+            select(AdaptiveObservation.id)
             .where(
-                ReviewState.user_id == user.id,
-                ReviewState.due_at <= now,
+                AdaptiveObservation.user_id == user.id,
+                AdaptiveObservation.correct.is_(False),
+                AdaptiveObservation.voided.is_(False),
             )
+            .order_by(AdaptiveObservation.seq.desc())
             .limit(1)
         )
-        if due is not None:
+        if mistake is not None:
             plans.append(
                 _Plan(
                     TYPE_REVIEW,
                     "Пора повторить нормы ↻",
-                    "Есть кейсы, срок повторения которых наступил. Пять минут — и они снова в памяти.",
+                    "В прошлых кейсах была ошибка. Пять минут практики — и тема перестанет проваливаться.",
                 )
             )
 
