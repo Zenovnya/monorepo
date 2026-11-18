@@ -21,6 +21,10 @@ class TheoryCardIn(BaseModel):
     bear_line: str = ""
 
 
+# Типы вопросов, формат `correct` у которых описан в lexbear_scoring.
+QUESTION_KINDS = ("choice", "multi", "truefalse", "case")
+
+
 class QuestionIn(BaseModel):
     """Вопрос/задание урока.
 
@@ -36,6 +40,20 @@ class QuestionIn(BaseModel):
     correct: Any = 0
     explanation: str = ""
 
+    @field_validator("kind")
+    @classmethod
+    def _known_kind(cls, value: str) -> str:
+        """Неизвестный тип вопроса не будет проверен ни одним путём.
+
+        `lexbear_scoring` знает четыре формата `correct`; опечатка в `kind`
+        («choise») давала вопрос, который нельзя засчитать ни при каком ответе.
+        """
+        if value not in QUESTION_KINDS:
+            raise ValueError(
+                "Неизвестный тип вопроса. Допустимые: " + ", ".join(QUESTION_KINDS)
+            )
+        return value
+
 
 class LessonIn(BaseModel):
     """Урок LexBear со вложенной теорией и вопросами."""
@@ -46,6 +64,68 @@ class LessonIn(BaseModel):
     xp_reward: int = 10
     cards: list[TheoryCardIn] = Field(default_factory=list)
     questions: list[QuestionIn] = Field(default_factory=list)
+
+    @field_validator("questions")
+    @classmethod
+    def _correct_matches_options(cls, questions: list[QuestionIn]):
+        """`correct` обязан указывать внутрь списка вариантов.
+
+        Раньше `PUT /admin/content/units/{unit}/lessons` принимал вопрос с
+        `options: ["А","Б"], correct: 5` — вопрос сохранялся, а верный ответ
+        выбрать было невозможно. Отдельно проверяются вырожденные случаи
+        множественного выбора (пустой список или все варианты сразу).
+        """
+        for index, question in enumerate(questions, start=1):
+            count = len(question.options)
+            if question.kind == "truefalse":
+                # Формат true/false: `correct` — булево, вариантов нет.
+                continue
+            if count < 2:
+                raise ValueError(
+                    f"Вопрос №{index}: нужно минимум два варианта ответа"
+                )
+            indices = _correct_indices(question.correct)
+            if not indices:
+                raise ValueError(
+                    f"Вопрос №{index}: не указан правильный вариант "
+                    f"(correct={question.correct!r})"
+                )
+            outside = [i for i in indices if not 0 <= i < count]
+            if outside:
+                raise ValueError(
+                    f"Вопрос №{index}: правильный вариант вне списка "
+                    f"(correct={outside}, вариантов {count})"
+                )
+            if question.kind == "choice" and len(indices) != 1:
+                raise ValueError(
+                    f"Вопрос №{index}: для одиночного выбора нужен один индекс, "
+                    f"получено {len(indices)}"
+                )
+            if question.kind == "multi" and len(set(indices)) == count:
+                raise ValueError(
+                    f"Вопрос №{index}: при множественном выборе все варианты "
+                    "верны — такой вопрос не проверяет знание"
+                )
+        return questions
+
+
+def _correct_indices(correct: Any) -> list[int]:
+    """Индексы из поля `correct` (число, список или булево)."""
+    if isinstance(correct, bool):
+        return [0 if correct else 1]
+    if isinstance(correct, int):
+        return [correct]
+    if isinstance(correct, (list, tuple)):
+        result: list[int] = []
+        for value in correct:
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                result.append(value)
+            elif isinstance(value, str) and value.lstrip("-").isdigit():
+                result.append(int(value))
+        return result
+    return []
 
 
 class UnitIn(BaseModel):

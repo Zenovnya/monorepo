@@ -297,3 +297,97 @@ class TestAdminCaseSchemaRejectsUnsolvableCases:
 
         case = CaseIn(**self._payload(False, True, False))
         assert sum(1 for option in case.options if option.is_correct) == 1
+
+
+class TestLessonSchemaRejectsUnscorableQuestions:
+    """Вопрос, который нельзя засчитать, нельзя и сохранить.
+
+    Проверено на живом сервере до правки: `PUT /admin/content/units/{unit}/lessons`
+    принимал `options: ["А","Б"], correct: 5` и опечатку `kind: "choise"` с кодом
+    200. `lexbear_scoring` умеет четыре формата `correct`, поэтому такой вопрос
+    сохранялся, доезжал до пользователя и не засчитывался ни при каком ответе —
+    то есть урок нельзя было пройти на максимум никогда.
+    """
+
+    @staticmethod
+    def _lesson(*questions: dict) -> dict:
+        return {
+            "slug": "lesson-schema",
+            "title": "Урок",
+            "order": 1,
+            "xp_reward": 10,
+            "cards": [{"order": 1, "title": "Т", "definition": "Д"}],
+            "questions": list(questions),
+        }
+
+    def _question(self, **overrides) -> dict:
+        question = {
+            "order": 1,
+            "kind": "choice",
+            "prompt": "Вопрос?",
+            "options": ["А", "Б"],
+            "correct": 0,
+            "explanation": "Разбор",
+        }
+        question.update(overrides)
+        return question
+
+    def test_correct_outside_options_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import LessonIn
+
+        with pytest.raises(ValidationError) as exc:
+            LessonIn(**self._lesson(self._question(correct=5)))
+        assert "вне списка" in str(exc.value)
+
+    def test_unknown_kind_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import LessonIn
+
+        with pytest.raises(ValidationError) as exc:
+            LessonIn(**self._lesson(self._question(kind="choise")))
+        assert "Неизвестный тип вопроса" in str(exc.value)
+
+    def test_single_option_question_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import LessonIn
+
+        with pytest.raises(ValidationError) as exc:
+            LessonIn(**self._lesson(self._question(options=["А"], correct=0)))
+        assert "минимум два варианта" in str(exc.value)
+
+    def test_multi_with_all_options_correct_is_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import LessonIn
+
+        with pytest.raises(ValidationError) as exc:
+            LessonIn(**self._lesson(self._question(kind="multi", correct=[0, 1])))
+        assert "все варианты верны" in str(exc.value)
+
+    def test_choice_with_list_of_correct_is_rejected(self) -> None:
+        """Одиночный выбор с двумя индексами: клиент пришлёт одно число."""
+        from pydantic import ValidationError
+
+        from app.modules.content.content_schemas import LessonIn
+
+        with pytest.raises(ValidationError) as exc:
+            LessonIn(**self._lesson(self._question(options=["А", "Б", "В"], correct=[0, 1])))
+        assert "один индекс" in str(exc.value)
+
+    def test_truefalse_does_not_need_options(self) -> None:
+        from app.modules.content.content_schemas import LessonIn
+
+        lesson = LessonIn(
+            **self._lesson(self._question(kind="truefalse", options=[], correct=True))
+        )
+        assert lesson.questions[0].kind == "truefalse"
+
+    def test_valid_lesson_passes(self) -> None:
+        from app.modules.content.content_schemas import LessonIn
+
+        lesson = LessonIn(**self._lesson(self._question(correct=1)))
+        assert lesson.questions[0].correct == 1
