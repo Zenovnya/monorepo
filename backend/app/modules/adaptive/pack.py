@@ -56,6 +56,17 @@ class Pack:
     def release_key(self) -> str:
         return f"{self.raw['pack_id']}@{self.raw['pack_version']}"
 
+    def lessons_of(self, topic_id: str) -> list[dict[str, Any]]:
+        """Уроки темы в порядке прохождения.
+
+        Список уроков в самой теме не хранится — он выводится из уроков. Так
+        нельзя получить урок, которого нет, или потерять урок при переносе.
+        """
+        return sorted(
+            (row for row in self.lessons.values() if row["primary_topic_id"] == topic_id),
+            key=lambda row: row["order"],
+        )
+
     @property
     def editorial_note(self) -> str | None:
         return self.raw.get("editorial_note")
