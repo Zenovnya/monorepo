@@ -36,9 +36,16 @@ export default function AdaptiveLearningScreen({ navigation }) {
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
 
+  /*
+   * Показанные в этой сессии версии кейсов. Сервер без `exclude` ранжирует
+   * детерминировано и всегда возвращает **один и тот же** кейс — проверено:
+   * при четырёх одобренных три запроса подряд дают один `case_version_id`.
+   * Поэтому список показанных держим в ref (перерисовка не нужна) и передаём.
+   */
+  const seen = useRef([]);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['learning-next'],
-    queryFn: learningApi.next,
+    queryFn: () => learningApi.next(seen.current),
   });
   // `learningApi.next` отдаёт {case, unavailableReason}: сервер объясняет,
   // почему кейса нет, чтобы «всё пройдено» не показывалось вместо «контента
@@ -70,6 +77,10 @@ export default function AdaptiveLearningScreen({ navigation }) {
   };
 
   const next = () => {
+    // Запоминаем текущий кейс, иначе «Дальше» возвращает его же бесконечно.
+    if (item && !seen.current.includes(item.case_version_id)) {
+      seen.current = [...seen.current, item.case_version_id];
+    }
     setSelected(null);
     setResult(null);
     refetch();
