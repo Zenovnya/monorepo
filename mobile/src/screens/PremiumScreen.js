@@ -4,10 +4,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { usePremium } from '../hooks/usePremium';
 import {
@@ -47,7 +48,13 @@ const perks = [
  */
 export default function PremiumScreen({ navigation }) {
   const [plan, setPlan] = useState('yearly');
-  const { isPremium, startCheckout, isCheckingOut } = usePremium();
+  const {
+    isPremium,
+    startCheckout,
+    isCheckingOut,
+    checkoutConfigured,
+    checkoutError,
+  } = usePremium();
 
   const onSubscribe = () => {
     Haptics.notificationAsync(
@@ -69,13 +76,13 @@ export default function PremiumScreen({ navigation }) {
         <KhokhlomaCorners variant="onDark" size="md" inset={10} />
 
         <View style={styles.header}>
-          <Pressable
+          <PressableScale
             onPress={() => navigation.goBack()}
             hitSlop={8}
             style={styles.closeBtn}
           >
             <Text style={styles.closeText}>✕</Text>
-          </Pressable>
+          </PressableScale>
           <View style={styles.superPill}>
             <Text style={styles.superPillText}>LEXBEAR PLUS</Text>
           </View>
@@ -121,13 +128,12 @@ export default function PremiumScreen({ navigation }) {
           {PLANS.map((p) => {
             const isSelected = plan === p.key;
             return (
-              <Pressable
+              <PressableScale
                 key={p.key}
                 onPress={() => setPlan(p.key)}
-                style={({ pressed }) => [
+                style={[
                   styles.plan,
                   isSelected && styles.planSelected,
-                  pressed && styles.planPressed,
                 ]}
               >
                 {p.popular ? (
@@ -179,7 +185,7 @@ export default function PremiumScreen({ navigation }) {
                 >
                   {p.note}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -205,7 +211,21 @@ export default function PremiumScreen({ navigation }) {
           ))}
         </View>
 
-        {isCheckingOut ? (
+        {checkoutConfigured === false ? (
+          <View style={[styles.paymentHintBox, styles.paymentWarnBox]}>
+            <Text style={styles.paymentWarn}>
+              Оплата пока недоступна: платёжный шлюз не подключён. Мы сообщим,
+              когда подписку можно будет оформить.
+            </Text>
+          </View>
+        ) : checkoutError ? (
+          <View style={[styles.paymentHintBox, styles.paymentWarnBox]}>
+            <Text style={styles.paymentWarn}>
+              Не удалось создать платёж. Проверьте соединение и попробуйте ещё
+              раз.
+            </Text>
+          </View>
+        ) : isCheckingOut ? (
           <View style={styles.paymentHintBox}>
             <Text style={styles.paymentHint}>
               Оплата открыта в браузере. После оплаты вернитесь в приложение —
@@ -231,6 +251,17 @@ export default function PremiumScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  paymentWarnBox: {
+    borderColor: brand.red,
+    backgroundColor: brand.redSoft,
+  },
+  paymentWarn: {
+    color: brand.red,
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

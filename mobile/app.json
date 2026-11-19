@@ -2,6 +2,7 @@
   "expo": {
     "name": "Лапа закона",
     "slug": "lapa-zakona-dbqt7w5rtluxkgwktyx",
+    "scheme": "lapazakona",
     "owner": "kakichs-team",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +12,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F6F1E8"
+      "backgroundColor": "#F7EFDF"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -24,7 +25,7 @@
       "package": "com.lapazakona.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F6F1E8"
+        "backgroundColor": "#F7EFDF"
       }
     },
     "web": {

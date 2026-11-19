@@ -4,10 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
+import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { describeLoadError } from '../api/client';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaCorners,
@@ -29,19 +34,6 @@ const SHIELD_META = {
 
 const AVATAR_COLORS = [brand.red, brand.gold, brand.pine, brand.ink, '#9A5B32'];
 
-const fake = [
-  { name: 'Артём К.', xp: 340 },
-  { name: 'Мария С.', xp: 315 },
-  { name: 'Ты', xp: 0, me: true },
-  { name: 'Игорь Д.', xp: 260 },
-  { name: 'Полина В.', xp: 245 },
-  { name: 'Никита М.', xp: 220 },
-  { name: 'Алина Ф.', xp: 200 },
-  { name: 'Сергей Т.', xp: 190 },
-  { name: 'Кристина О.', xp: 170 },
-  { name: 'Роман Б.', xp: 155 },
-];
-
 /**
  * Экран «Лига» (LeagueScreen):
  * наградная карточка дивизиона в красно-золотой рамке хохломы,
@@ -50,12 +42,23 @@ const fake = [
  */
 export default function LeagueScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
-  const board = fake
-    .map((f) =>
-      f.me ? { ...f, xp: user?.xp ?? 0, name: user?.name || 'Ты' } : f
-    )
-    .sort((a, b) => b.xp - a.xp);
-  const league = user?.league || 'Бронза';
+
+  // Реальная ведомость лиги с бэкенда. Раньше здесь был захардкоженный
+  // список выдуманных людей, и «Ты» с 0 XP стоял посреди чужих результатов.
+  const { data: leaderboard, isLoading, error, refetch } = useQuery({
+    queryKey: ['gamification-leaderboard'],
+    queryFn: () => gamificationApi.leaderboard(30),
+  });
+
+  const entries = leaderboard?.entries ?? [];
+  const board = entries.map((e) => ({
+    name: e.name,
+    xp: e.xp,
+    me: e.is_me,
+    level: e.level,
+    position: e.position,
+  }));
+  const league = leaderboard?.league || user?.league || 'Бронза';
   const curIdx = Math.max(0, leagues.indexOf(league));
   const nextIdx = Math.min(leagues.length - 1, leagues.indexOf(league) + 1);
 
@@ -69,16 +72,15 @@ export default function LeagueScreen({ navigation }) {
 
       {/* Шапка */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
-          style={({ pressed }) => [
+          style={[
             styles.backBtn,
-            pressed && styles.backPressed,
           ]}
         >
           <Text style={styles.backText}>←</Text>
-        </Pressable>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerKicker}>§ ТУРНИР НЕДЕЛИ</Text>
           <Text style={styles.title}>Лига</Text>
@@ -149,6 +151,29 @@ export default function LeagueScreen({ navigation }) {
 
       {/* Чистая ведомость участников */}
       <View style={styles.list}>
+        {isLoading && board.length === 0 ? (
+          <LoadingState compact label="Загружаем ведомость лиги…" />
+        ) : null}
+
+        {/* Раньше ошибка загрузки выглядела как «в лиге никого нет»: пустая
+            ведомость вместо причины. */}
+        {!isLoading && error && board.length === 0 ? (
+          <ErrorState
+            compact
+            title="Не удалось загрузить ведомость"
+            message={describeLoadError(error, 'лигу')}
+            onRetry={() => refetch()}
+          />
+        ) : null}
+
+        {!isLoading && !error && board.length === 0 ? (
+          <EmptyState
+            compact
+            title="В лиге пока никого нет"
+            message="Пройдите урок — и возглавите ведомость."
+          />
+        ) : null}
+
         {board.map((r, i) => {
           const isTop3 = i < 3;
           const sealTone = i === 0 ? 'gold' : i === 1 ? 'red' : 'pine';
@@ -220,6 +245,17 @@ export default function LeagueScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  emptyWrap: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: colors.subtext,
+    fontSize: 13.5,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

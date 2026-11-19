@@ -1,32 +1,23 @@
 """Служебные (admin) роуты управления контентом.
 
-Все эндпоинты защищены admin-токеном (``X-Admin-Token``) и предназначены для
-внутренней веб-админки и деплой-скриптов, а не для мобильных клиентов.
+Защищены admin-токеном (``X-Admin-Token``) и предназначены для внутренней
+веб-админки и деплой-скриптов, а не для мобильных клиентов.
 
-Механизм двухрежимный:
-- ``POST /admin/content/reload`` — массовая загрузка/синхронизация из JSON-паков
-  (``app/content_packs``) с опцией ``prune`` (мягкое удаление отсутствующего);
-- CRUD кейсов/уроков — точечные правки прямо в БД (для нетехнического
-  редактора через веб-форму), без правки файлов и редеплоя.
-
-После любой записи инкрементируется версия контента → кэш чтений
-инвалидируется, и мобильное приложение сразу видит изменения.
+С 0026 контент поставляется одним файлом (``app/content_packs/themes.json``):
+он проверяется на импорте и отдаётся движком. Поэтому здесь не «пишем уроки в
+БД», а **читаем и проверяем пак** — правки контента делаются в файле, а не в
+таблицах, иначе две копии контента неизбежно разъедутся.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from __future__ import annotations
 
-from app.cache import bump_content_version
-from app.database import get_session
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from app.modules.admin.security import require_admin
-from app.modules.content import content_loader
-from app.modules.content.content_schemas import CaseIn, LessonIn
-from app.modules.content.lexbear_models import LexBearLesson, Question, TheoryCard, Unit
-from app.modules.content.models import Case
-from app.modules.learning import importer as learning_importer
-from app.modules.learning.models import CaseVersion, LearningCase
+from app.modules.content.validation import CaseIn, LessonIn
+from app.modules.adaptive import engine
+from app.modules.adaptive.errors import EngineError
+from app.modules.adaptive.pack import get_pack, load_pack, validate
 
 router = APIRouter(
     prefix="/admin/content",
@@ -35,273 +26,77 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------------------------------------------
-# Массовая загрузка из JSON-паков
-# ---------------------------------------------------------------------------
-@router.post("/reload")
-async def reload_content(
-    prune: bool = False,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Загружает/синхронизирует контент из JSON-паков.
-
-    :param prune: если true — деактивирует контент, отсутствующий в JSON
-        (мягкое удаление; прогресс и SRS сохраняются).
-    """
-    report = await content_loader.load_content(session, prune=prune)
-    return {"ok": True, "prune": prune, "report": report}
+# --- Пакет тем -------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Адаптивный банк: импорт кейсов из паков и статус юридической проверки
-# ---------------------------------------------------------------------------
-@router.post("/reload-adaptive")
-async def reload_adaptive(
-    publish: bool = True,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Переносит кейсы ``cases.json`` в адаптивный банк (идемпотентно).
-
-    Дополняет ``/reload`` (legacy-таблицы). После вызова ``GET /learning/next``
-    выбирает из полного набора кейсов, а не из одного стартового.
-
-    :param publish: публиковать ли кейсы. Юридическая проверка не меняется —
-        ``review_status`` остаётся ``imported``.
-    """
-    try:
-        report = await learning_importer.import_cases(session, publish=publish)
-    except learning_importer.ContentImportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    await session.commit()
-    await bump_content_version()
-    return {"ok": True, "publish": publish, "report": report}
-
-
-@router.get("/adaptive/review")
-async def adaptive_review_queue(
-    review_status: str | None = None,
-    session: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    """Список кейсов адаптивного банка со статусом юридической проверки."""
-    query = (
-        select(CaseVersion)
-        .where(CaseVersion.source_slug.is_not(None))
-        .order_by(CaseVersion.review_status, CaseVersion.source_slug)
-    )
-    if review_status:
-        query = query.where(CaseVersion.review_status == review_status)
-    versions = (await session.scalars(query)).all()
-    return [
-        {
-            "slug": v.source_slug,
-            "title": (await session.get(LearningCase, v.case_id)).title,
-            "status": v.status,
-            "review_status": v.review_status,
-            "reviewed_by": v.reviewed_by,
-            "reviewed_at": v.reviewed_at.isoformat() if v.reviewed_at else None,
-        }
-        for v in versions
-    ]
-
-
-@router.post("/adaptive/review/{slug}")
-async def adaptive_set_review(
-    slug: str,
-    review_status: str,
-    reviewed_by: str | None = None,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Меняет статус юридической проверки кейса: ``in_review`` или ``approved``."""
-    try:
-        version = await learning_importer.set_review_status(
-            session, slug, review_status, reviewed_by=reviewed_by
-        )
-    except learning_importer.ContentImportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
-    await session.commit()
+@router.get("/pack")
+async def pack_summary() -> dict:
+    """Сводка по опубликованному паку: темы, уроки, карточки, нормы."""
+    pack = get_pack()
     return {
         "ok": True,
-        "slug": slug,
-        "review_status": version.review_status,
-        "reviewed_by": version.reviewed_by,
+        "release_key": pack.release_key,
+        "editorial_note": pack.editorial_note,
+        "topics": len(pack.topics),
+        "lessons": len(pack.lessons),
+        "items": len(pack.items),
+        "legal_authorities": len(pack.authorities),
+        "algorithm_version": pack.algorithm.get("version"),
     }
 
 
-# ---------------------------------------------------------------------------
-# Кейсы (CRUD)
-# ---------------------------------------------------------------------------
-def _serialize_case_admin(case: Case) -> dict:
-    """Полная сериализация кейса для админки (включая правильность и slug)."""
-    return {
-        "id": str(case.id),
-        "slug": case.slug,
-        "title": case.title,
-        "codex": case.codex,
-        "difficulty": case.difficulty,
-        "case_text": case.case_text,
-        "hint": case.hint,
-        "featured": case.featured,
-        "is_active": case.is_active,
-        "options": [
-            {
-                "id": o.id,
-                "text": o.text,
-                "is_correct": o.is_correct,
-                "explanation": o.explanation,
-            }
-            for o in case.options
-        ],
-    }
+@router.post("/pack/validate")
+async def validate_pack() -> dict:
+    """Проверяет пак по тем же правилам, что и импорт.
 
-
-@router.get("/cases")
-async def admin_list_cases(
-    include_inactive: bool = True,
-    session: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    """Возвращает кейсы вкладки «Кейсы» (по умолчанию — включая деактивированные)."""
-    query = (
-        select(Case)
-        .options(selectinload(Case.options))
-        .where(Case.slug.is_not(None))
-        .order_by(Case.created_at)
-    )
-    if not include_inactive:
-        query = query.where(Case.is_active.is_(True))
-    cases = (await session.scalars(query)).all()
-    return [_serialize_case_admin(c) for c in cases]
-
-
-@router.put("/cases")
-async def admin_upsert_case(
-    case_in: CaseIn,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Создаёт или обновляет кейс по ``slug`` (upsert)."""
-    case = await content_loader.upsert_case(session, case_in)
-    await session.commit()
-    await bump_content_version()
-    await session.refresh(case, attribute_names=["options"])
-    return _serialize_case_admin(case)
-
-
-@router.delete("/cases/{slug}")
-async def admin_delete_case(
-    slug: str,
-    hard: bool = False,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Удаляет кейс: мягко (is_active=False) по умолчанию либо физически (hard)."""
-    case = await session.scalar(select(Case).where(Case.slug == slug))
-    if case is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Кейс не найден"
-        )
-    if hard:
-        await session.delete(case)
-    else:
-        case.is_active = False
-    await session.commit()
-    await bump_content_version()
-    return {"ok": True, "slug": slug, "hard": hard}
-
-
-# ---------------------------------------------------------------------------
-# Юниты и уроки
-# ---------------------------------------------------------------------------
-@router.get("/units")
-async def admin_list_units(
-    session: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    """Список юнитов (для выбора при добавлении урока)."""
-    units = (await session.scalars(select(Unit).order_by(Unit.order))).all()
-    return [
-        {
-            "id": u.id,
-            "code": u.code,
-            "codex": u.codex,
-            "title": u.title,
-            "is_active": u.is_active,
-        }
-        for u in units
-    ]
-
-
-@router.get("/lessons")
-async def admin_list_lessons(
-    session: AsyncSession = Depends(get_session),
-) -> list[dict]:
-    """Список уроков с числом карточек теории и вопросов."""
-    lessons = (
-        await session.scalars(
-            select(LexBearLesson).order_by(LexBearLesson.unit_id, LexBearLesson.order)
-        )
-    ).all()
-    out = []
-    for lesson in lessons:
-        n_cards = await session.scalar(
-            select(func.count(TheoryCard.id)).where(TheoryCard.lesson_id == lesson.id)
-        )
-        n_questions = await session.scalar(
-            select(func.count(Question.id)).where(Question.lesson_id == lesson.id)
-        )
-        out.append(
-            {
-                "id": lesson.id,
-                "slug": lesson.slug,
-                "unit_id": lesson.unit_id,
-                "title": lesson.title,
-                "order": lesson.order,
-                "xp_reward": lesson.xp_reward,
-                "is_active": lesson.is_active,
-                "cards": n_cards,
-                "questions": n_questions,
-            }
-        )
-    return out
-
-
-@router.put("/units/{unit_code}/lessons")
-async def admin_upsert_lesson(
-    unit_code: str,
-    lesson_in: LessonIn,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Создаёт/обновляет урок (с теорией и вопросами) в юните ``unit_code``."""
+    Нужен, чтобы ошибку в контенте нашли здесь, а не пользователь: битый пак
+    не должен доехать до экрана «кейс не открывается».
+    """
+    pack = load_pack()
     try:
-        lesson = await content_loader.upsert_lesson(session, unit_code, lesson_in)
-    except content_loader.UnitNotFoundError as exc:
+        validate(pack)
+    except EngineError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "release_key": pack.release_key}
+
+
+@router.get("/pack/{lesson_id}")
+async def lesson_preview(lesson_id: str) -> dict:
+    """Учебный экран урока — то же, что видит пользователь."""
+    pack = get_pack()
+    if lesson_id not in pack.lessons:
+        raise HTTPException(status_code=404, detail="UNKNOWN_LESSON")
+    return engine.lesson_payload(pack, lesson_id)
+
+
+# --- Проверки ввода для формы редактирования ------------------------------
+
+
+@router.post("/validate/case")
+async def validate_case(data: CaseIn) -> dict:
+    """Проверяет кейс из формы, не записывая его.
+
+    Схема ``CaseIn`` уже отказывает нерешаемому кейсу (нет правильного варианта
+    или их два) — здесь она просто доступна как отдельная ручка, чтобы форма
+    могла показать ошибку до сохранения.
+    """
+    return {"ok": True, "slug": data.slug, "options": len(data.options)}
+
+
+@router.post("/validate/lesson")
+async def validate_lesson(data: LessonIn) -> dict:
+    """Проверяет урок с вопросами из формы, не записывая его."""
+    return {"ok": True, "slug": data.slug, "questions": len(data.questions)}
+
+
+@router.get("/status")
+async def content_status() -> dict:
+    """Короткий ответ «контент есть и он валиден» для деплой-скриптов."""
+    pack = get_pack()
+    try:
+        validate(pack)
+    except EngineError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
-    await session.commit()
-    await bump_content_version()
-    return {
-        "ok": True,
-        "id": lesson.id,
-        "slug": lesson.slug,
-        "unit_code": unit_code,
-    }
-
-
-@router.delete("/lessons/{slug}")
-async def admin_delete_lesson(
-    slug: str,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    """Мягко удаляет урок (is_active=False); прогресс сохраняется."""
-    lesson = await session.scalar(
-        select(LexBearLesson).where(LexBearLesson.slug == slug)
-    )
-    if lesson is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Урок не найден"
-        )
-    lesson.is_active = False
-    await session.commit()
-    await bump_content_version()
-    return {"ok": True, "slug": slug}
+    return {"ok": True, "release_key": pack.release_key}

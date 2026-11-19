@@ -1,1 +1,66 @@
+name: Баг
+description: Что-то работает не так, как описано в документации
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Перед отправкой проверьте `docs/` — возможно, поведение описано как
+        ожидаемое (например, пустая лента кейсов до юридической проверки).
 
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло
+      description: Фактическое поведение. Без оценок и предположений о причинах.
+      placeholder: Нажал «Дальше» — вернулся тот же кейс.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ожидалось
+      placeholder: Должен был открыться следующий кейс.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      description: По шагам, начиная с входа в приложение.
+      placeholder: |
+        1. Войти в аккаунт
+        2. Открыть «Практикум»
+        3. Ответить на кейс, нажать «Дальше»
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Мобильное приложение
+        - Backend / API
+        - Контент (уроки, кейсы, тексты)
+        - Админка
+        - Не знаю
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия и платформа
+      description: Версия приложения или коммит, ОС и модель устройства.
+      placeholder: 1.4.0, Android 14, Pixel 7
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи и скриншоты
+      description: Приложите текст ошибки или скриншот. Не вставляйте токены и персональные данные.
+    validations:
+      required: false

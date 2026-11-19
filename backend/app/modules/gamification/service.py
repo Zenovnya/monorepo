@@ -29,6 +29,10 @@ class InsufficientGemsError(GamificationError):
     """У пользователя недостаточно гемов для покупки."""
 
 
+class ItemAlreadyOwnedError(GamificationError):
+    """Предмет гардероба уже куплен — повторная покупка не нужна."""
+
+
 class UnknownShopItemError(GamificationError):
     """Товар отсутствует в каталоге магазина."""
 
@@ -69,22 +73,223 @@ def _today_utc() -> datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+# Максимум жизней (совпадает с default у User.lives).
+MAX_LIVES = 5
+
+# Сколько минут восстанавливается одна жизнь.
+LIFE_REGEN_MINUTES = 20
+
+
+def _as_aware_utc(value: datetime | None) -> datetime | None:
+    """Приводит дату из БД к aware-UTC (sqlite отдаёт naive)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def regenerate_lives(user: User, now: datetime | None = None) -> int:
+    """Доначисляет жизни, накопившиеся с момента последней траты.
+
+    Зачем это нужно: жизни списывались за ошибки, но не восстанавливались
+    никогда и нигде не проверялись. То есть ограничения не было вовсе, а
+    купленное «Пополнение жизней» возвращало счётчик, который ни на что не
+    влиял. Теперь жизнь стоит 20 минут ожидания — это и есть смысл механики:
+    мягкая пауза после серии ошибок, а не блокировка навсегда.
+
+    Заодно закрывается дыра с копящимся запасом: если пользователь не заходил
+    неделю, при следующем входе он получит максимум, а не 500 жизней.
+    """
+    if (user.lives or 0) >= MAX_LIVES:
+        user.lives = MAX_LIVES
+        user.lives_updated_at = None
+        return user.lives
+
+    now = now or datetime.now(timezone.utc)
+    updated = _as_aware_utc(user.lives_updated_at)
+
+    # Метки нет — либо жизни никогда не тратились, либо пользователь из
+    # версии до миграции 0023. Жизни не трогаем, но ставим метку, чтобы
+    # следующее восстановление было предсказуемым.
+    if updated is None:
+        user.lives_updated_at = now
+        return user.lives
+
+    elapsed_minutes = int((now - updated).total_seconds() // 60)
+    restored = elapsed_minutes // LIFE_REGEN_MINUTES
+    if restored <= 0:
+        return user.lives
+
+    before = user.lives or 0
+    user.lives = min(MAX_LIVES, before + restored)
+    if user.lives >= MAX_LIVES:
+        user.lives_updated_at = None
+    else:
+        # Сдвигаем метку ровно на потраченные интервалы, чтобы остаток времени
+        # до следующей жизни не сгорал.
+        user.lives_updated_at = updated + timedelta(
+            minutes=restored * LIFE_REGEN_MINUTES
+        )
+    return user.lives
+
+
+def lives_state(user: User, now: datetime | None = None) -> dict:
+    """Сколько жизней и через сколько восстановится следующая.
+
+    Клиент показывает это в шапке урока: «3 ❤️ · +1 через 12 мин». Без
+    обратного отсчёта механика выглядит как поломка — непонятно, ждать или
+    покупать.
+    """
+    now = now or datetime.now(timezone.utc)
+    lives = user.lives or 0
+
+    if lives >= MAX_LIVES:
+        return {
+            "lives": MAX_LIVES,
+            "max_lives": MAX_LIVES,
+            "next_life_in_seconds": 0,
+            "regen_minutes": LIFE_REGEN_MINUTES,
+        }
+
+    updated = _as_aware_utc(user.lives_updated_at)
+    if updated is None:
+        return {
+            "lives": lives,
+            "max_lives": MAX_LIVES,
+            "next_life_in_seconds": LIFE_REGEN_MINUTES * 60,
+            "regen_minutes": LIFE_REGEN_MINUTES,
+        }
+
+    elapsed = max(0, int((now - updated).total_seconds()))
+    remaining = LIFE_REGEN_MINUTES * 60 - (elapsed % (LIFE_REGEN_MINUTES * 60))
+    return {
+        "lives": lives,
+        "max_lives": MAX_LIVES,
+        "next_life_in_seconds": remaining,
+        "regen_minutes": LIFE_REGEN_MINUTES,
+    }
+
+
+def spend_lives(user: User, amount: int) -> int:
+    """Списывает жизни за ошибки, не уходя ниже нуля.
+
+    Метка времени ставится при первой трате из полного запаса: от неё
+    считается восстановление. Если трата идёт при уже неполном счёте,
+    метку не сдвигаем — иначе каждая ошибка отодвигала бы следующую жизнь.
+    """
+    amount = max(0, amount)
+    if not amount:
+        return user.lives or 0
+
+    had_full = (user.lives or 0) >= MAX_LIVES
+    user.lives = max(0, (user.lives or 0) - amount)
+    if had_full or user.lives_updated_at is None:
+        user.lives_updated_at = datetime.now(timezone.utc)
+    return user.lives
+
+
+def _streak_freezes(user: User) -> int:
+    """Возвращает число купленных заморозок стрика."""
+    return int((user.bear_outfit or {}).get("streak_freezes") or 0)
+
+
+def _consume_streak_freeze(user: User, count: int) -> int:
+    """Списывает заморозки стрика (не больше, чем есть)."""
+    outfit = dict(user.bear_outfit or {})
+    freezes = int(outfit.get("streak_freezes") or 0)
+    spent = max(0, min(freezes, count))
+    if spent:
+        outfit["streak_freezes"] = freezes - spent
+        user.bear_outfit = outfit
+    return spent
+
+
 def update_streak(user: User, now: datetime | None = None) -> int:
-    """Обновляет стрик пользователя при активности в новый день."""
+    """Обновляет стрик пользователя при активности в новый день.
+
+    Если день (или несколько) пропущен, а у пользователя куплены заморозки
+    стрика, пропуски закрываются ими: серия сохраняется, заморозки списываются.
+    """
     now = now or datetime.now(timezone.utc)
     today = now.date()
     if user.last_active_day is not None:
         last = user.last_active_day
         if last.date() == today:
             return user.streak  # уже отмечали сегодня
-        if last.date() == today - timedelta(days=1):
+        gap = (today - last.date()).days
+        if gap == 1:
             user.streak += 1
         else:
-            user.streak = 1
+            # gap - 1 пропущенных дней (сегодняшний не в счёт).
+            # Раньше стрик просто сбрасывался в 1, а купленная за 200 гемов
+            # «Заморозка стрика» не использовалась ни при каких условиях.
+            missed = gap - 1
+            covered = _consume_streak_freeze(user, missed)
+            if covered >= missed:
+                # Все пропуски закрыты заморозками — серия продолжается.
+                user.streak += 1
+            else:
+                # Заморозок не хватило (или их нет) — серия начинается заново.
+                user.streak = 1
     else:
         user.streak = 1
     user.last_active_day = now
     return user.streak
+
+
+async def _add_daily_xp(
+    session: AsyncSession, user_id: uuid.UUID, amount: int
+) -> None:
+    """Инкрементирует счётчик XP за текущие сутки (UTC)."""
+    if amount == 0:
+        return
+    from app.modules.progress.models import DailyXp
+
+    today = _today_utc()
+    row = await session.scalar(
+        select(DailyXp).where(
+            DailyXp.user_id == user_id,
+            DailyXp.day == today,
+        )
+    )
+    if row is None:
+        session.add(DailyXp(user_id=user_id, day=today, xp=amount))
+    else:
+        row.xp += amount
+
+
+async def get_daily_progress(
+    session: AsyncSession, user_id: uuid.UUID
+) -> dict:
+    """Возвращает прогресс по ежедневной цели: сколько XP набрано сегодня.
+
+    ``daily_goal`` задаётся при онбординге (минуты × 2), но до этой правки
+    нигде не использовался, поэтому «цель дня» нельзя было ни показать,
+    ни выполнить.
+    """
+    from app.modules.progress.models import DailyXp
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise GamificationError("Пользователь не найден")
+
+    today = _today_utc()
+    row = await session.scalar(
+        select(DailyXp).where(
+            DailyXp.user_id == user_id,
+            DailyXp.day == today,
+        )
+    )
+    done = row.xp if row is not None else 0
+    goal = user.daily_goal or 0
+    return {
+        "goal": goal,
+        "done": done,
+        "remaining": max(0, goal - done),
+        "completed": goal > 0 and done >= goal,
+        "day": today.date().isoformat(),
+    }
 
 
 async def add_xp(
@@ -98,6 +303,7 @@ async def add_xp(
         update_streak(user)
 
     user.xp += amount
+    await _add_daily_xp(session, user.id, amount)
     new_level = level_from_xp(user.xp)
     leveled_up = new_level > user.level
     user.level = new_level
@@ -174,13 +380,20 @@ async def get_gamification_state(
     if user is None:
         raise GamificationError("Пользователь не найден")
 
+    # Доначисляем жизни до выдачи состояния: иначе клиент показывал бы старый
+    # счётчик, хотя время восстановления уже прошло.
+    if regenerate_lives(user):
+        await session.flush()
+
     achievements = await list_achievements(session, user_id)
     state = {
         "xp": user.xp,
         "level": user.level,
         "streak": user.streak,
         "gems": user.gems,
+        "streak_freezes": _streak_freezes(user),
         "next_level_xp": xp_for_next_level(user.level),
+        **lives_state(user),
         "achievements": [
             {
                 "code": a.code,
@@ -276,6 +489,11 @@ async def purchase_shop_item(
     if user.gems < price:
         raise InsufficientGemsError("Недостаточно гемов")
 
+    # Косметику нельзя купить дважды: раньше повторная покупка списывала
+    # гемы и просто выставляла тот же флаг, то есть забирала валюту впустую.
+    if item in _OUTFITS and (user.bear_outfit or {}).get(_OUTFITS[item]):
+        raise ItemAlreadyOwnedError("Этот предмет уже есть в гардеробе")
+
     user.gems -= price
     effect = _apply_shop_effect(session, user, item)
     await session.flush()
@@ -288,9 +506,6 @@ async def purchase_shop_item(
         "effect": effect,
     }
 
-
-# Максимум жизней (совпадает с default у User.lives).
-MAX_LIVES = 5
 
 # Косметика попадает в bear_outfit под этими ключами.
 _OUTFITS = {
@@ -319,10 +534,11 @@ def _apply_shop_effect(session, user: User, item: str) -> dict:
     if item in _OUTFITS:
         key = _OUTFITS[item]
         outfit = dict(user.bear_outfit or {})
-        already = bool(outfit.get(key))
         outfit[key] = True
         user.bear_outfit = outfit
-        return {"kind": "outfit", "outfit": key, "already_owned": already}
+        # Повторную покупку отсекает ItemAlreadyOwnedError выше, поэтому здесь
+        # предмет всегда новый.
+        return {"kind": "outfit", "outfit": key, "already_owned": False}
 
     if item == "streak_freeze":
         # Заморозки стрика кладём в то же расширяемое JSON-поле, что и одежду:

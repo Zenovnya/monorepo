@@ -1,1189 +1,418 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { lexbearApi } from '../api/lexbear';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { adaptiveApi } from '../api/adaptive';
+import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { LegalText } from '../components/LegalText';
-import { useMascotToast } from '../components/MascotToast';
+import { PressableScale } from '../components/PressableScale';
+import { ErrorState, LoadingState } from '../components/StateViews';
 import {
   brand,
   serifFamily,
-  KhokhlomaCorners,
-  KhokhlomaMedallion,
   KhokhlomaDivider,
+  PaperGrain,
   RibbonBookmark,
   WaxSeal,
-  PaperGrain,
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 
-function normalizeCorrect(correct) {
-  if (Array.isArray(correct)) return correct;
-  if (typeof correct === 'boolean') return [correct ? 0 : 1];
-  if (typeof correct === 'number') return [correct];
-  return [];
-}
-
-function hasSelection(q, selected, multi) {
-  if (!q) return false;
-  return Array.isArray(q.correct) ? multi.length > 0 : selected !== null;
-}
-
 /**
- * Экран урока LexBear:
- * во время теории и вопросов — чистый современный интерфейс с деликатными
- * деталями старинного документа (закладка-ляссе, §, синяя справка #7298BC);
- * на экране завершения — праздничная красно-золотая грамота в рамке хохломы.
+ * Урок «Лапы Закона»: разбор → проверка.
+ *
+ * Три состояния, и они не должны смешиваться:
+ *
+ * 1. **Теория** — то, что можно читать: ситуация, шаги, норма. Ответов здесь
+ *    нет, потому что это разбор, а не проверка.
+ * 2. **Проверка** — карточка без ключа. Проверяется сервером, клиент не знает
+ *    правильный вариант заранее.
+ * 3. **Разбор после ответа** — ключ, объяснение и ссылки на нормы.
+ *
+ * Подсказка доступна в проверке, но снимает зачёт: иначе «подсмотрел» и
+ * «знаешь» выглядели бы одинаково в приоритете темы.
  */
 export default function LessonScreen({ route, navigation }) {
-  const { lessonId } = route.params;
+  const { lessonId } = route.params ?? {};
   const queryClient = useQueryClient();
 
-  const [phase, setPhase] = useState('theory'); // theory | practice | done
-  const [tIdx, setTIdx] = useState(0);
-  const [qIdx, setQIdx] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [correctCount, setCorrectCount] = useState(0);
+  const [phase, setPhase] = useState('theory'); // theory | check
   const [selected, setSelected] = useState(null);
-  const [multi, setMulti] = useState([]);
-  const [checked, setChecked] = useState(null); // null | 'right' | 'wrong'
-  const [shake, setShake] = useState(false);
+  const [card, setCard] = useState(null);
+  const [attemptId, setAttemptId] = useState(null);
+  const [result, setResult] = useState(null);
+  const [hint, setHint] = useState(null);
 
-  const { data: lesson, isLoading, error } = useQuery({
-    queryKey: ['lexbear-lesson', lessonId],
-    queryFn: () => lexbearApi.getLesson(lessonId),
+  const lesson = useQuery({
+    queryKey: ['adaptive-lesson', lessonId],
+    queryFn: () => adaptiveApi.lesson(lessonId),
+    enabled: Boolean(lessonId),
   });
 
-  const toast = useMascotToast();
-
-  const completeMutation = useMutation({
-    mutationFn: ({ correct, total }) =>
-      lexbearApi.completeLesson(lessonId, { correct, total }),
+  const openCheck = useMutation({
+    mutationFn: () => adaptiveApi.openAttempt({ itemId: lesson.data.control_item_id, origin: 'lesson', mode: 'check' }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries(['lexbear-learn']);
-      queryClient.invalidateQueries(['progress-overview']);
-      queryClient.invalidateQueries(['gamification-me']);
-
-      if (data?.level_up) {
-        toast.show({
-          kind: 'level_up',
-          title: `Уровень ${data.level}`,
-          text: 'Ты растёшь. Погнали дальше.',
-        });
-      }
-      if (data?.streak_incremented && data?.streak) {
-        toast.show({
-          kind: 'streak_celebrate',
-          title: `Стрик ${data.streak} 🔥`,
-          text: 'Занимаешься каждый день — так держать.',
-        });
-      }
-      for (const ach of data?.achievements_unlocked ?? []) {
-        toast.show({
-          kind: 'achievement',
-          title: `🏅 ${ach.title}`,
-          text: ach.description || 'Новое достижение получено.',
-        });
-      }
+      // Карточка приходит вместе с попыткой: отдельного запроса «дай вопрос»
+      // нет, иначе клиент мог бы получить его, не открывая попытку.
+      setCard(data.item);
+      setAttemptId(data.attempt_id);
+      setSelected(null);
+      setResult(null);
+      setHint(null);
+      setPhase('check');
     },
   });
 
-  if (isLoading) {
+  const act = useMutation({
+    mutationFn: ({ action, optionId }) => adaptiveApi.act(attemptId, { action, optionId }),
+    onSuccess: (data) => {
+      if (data.status === 'open') {
+        setHint(data.assistance);
+        return;
+      }
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
+    },
+  });
+
+  if (!lessonId) {
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={110} emotion="thinking" />
-        <ActivityIndicator size="small" color={brand.red} />
-        <Text style={styles.loadingHint}>Готовим материалы урока…</Text>
-      </View>
+      <ErrorState
+        title="Урок не выбран"
+        message="Вернитесь к списку тем и откройте урок оттуда."
+        onRetry={() => navigation.goBack()}
+        illustration={<WaxSeal label="?" tone="locked" size={48} />}
+      />
     );
   }
 
-  if (error || !lesson) {
+  if (lesson.isLoading) {
     return (
-      <View style={styles.center}>
-        <View style={styles.errorCard}>
-          <WaxSeal label="§" tone="red" size={48} />
-          <Text style={styles.errorText}>Не удалось загрузить урок</Text>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => [
-              styles.errorBackBtn,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <Text style={styles.errorBackText}>Назад</Text>
-          </Pressable>
-        </View>
-      </View>
+      <LoadingState
+        label="Открываем разбор…"
+        illustration={<AnimatedMascot size={112} emotion="thinking" />}
+      />
     );
   }
 
-  const cards = lesson.cards ?? [];
-  const questions = lesson.questions ?? [];
-
-  const effectivePhase =
-    phase === 'theory' && cards.length === 0 ? 'practice' : phase;
-  const totalSteps = cards.length + questions.length;
-
-  const nextTheory = () => {
-    if (tIdx + 1 < cards.length) setTIdx(tIdx + 1);
-    else setPhase('practice');
-  };
-
-  const check = () => {
-    const q = questions[qIdx];
-    if (!q) return;
-    const rightAnswers = normalizeCorrect(q.correct);
-    const isMulti = Array.isArray(q.correct);
-
-    let isRight;
-    if (isMulti) {
-      const sortedUser = [...multi].sort();
-      const sortedRight = [...rightAnswers].sort();
-      isRight =
-        sortedUser.length === sortedRight.length &&
-        sortedUser.every((v, i) => v === sortedRight[i]);
-    } else {
-      isRight = selected === rightAnswers[0];
-    }
-
-    setChecked(isRight ? 'right' : 'wrong');
-    if (isRight) setCorrectCount((c) => c + 1);
-    else {
-      setShake(true);
-      setLives((l) => Math.max(0, l - 1));
-      setTimeout(() => setShake(false), 400);
-    }
-  };
-
-  const nextQuestion = () => {
-    setChecked(null);
-    setSelected(null);
-    setMulti([]);
-    if (qIdx + 1 < questions.length && lives > 0) {
-      setQIdx(qIdx + 1);
-    } else {
-      completeMutation.mutate({
-        correct: correctCount,
-        total: questions.length,
-      });
-      setPhase('done');
-    }
-  };
-
-  /* ==== ЭКРАН ЗАВЕРШЕНИЯ ОБУЧЕНИЯ — ПРАЗДНИЧНАЯ ГРАМОТА ХОХЛОМЫ ==== */
-  if (effectivePhase === 'done') {
-    const accuracy =
-      questions.length > 0
-        ? Math.round((correctCount / questions.length) * 100)
-        : 0;
-
-    const isPerfect = accuracy === 100 && lives === 3 && questions.length > 0;
-    const isGreat = !isPerfect && accuracy >= 80;
-    const isPassed = !isPerfect && !isGreat && accuracy >= 60;
-    const isFailed = !isPerfect && !isGreat && !isPassed;
-
-    const titleText = isPerfect
-      ? 'Блестящий результат!'
-      : isGreat
-      ? 'Отличный урок!'
-      : isPassed
-      ? 'Урок освоен!'
-      : 'Ещё раз попробуем?';
-
+  if (lesson.error) {
     return (
-      <View style={styles.resultScreen}>
-        <PaperGrain />
-        <View style={styles.resultBody}>
-          <View
-            style={[
-              styles.diplomaCard,
-              isFailed && styles.diplomaCardMuted,
-            ]}
-          >
-            {!isFailed ? (
-              <KhokhlomaCorners variant="light" size="md" inset={9} />
-            ) : null}
-
-            <Text style={styles.diplomaKicker}>
-              {isFailed ? '§ ПОВТОРЕНИЕ НОРМЫ' : '§ УРОК ЗАВЕРШЁН · НАГРАДА'}
-            </Text>
-
-            <KhokhlomaMedallion
-              size={182}
-              muted={isFailed}
-              style={styles.diplomaMedallion}
-            >
-              <AnimatedMascot
-                size={156}
-                perfect={isPerfect}
-                celebrate={isGreat}
-                emotion={isPassed ? 'happy' : isFailed ? 'sad' : undefined}
-              />
-            </KhokhlomaMedallion>
-
-            <Text
-              style={[
-                styles.resultTitle,
-                isFailed && styles.resultTitleFailed,
-              ]}
-            >
-              {titleText}
-            </Text>
-            <Text style={styles.resultSubtitle}>
-              {isFailed
-                ? 'Ничего страшного — освежим теорию и закрепим статью.'
-                : 'Знание закона — твоя надёжная опора.'}
-            </Text>
-
-            <KhokhlomaDivider style={styles.resultDivider} />
-
-            {/* Рамки итогов: золотая точность/награда и лаковые жизни */}
-            <View style={styles.resultStats}>
-              <StatCard
-                label="Точность"
-                value={`${accuracy}%`}
-                frameColor={isFailed ? brand.ruleStrong : brand.gold}
-                textColor={isFailed ? colors.subtext : brand.goldInk}
-              />
-              <StatCard
-                label="Жизни"
-                value={`❤️ ${lives}`}
-                frameColor={brand.red}
-                textColor={brand.red}
-              />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.footer}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.btn,
-              styles.btnRed,
-              pressed && styles.btnPressed,
-            ]}
-            onPress={() => navigation.popToTop()}
-          >
-            <Text style={styles.btnText}>На путь</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось открыть урок"
+        message={describeLoadError(lesson.error, 'урок')}
+        onRetry={() => lesson.refetch()}
+        illustration={<WaxSeal label="!" tone="red" size={48} />}
+      />
     );
   }
 
-  /* ==== ОСНОВНОЙ ЭКРАН УРОКА ==== */
-  const progressPct =
-    totalSteps > 0
-      ? Math.min(
-          100,
-          ((effectivePhase === 'theory'
-            ? tIdx + 0.5
-            : cards.length + qIdx + (checked ? 1 : 0.4)) /
-            totalSteps) *
-            100
-        )
-      : 0;
-  const canCheck = hasSelection(questions[qIdx], selected, multi);
+  const data = lesson.data;
+  const theory = data.theory || '';
+  const paragraphs = theory.split(/\n{2,}/).filter(Boolean);
+  const steps = Array.isArray(data.actions) ? data.actions : [];
+  // Проверка возможна, только когда попытка действительно открыта: ручка
+  // /adaptive требует attempt_id, «просто посмотреть ключ» нельзя.
+  const checking = phase === 'check' && Boolean(attemptId);
+  const error =
+    openCheck.error?.response?.data?.detail === 'CONTENT_UNAVAILABLE'
+      ? 'Эта карточка отозвана редакцией — проверку пройти нельзя.'
+      : null;
 
   return (
     <View style={styles.container}>
       <PaperGrain />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <PressableScale onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
+          <Text style={styles.backText}>‹ Назад</Text>
+        </PressableScale>
 
-      {/* Чистая шапка урока: закрытие + золотая шкала прогресса + жизни */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Закрыть"
-          style={styles.closeBtn}
-        >
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
-
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${Math.max(progressPct, 10)}%` },
-            ]}
-          >
-            <View style={styles.progressShine} />
-          </View>
-        </View>
-
-        <View style={styles.livesWrap}>
-          <Text style={styles.livesHeart}>❤️</Text>
-          <Text style={styles.livesCount}>{lives}</Text>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          checked && styles.contentWithSheet,
-        ]}
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {effectivePhase === 'theory' && cards[tIdx] && (
-          <TheoryView card={cards[tIdx]} step={tIdx + 1} total={cards.length} />
-        )}
-
-        {effectivePhase === 'practice' && questions[qIdx] && (
-          <QuestionView
-            q={questions[qIdx]}
-            selected={selected}
-            multi={multi}
-            checked={checked}
-            shake={shake}
-            onSelectSingle={(i) => !checked && setSelected(i)}
-            onToggleMulti={(i) => {
-              if (checked) return;
-              setMulti((prev) =>
-                prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]
-              );
-            }}
-          />
-        )}
-      </ScrollView>
-
-      {/* Нижняя шторка проверки (хвойный #315B46 для верного, лаковый #C9362B для ошибки) */}
-      {effectivePhase === 'practice' && checked ? (
-        <View
-          style={[
-            styles.feedbackSheet,
-            checked === 'right'
-              ? styles.feedbackSheetRight
-              : styles.feedbackSheetWrong,
-          ]}
-        >
-          <View style={styles.feedbackTopRow}>
-            <WaxSeal
-              label={checked === 'right' ? '✓' : '✕'}
-              size={36}
-              tone={checked === 'right' ? 'pine' : 'red'}
-            />
-            <Text
-              style={[
-                styles.feedbackTitle,
-                {
-                  color: checked === 'right' ? brand.pineDark : brand.redDark,
-                },
-              ]}
-            >
-              {checked === 'right' ? 'Верно!' : 'Разберём ошибку'}
-            </Text>
-            <AnimatedMascot
-              size={60}
-              celebrate={checked === 'right'}
-              error={checked === 'wrong'}
-              emotion={checked === 'right' ? 'happy' : 'sad'}
-            />
-          </View>
-
-          {questions[qIdx]?.explanation ? (
-            <LegalText style={styles.feedbackText}>
-              {questions[qIdx]?.explanation}
-            </LegalText>
-          ) : null}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.btn,
-              checked === 'right' ? styles.btnPine : styles.btnRed,
-              pressed && styles.btnPressed,
-            ]}
-            onPress={nextQuestion}
-          >
-            <Text style={styles.btnText}>Продолжить</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.footer}>
-          {effectivePhase === 'theory' && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.btn,
-                styles.btnRed,
-                pressed && styles.btnPressed,
-              ]}
-              onPress={nextTheory}
-            >
-              <Text style={styles.btnText}>Дальше</Text>
-            </Pressable>
-          )}
-
-          {effectivePhase === 'practice' && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.btn,
-                canCheck ? styles.btnRed : styles.btnDisabled,
-                pressed && canCheck && styles.btnPressed,
-              ]}
-              disabled={!canCheck}
-              onPress={check}
-            >
-              <Text
-                style={[styles.btnText, !canCheck && styles.btnTextDisabled]}
-              >
-                Проверить
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function TheoryView({ card, step, total }) {
-  const chips = Array.isArray(card.chips) ? card.chips : [];
-
-  return (
-    <View style={styles.theory}>
-      <View style={styles.newTagRow}>
-        <Text style={styles.paraSign}>§</Text>
-        <Text style={styles.theoryMeta}>
-          ТЕОРИЯ · ЛИСТ {step} ИЗ {total}
-        </Text>
-      </View>
-
-      <Text style={styles.theoryTitle}>{card.title}</Text>
-
-      {/* Мишка-юрист с репликой */}
-      {card.bear_line ? (
-        <View style={styles.bearLine}>
-          <AnimatedMascot
-            size={88}
-            emotion={card.practical || step > 1 ? 'strict' : 'neutral'}
-            wave={!card.practical && step === 1}
-            talking
-          />
-          <View style={styles.bubbleOuter}>
-            <View style={styles.bubbleTail} />
-            <View style={styles.bubble}>
-              <LegalText style={styles.bubbleText}>{card.bear_line}</LegalText>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Лист нормы права со шёлковой закладкой кодекса */}
-      <View style={styles.card}>
-        <RibbonBookmark
-          color={brand.red}
-          symbol="§"
-          right={16}
-          height={28}
-          width={20}
-          cutoutColor={colors.card}
-        />
-        <Text style={styles.statuteEyebrow}>НОРМА ПРАВА</Text>
-        <LegalText style={styles.cardText}>{card.definition}</LegalText>
-      </View>
-
-      {/* Информационная памятка «На практике» — приглушённый синий (#7298BC) */}
-      {card.practical ? (
-        <View style={styles.practicalCard}>
-          <Text style={styles.practicalLabel}>ℹ️ НА ПРАКТИКЕ · ПАМЯТКА</Text>
-          <LegalText style={styles.practicalText}>{card.practical}</LegalText>
-        </View>
-      ) : null}
-
-      {chips.length > 0 ? (
-        <View style={styles.chips}>
-          {chips.map((chip) => (
-            <View key={chip} style={styles.chip}>
-              <Text style={styles.chipText}>{chip}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-const kindLabels = {
-  case: 'Кейс',
-  choice: 'Выбор',
-  truefalse: 'Верно / неверно',
-  action: 'Что делать?',
-  fine: 'Наказание',
-  match: 'Сопоставить',
-};
-
-function QuestionView({
-  q,
-  selected,
-  multi,
-  checked,
-  shake,
-  onSelectSingle,
-  onToggleMulti,
-}) {
-  const isMulti = Array.isArray(q.correct);
-  const rightList = normalizeCorrect(q.correct);
-
-  return (
-    <View style={[styles.question, shake && styles.shake]}>
-      <View style={styles.newTagRow}>
-        <Text style={styles.paraSign}>§</Text>
-        <Text style={styles.questionKind}>
-          {kindLabels[q.kind] || q.kind}
-        </Text>
-      </View>
-
-      <Text style={styles.questionPrompt}>{q.prompt}</Text>
-
-      {isMulti && (
-        <View style={styles.multiHintBox}>
-          <Text style={styles.multiHint}>
-            Выберите все подходящие варианты
+        <View style={styles.categoryRow}>
+          <Text style={styles.categorySign}>§</Text>
+          <Text style={styles.categoryLabel}>
+            {data.topic_title} · УРОК {data.order}
           </Text>
         </View>
-      )}
+        <Text style={styles.title}>{data.title}</Text>
+        <Text style={styles.goal}>{data.goal}</Text>
 
-      {q.case_text ? (
-        <View style={styles.scenarioCard}>
-          <Text style={styles.cardText}>{q.case_text}</Text>
+        <View style={styles.theoryCard}>
+          <RibbonBookmark
+            color={brand.red}
+            symbol="§"
+            right={16}
+            height={28}
+            width={20}
+            cutoutColor={colors.card}
+          />
+          <Text style={styles.cardEyebrow}>РАЗБОР</Text>
+          {paragraphs.map((paragraph, index) => (
+            <Text key={index} style={styles.paragraph}>
+              {paragraph}
+            </Text>
+          ))}
         </View>
-      ) : null}
 
-      <View style={styles.options}>
-        {(q.options || []).map((opt, i) => {
-          const isSel = isMulti ? multi.includes(i) : selected === i;
-          const isCorrect = Boolean(checked) && rightList.includes(i);
-          const isWrongPick = checked === 'wrong' && isSel && !isCorrect;
-
-          return (
-            <Pressable
-              key={String(i)}
-              disabled={Boolean(checked)}
-              onPress={() => (isMulti ? onToggleMulti(i) : onSelectSingle(i))}
-              style={({ pressed }) => [
-                styles.option,
-                isSel && !checked && styles.optionSelected,
-                isCorrect && styles.optionCorrect,
-                isWrongPick && styles.optionWrong,
-                pressed && !checked && styles.optionPressed,
-              ]}
-            >
-              <View
-                style={[
-                  styles.optionLetter,
-                  isSel && !checked && styles.optionLetterSelected,
-                  isCorrect && styles.optionLetterCorrect,
-                  isWrongPick && styles.optionLetterWrong,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.optionLetterText,
-                    isSel && !checked && styles.optionLetterTextSelected,
-                    (isCorrect || isWrongPick) &&
-                      styles.optionLetterTextWhite,
-                  ]}
-                >
-                  {isCorrect
-                    ? '✓'
-                    : isWrongPick
-                    ? '✕'
-                    : isMulti
-                    ? isSel
-                      ? '✓'
-                      : ''
-                    : String.fromCharCode(65 + i)}
+        {steps.length ? (
+          <View style={styles.stepsCard}>
+            <Text style={styles.cardEyebrow}>ЧТО ДЕЛАТЬ</Text>
+            {steps.map((step, index) => (
+              <View key={index} style={styles.stepRow}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>{index + 1}</Text>
+                </View>
+                <Text style={styles.stepText}>
+                  {typeof step === 'string' ? step : step.text ?? JSON.stringify(step)}
                 </Text>
               </View>
-              <Text
-                style={[
-                  styles.optionText,
-                  isSel && !checked && styles.optionTextSelected,
-                  isCorrect && styles.optionTextCorrect,
-                  isWrongPick && styles.optionTextWrong,
-                ]}
-              >
-                {opt?.text ?? opt}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
+            ))}
+          </View>
+        ) : null}
 
-function StatCard({ label, value, frameColor, textColor }) {
-  return (
-    <View style={[styles.statOuter, { backgroundColor: frameColor }]}>
-      <Text
-        style={[
-          styles.statLabel,
-          frameColor === brand.gold && { color: brand.ink },
-        ]}
-      >
-        {label}
-      </Text>
-      <View style={styles.statInner}>
-        <Text style={[styles.statValue, { color: textColor }]}>{value}</Text>
-      </View>
+        {data.legal_basis_ids?.length ? (
+          <Text style={styles.law}>Нормы: {data.legal_basis_ids.join(', ')}</Text>
+        ) : null}
+
+        <KhokhlomaDivider />
+
+        {!checking ? (
+          <>
+            <Text style={styles.sectionTitle}>Проверим себя</Text>
+            <Text style={styles.sectionNote}>
+              Одна карточка по этому уроку. Засчитывается первый самостоятельный
+              ответ — подсказка снимает зачёт.
+            </Text>
+            {error ? <Text style={styles.errorNote}>{error}</Text> : null}
+            <PressableScale
+              style={[styles.primaryBtn, openCheck.isPending && styles.btnDisabled]}
+              disabled={openCheck.isPending}
+              onPress={() => openCheck.mutate()}
+            >
+              <Text style={styles.primaryBtnText}>
+                {openCheck.isPending ? 'Открываем…' : 'Пройти проверку'}
+              </Text>
+            </PressableScale>
+          </>
+        ) : null}
+
+        {checking ? (
+          <View style={styles.checkCard}>
+            <Text style={styles.cardEyebrow}>ПРОВЕРКА</Text>
+            <Text style={styles.checkQuestion}>{card?.question}</Text>
+            {(card?.options ?? []).map((option) => {
+              const isSelected = selected === option.id;
+              const isRight = Boolean(result) && result.correct_option_id === option.id;
+              const isWrongPick =
+                Boolean(result) && isSelected && result.correct_option_id !== option.id;
+              return (
+                <PressableScale
+                  key={option.id}
+                  disabled={Boolean(result) || act.isPending}
+                  onPress={() => setSelected(option.id)}
+                  style={[
+                    styles.option,
+                    isSelected && !result && styles.optionSelected,
+                    isRight && styles.optionRight,
+                    isWrongPick && styles.optionWrong,
+                  ]}
+                >
+                  <View style={styles.optionBadge}>
+                    <Text style={styles.optionBadgeText}>{option.id}</Text>
+                  </View>
+                  <Text style={styles.optionText}>{option.text}</Text>
+                </PressableScale>
+              );
+            })}
+
+            {!result ? (
+              <View style={styles.rowButtons}>
+                <PressableScale
+                  style={[styles.ghostBtn, act.isPending && styles.btnDisabled]}
+                  disabled={act.isPending}
+                  onPress={() => act.mutate({ action: 'help' })}
+                >
+                  <Text style={styles.ghostBtnText}>Подсказка</Text>
+                </PressableScale>
+                <PressableScale
+                  style={[styles.primaryBtn, (!selected || act.isPending) && styles.btnDisabled]}
+                  disabled={!selected || act.isPending}
+                  onPress={() => act.mutate({ action: 'answer', optionId: selected })}
+                >
+                  <Text style={styles.primaryBtnText}>Ответить</Text>
+                </PressableScale>
+              </View>
+            ) : (
+              <PressableScale style={styles.primaryBtn} onPress={() => navigation.navigate('Adaptive')}>
+                <Text style={styles.primaryBtnText}>Дальше к практике</Text>
+              </PressableScale>
+            )}
+          </View>
+        ) : null}
+
+        {result ? (
+          <View style={[styles.resultCard, !result.counted && styles.resultMuted]}>
+            <Text style={styles.cardEyebrow}>
+              {result.counted ? '§ ЗАСЧИТАНО' : '§ НЕ ЗАСЧИТАНО'}
+            </Text>
+            <Text style={styles.resultTitle}>{result.correct ? 'Верно' : 'Неверно'}</Text>
+            {result.correct_option_id ? (
+              <Text style={styles.resultAnswer}>
+                Верный вариант: {result.correct_option_id}
+              </Text>
+            ) : null}
+            {result.explanation ? (
+              <Text style={styles.paragraph}>{result.explanation}</Text>
+            ) : null}
+            {!result.counted && result.reason === 'ASSISTED' ? (
+              <Text style={styles.reasonNote}>
+                Была подсказка — ответ не идёт в приоритет темы.
+              </Text>
+            ) : null}
+            {result.legal_basis_ids?.length ? (
+              <Text style={styles.law}>Нормы: {result.legal_basis_ids.join(', ')}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {hint ? (
+          <View style={styles.hintCard}>
+            <Text style={styles.cardEyebrow}>ПОДСКАЗКА</Text>
+            <Text style={styles.paragraph}>{hint}</Text>
+          </View>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, paddingBottom: 60, gap: 14 },
+  backBtn: { alignSelf: 'flex-start' },
+  backText: { fontSize: 14, fontWeight: '800', color: colors.subtext },
+  categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  categorySign: { fontSize: 16, color: brand.red, fontWeight: '900' },
+  categoryLabel: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: colors.background,
-  },
-  loadingHint: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.subtext,
-  },
-  errorCard: {
-    width: '100%',
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderBottomWidth: 4,
-    borderColor: brand.rule,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-  },
-  errorText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  errorBackBtn: {
-    marginTop: 6,
-    height: 46,
-    paddingHorizontal: 26,
-    borderRadius: 14,
-    backgroundColor: brand.red,
-    borderBottomWidth: 4,
-    borderBottomColor: brand.redDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorBackText: {
-    color: brand.creamText,
-    fontWeight: '800',
-    fontSize: 13.5,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-
-  /* Шапка урока */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    backgroundColor: colors.background,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: brand.muted,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 12,
-    borderRadius: 999,
-    backgroundColor: brand.rule,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: brand.gold,
-  },
-  progressShine: {
-    height: 3.5,
-    marginHorizontal: 5,
-    marginTop: 2,
-    borderRadius: 999,
-    backgroundColor: 'rgba(252, 248, 240, 0.5)',
-  },
-  livesWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  livesHeart: {
-    fontSize: 16,
-  },
-  livesCount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: brand.red,
-  },
-
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 28,
-  },
-  contentWithSheet: {
-    paddingBottom: 210,
-  },
-
-  /* Теория */
-  theory: {
-    gap: 14,
-  },
-  newTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  paraSign: {
-    fontSize: 15,
-    fontWeight: '800',
-    fontFamily: serifFamily,
-    color: brand.red,
-  },
-  theoryMeta: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.9,
-    color: brand.goldInk,
-  },
-  theoryTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-    lineHeight: 28,
-    letterSpacing: -0.3,
-  },
-
-  bearLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bubbleOuter: {
-    flex: 1,
-    position: 'relative',
-  },
-  bubbleTail: {
-    position: 'absolute',
-    left: -6,
-    top: 18,
-    width: 12,
-    height: 12,
-    backgroundColor: colors.card,
-    borderLeftWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: brand.rule,
-    transform: [{ rotate: '45deg' }],
-    zIndex: 2,
-  },
-  bubble: {
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderBottomWidth: 3,
-    borderColor: brand.rule,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  bubbleText: {
-    fontSize: 13.5,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 19.5,
-  },
-
-  card: {
-    position: 'relative',
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderBottomWidth: 3.5,
-    borderColor: brand.rule,
-    padding: 16,
-    gap: 7,
-  },
-  statuteEyebrow: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.9,
-    color: brand.muted,
-    paddingRight: 26,
-  },
-  cardText: {
-    fontSize: 14.5,
-    fontWeight: '500',
-    color: colors.text,
-    lineHeight: 21.5,
-  },
-
-  /* Памятка в приглушённом синем (#7298BC — только информация) */
-  practicalCard: {
-    backgroundColor: brand.infoSoft,
-    borderRadius: 16,
-    borderWidth: 1.2,
-    borderColor: brand.infoBorder,
-    borderLeftWidth: 4,
-    borderLeftColor: brand.info,
-    padding: 14,
-    gap: 6,
-  },
-  practicalLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    color: brand.infoInk,
-  },
-  practicalText: {
-    fontSize: 13.5,
-    fontWeight: '500',
-    color: colors.text,
-    lineHeight: 19.5,
-  },
-
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: brand.rule,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.subtext,
-  },
-
-  /* Практика */
-  question: {
-    gap: 14,
-  },
-  shake: {
-    transform: [{ translateX: -5 }],
-  },
-  questionKind: {
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-    color: brand.red,
-  },
-  questionPrompt: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.text,
-    lineHeight: 26,
-    letterSpacing: -0.2,
-  },
-  multiHintBox: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: brand.infoSoft,
-  },
-  multiHint: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: brand.infoInk,
-  },
-  scenarioCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: brand.rule,
-    padding: 14,
-  },
-  options: {
-    gap: 10,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderBottomWidth: 3.5,
-    borderColor: brand.rule,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-  },
-  optionSelected: {
-    backgroundColor: brand.goldSoft,
-    borderColor: brand.gold,
-  },
-  optionCorrect: {
-    backgroundColor: brand.pineSoft,
-    borderColor: brand.pine,
-  },
-  optionWrong: {
-    backgroundColor: brand.redSoft,
-    borderColor: brand.red,
-  },
-  optionPressed: {
-    transform: [{ translateY: 2 }],
-    borderBottomWidth: 1.5,
-  },
-  optionLetter: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: colors.background,
-    borderWidth: 1.2,
-    borderColor: brand.rule,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionLetterSelected: {
-    backgroundColor: brand.gold,
-    borderColor: brand.goldDark,
-  },
-  optionLetterCorrect: {
-    backgroundColor: brand.pine,
-    borderColor: brand.pineDark,
-  },
-  optionLetterWrong: {
-    backgroundColor: brand.red,
-    borderColor: brand.redDark,
-  },
-  optionLetterText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.subtext,
-  },
-  optionLetterTextSelected: {
-    color: brand.ink,
-  },
-  optionLetterTextWhite: {
-    color: brand.creamText,
-  },
-  optionText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 19.5,
-  },
-  optionTextSelected: {
-    fontWeight: '700',
-    color: brand.ink,
-  },
-  optionTextCorrect: {
-    fontWeight: '700',
-    color: brand.pineDark,
-  },
-  optionTextWrong: {
-    fontWeight: '700',
-    color: brand.redDark,
-  },
-
-  /* Шторка ответа и нижняя кнопка */
-  footer: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 20,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: brand.rule,
-  },
-  feedbackSheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 2,
-    gap: 10,
-  },
-  feedbackSheetRight: {
-    backgroundColor: brand.pineSoft,
-    borderTopColor: brand.pine,
-  },
-  feedbackSheetWrong: {
-    backgroundColor: brand.redSoft,
-    borderTopColor: brand.red,
-  },
-  feedbackTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  feedbackTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  feedbackText: {
-    fontSize: 13.5,
-    fontWeight: '500',
-    color: colors.text,
-    lineHeight: 19.5,
-  },
-
-  btn: {
-    height: 52,
-    borderRadius: 16,
-    borderBottomWidth: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnRed: {
-    backgroundColor: brand.red,
-    borderBottomColor: brand.redDark,
-  },
-  btnPine: {
-    backgroundColor: brand.pine,
-    borderBottomColor: brand.pineDark,
-  },
-  btnDisabled: {
-    backgroundColor: brand.rule,
-    borderBottomWidth: 0,
-  },
-  btnPressed: {
-    transform: [{ translateY: 2 }],
-    borderBottomWidth: 2,
-  },
-  btnText: {
-    color: brand.creamText,
-    fontSize: 14.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-  },
-  btnTextDisabled: {
-    color: colors.locked,
-  },
-
-  /* Финал обучения — грамота с рамкой хохломы */
-  resultScreen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  resultBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  diplomaCard: {
-    position: 'relative',
-    width: '100%',
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderBottomWidth: 5,
-    borderColor: brand.gold,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
-  diplomaCardMuted: {
-    borderColor: brand.rule,
-  },
-  diplomaKicker: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
     color: brand.goldInk,
-    marginBottom: 14,
   },
-  diplomaMedallion: {
-    marginBottom: 16,
-  },
-  resultTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: brand.ink,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  resultTitleFailed: {
-    color: brand.subtext,
-  },
-  resultSubtitle: {
-    marginTop: 5,
-    fontSize: 13.5,
-    fontWeight: '500',
-    color: colors.subtext,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  resultDivider: {
-    marginVertical: 16,
-  },
-  resultStats: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  statOuter: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 3,
-    paddingTop: 6,
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    color: brand.creamText,
-    marginBottom: 5,
-  },
-  statInner: {
-    width: '100%',
+  title: { fontSize: 25, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
+  goal: { fontSize: 14, lineHeight: 21, color: colors.subtext },
+  theoryCard: {
+    position: 'relative',
     backgroundColor: colors.card,
-    borderRadius: 13,
-    paddingVertical: 11,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
+    borderColor: brand.rule,
+    padding: 18,
+    paddingRight: 34,
+    gap: 10,
+  },
+  cardEyebrow: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: brand.muted,
+  },
+  paragraph: { fontSize: 15, lineHeight: 23, color: colors.text },
+  stepsCard: {
+    backgroundColor: brand.goldSoft,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: brand.goldBorder,
+    padding: 18,
+    gap: 12,
+  },
+  stepRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  stepBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBadgeText: { fontSize: 12, fontWeight: '900', color: brand.ink },
+  stepText: { flex: 1, fontSize: 14, lineHeight: 21, color: colors.text },
+  law: { fontSize: 12, fontWeight: '700', color: brand.infoInk },
+  sectionTitle: { fontSize: 20, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
+  sectionNote: { fontSize: 13, lineHeight: 19, color: colors.subtext },
+  errorNote: { fontSize: 12.5, fontWeight: '700', color: brand.red },
+  primaryBtn: {
+    backgroundColor: brand.red,
+    borderRadius: 16,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.redDark,
+    paddingVertical: 15,
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '800',
+  primaryBtnText: { fontSize: 15.5, fontWeight: '900', color: brand.creamText },
+  btnDisabled: { opacity: 0.5 },
+  checkCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: brand.goldBorder,
+    padding: 18,
+    gap: 10,
+  },
+  checkQuestion: { fontSize: 16, fontWeight: '800', color: colors.text, lineHeight: 23 },
+  checkHintMeta: { fontSize: 12.5, lineHeight: 18, color: colors.subtext },
+  resultCard: {
+    backgroundColor: brand.pineSoft,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: brand.pineBorder,
+    padding: 18,
+    gap: 8,
+  },
+  resultMuted: { backgroundColor: colors.card, borderColor: brand.rule },
+  resultAnswer: { fontSize: 13.5, fontWeight: '800', color: colors.subtext },
+  reasonNote: { fontSize: 12.5, lineHeight: 18, color: colors.subtext, fontStyle: 'italic' },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    padding: 14,
+  },
+  optionSelected: { borderColor: brand.gold, backgroundColor: brand.goldSoft },
+  optionRight: { borderColor: brand.pine, backgroundColor: brand.pineSoft },
+  optionWrong: { borderColor: brand.red, backgroundColor: brand.redSoft },
+  optionBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: brand.cream,
+    borderWidth: 1.5,
+    borderColor: brand.ruleStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionBadgeText: { fontSize: 12.5, fontWeight: '900', color: colors.text },
+  optionText: { flex: 1, fontSize: 14.5, lineHeight: 21, color: colors.text },
+  rowButtons: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  ghostBtn: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  ghostBtnText: { fontSize: 13.5, fontWeight: '800', color: colors.subtext },
+  resultTitle: { fontSize: 20, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
+  hintCard: {
+    backgroundColor: brand.infoSoft,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: brand.infoBorder,
+    padding: 18,
+    gap: 8,
   },
 });

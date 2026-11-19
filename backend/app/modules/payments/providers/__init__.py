@@ -21,6 +21,7 @@ from app.modules.payments.providers.base import (
     WebhookNotConfigured,
 )
 from app.modules.payments.providers.manual import ManualProvider
+from app.modules.payments.providers.yookassa import YooKassaProvider
 
 __all__ = [
     "CheckoutResult",
@@ -28,6 +29,7 @@ __all__ = [
     "WebhookError",
     "WebhookEvent",
     "WebhookNotConfigured",
+    "YooKassaProvider",
     "get_payment_provider",
 ]
 
@@ -40,7 +42,7 @@ _PROVIDERS: dict[str, type[PaymentProvider]] = {
     # "prodamus": ProdamusProvider,
     # "yoomoney": YooMoneyProvider,
     # "cloudpayments": CloudPaymentsProvider,
-    # "yookassa": YooKassaProvider,
+    "yookassa": YooKassaProvider,
 }
 
 

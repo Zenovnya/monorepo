@@ -1,929 +1,339 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { lexbearApi } from '../api/lexbear';
-import { TopStats } from '../components/TopStats';
+import { adaptiveApi } from '../api/adaptive';
+import { describeLoadError } from '../api/client';
+import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { TopStats } from '../components/TopStats';
 import {
   brand,
   serifFamily,
-  KhokhlomaGarland,
-  KhokhlomaSprig,
   KhokhlomaDivider,
-  RibbonBookmark,
+  KhokhlomaGarland,
   PaperGrain,
+  RibbonBookmark,
+  WaxSeal,
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 
-// Классическая пара фонов хохломы для заголовков глав:
-// Лаковый красный (#C9362B) и благородный Чернильный лак (#302820) с золотом (#D9A849).
-// Синий не используется в главах, чтобы не спорить с красно-золотым фирменным стилем.
-const CHAPTER_THEMES = [
-  {
-    bg: brand.red,
-    lip: brand.redDark,
-    garland: 'onRed',
-    eyebrow: brand.goldLight,
-    crownBg: 'rgba(48, 40, 32, 0.24)',
-    trackBg: 'rgba(48, 40, 32, 0.26)',
-    ribbon: brand.gold,
-  },
-  {
-    bg: brand.ink,
-    lip: brand.inkDeep,
-    garland: 'onDark',
-    eyebrow: brand.gold,
-    crownBg: 'rgba(217, 168, 73, 0.16)',
-    trackBg: 'rgba(252, 248, 240, 0.14)',
-    ribbon: brand.red,
-  },
-];
-
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-const SNAKE_OFFSETS = [0, -46, -24, 34, 46, 12];
-
 /**
- * Экран «Учёба» LexBear:
- * современная карта уроков на сливочной бумаге (#F7EFDF),
- * точечная хохлома в заголовках глав, лаково-красные главные действия (#C9362B)
- * и золотые награды/XP (#D9A849).
+ * Экран «Учёба»: темы и уроки курса «Лапы Закона».
+ *
+ * Числа рядом с темами — это **приоритет практики**, а не «уровень знаний» и
+ * не процент правильных ответов. Пустая тема выглядит средней (50%)
+ * намеренно: про неё нет наблюдений, и показывать 0% или 100% было бы
+ * выдумкой. Подпись под полоской говорит об этом словами, а не только цветом.
+ *
+ * Карта не блокирует уроки «по порядку»: программа короткая, и запрет открыть
+ * пятый урок раньше первого ничего не защищает — он только мешает.
  */
 export default function LearnScreen({ navigation }) {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['lexbear-learn'],
-    queryFn: lexbearApi.learnPath,
-  });
+  const path = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
+  const dailyGoal = useQuery({ queryKey: ['gamification-daily-goal'], queryFn: gamificationApi.dailyGoal });
 
-  if (isLoading) {
+  const topics = useMemo(() => path.data?.topics ?? [], [path.data]);
+  const totals = useMemo(() => {
+    const lessons = topics.flatMap((topic) => topic.lessons ?? []);
+    const done = lessons.filter((lesson) => lesson.practised).length;
+    return { lessons: lessons.length, done };
+  }, [topics]);
+
+  if (path.isLoading) {
     return (
-      <View style={styles.center}>
-        <AnimatedMascot size={112} emotion="thinking" />
-        <ActivityIndicator size="small" color={brand.red} />
-        <Text style={styles.stateHint}>Открываем свод уроков…</Text>
-      </View>
+      <LoadingState
+        label="Открываем программу…"
+        illustration={<AnimatedMascot size={112} emotion="thinking" />}
+      />
     );
   }
 
-  if (error) {
+  // Пустой список и ошибка — разные вещи: «контента нет» нельзя показывать
+  // как «всё пройдено», и наоборот.
+  if (path.error) {
     return (
-      <View style={styles.center}>
-        <View style={styles.stateCard}>
-          <AnimatedMascot size={104} emotion="sad" error />
-          <Text style={styles.errorText}>Не удалось загрузить программу</Text>
-          {error.message ? (
-            <Text style={styles.errorDetail}>{error.message}</Text>
-          ) : null}
-          <Pressable
-            onPress={() => refetch()}
-            style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
-          >
-            <Text style={styles.retryBtnText}>Повторить</Text>
-          </Pressable>
-        </View>
-      </View>
+      <ErrorState
+        title="Не удалось загрузить программу"
+        message={describeLoadError(path.error, 'программу')}
+        onRetry={() => path.refetch()}
+        illustration={<WaxSeal label="!" tone="red" size={48} />}
+      />
     );
   }
-
-  // API currently returns a plain array; tolerate legacy/object envelopes too.
-  const units = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.units)
-    ? data.units
-    : Array.isArray(data?.data)
-    ? data.data
-    : [];
-
-  let globalSeenIncomplete = false;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
       <PaperGrain />
-      <TopStats />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <TopStats />
 
-      {/* Чистая шапка с приветственным мишкой и двумя карточками быстрой практики */}
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <View style={styles.titleBody}>
-            <Text style={styles.docKicker}>§ СВОД ЗНАНИЙ · LEXBEAR</Text>
-            <View style={styles.titleLine}>
-              <Text style={styles.title}>Учёба</Text>
-              <KhokhlomaSprig compact style={styles.titleSprig} />
-            </View>
-            <Text style={styles.subtitle}>
-              Короткие уроки, живые кейсы и право на каждый день
-            </Text>
-          </View>
-          <AnimatedMascot size={76} emotion="neutral" wave />
-        </View>
-
-        <View style={styles.questRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.questCard,
-              styles.questCardPrimary,
-              pressed && styles.questPressed,
-            ]}
-            onPress={() => navigation.navigate('Cases')}
+        <View style={styles.headerCard}>
+          <KhokhlomaGarland variant="onRed" count={5} style={styles.headerGarland} />
+          <RibbonBookmark
+            color={brand.gold}
+            symbol="§"
+            right={16}
+            height={28}
+            width={22}
+            cutoutColor={brand.red}
+          />
+          <Text style={styles.headerEyebrow}>ЛАПЫ ЗАКОНА · ПРОГРАММА</Text>
+          <Text style={styles.headerTitle}>Шесть тем, тридцать уроков</Text>
+          <Text style={styles.headerNote}>
+            {totals.done} из {totals.lessons} уроков пройдено. Каждый урок —
+            короткий разбор ситуации и одна проверка.
+          </Text>
+          <PressableScale
+            style={styles.headerBtn}
+            onPress={() => navigation.navigate('Adaptive')}
           >
-            <View style={styles.questTopRow}>
-              <View style={styles.sealMiniRed}>
-                <Text style={styles.sealMiniText}>§</Text>
-              </View>
-              <View style={styles.goldTag}>
-                <Text style={styles.goldTagText}>ДЛЯ ВАС</Text>
-              </View>
-            </View>
-            <Text style={styles.questTitle}>Рекомендации</Text>
-            <Text style={styles.questDesc} numberOfLines={2}>
-              Подборка дел по вашим слабым темам и ошибкам
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.questCard,
-              pressed && styles.questPressed,
-            ]}
-            onPress={() => navigation.navigate('Cases')}
-          >
-            <View style={styles.questTopRow}>
-              <View style={styles.sealMiniGold}>
-                <Text style={styles.sealMiniDarkText}>№</Text>
-              </View>
-              <View style={styles.infoTag}>
-                <Text style={styles.infoTagText}>50 ДЕЛ</Text>
-              </View>
-            </View>
-            <Text style={styles.questTitle}>Архив кейсов</Text>
-            <Text style={styles.questDesc} numberOfLines={2}>
-              Полное собрание из 50 жизненных ситуаций
-            </Text>
-          </Pressable>
+            <Text style={styles.headerBtnText}>К рекомендованному кейсу</Text>
+          </PressableScale>
         </View>
-      </View>
 
-      {units.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptySign}>§</Text>
-          <Text style={styles.emptyText}>Программа скоро появится</Text>
-        </View>
-      ) : (
-        units.map((unit, uIdx) => {
-          const theme = CHAPTER_THEMES[uIdx % CHAPTER_THEMES.length];
-          const roman = ROMAN[uIdx] || String(uIdx + 1);
-          const lessons = Array.isArray(unit.lessons) ? unit.lessons : [];
-          const doneCount = lessons.filter((l) => l.completed).length;
-          const pct =
-            lessons.length > 0
-              ? Math.round((doneCount / lessons.length) * 100)
-              : 0;
-
-          return (
-            <View key={unit.id ?? uIdx} style={styles.unitSection}>
-              {uIdx > 0 ? (
-                <KhokhlomaDivider style={styles.chapterDivider} />
-              ) : null}
-
-              {/* Заголовок главы с точечной красно-золотой хохломой и закладкой кодекса */}
+        {dailyGoal.data && dailyGoal.data.goal > 0 ? (
+          <View style={styles.goalCard}>
+            <View style={styles.goalHead}>
+              <Text style={styles.goalKicker}>§ ЦЕЛЬ ДНЯ</Text>
+              <Text style={styles.goalValue}>
+                {dailyGoal.data.done} / {dailyGoal.data.goal} XP
+              </Text>
+            </View>
+            <View style={styles.goalTrack}>
               <View
                 style={[
-                  styles.unitBanner,
+                  styles.goalFill,
                   {
-                    backgroundColor: theme.bg,
-                    borderBottomColor: theme.lip,
+                    width: `${Math.min(
+                      100,
+                      Math.round((dailyGoal.data.done / dailyGoal.data.goal) * 100)
+                    )}%`,
                   },
                 ]}
-              >
-                <RibbonBookmark
-                  color={theme.ribbon}
-                  symbol={roman}
-                  right={16}
-                  height={28}
-                  width={22}
-                  cutoutColor={theme.bg}
-                />
+              />
+            </View>
+            <Text style={styles.goalHint}>
+              {dailyGoal.data.completed
+                ? 'Норма выполнена — отличная работа!'
+                : `Осталось ${dailyGoal.data.remaining} XP.`}
+            </Text>
+          </View>
+        ) : null}
 
-                <KhokhlomaGarland
-                  variant={theme.garland}
-                  count={5}
-                  style={styles.bannerGarland}
-                />
+        {topics.length === 0 ? (
+          <EmptyState
+            compact
+            title="Программа ещё не опубликована"
+            message="Разборы появятся здесь, как только их опубликуют. Адаптивная практика доступна уже сейчас."
+          />
+        ) : (
+          topics.map((topic, index) => (
+            <View key={topic.topic_id} style={styles.topicSection}>
+              {index > 0 ? <KhokhlomaDivider /> : null}
 
-                <View style={styles.bannerTop}>
-                  <View style={styles.bannerTextWrap}>
-                    <Text style={[styles.bannerEyebrow, { color: theme.eyebrow }]}>
-                      ГЛАВА {roman} · РАЗДЕЛ {uIdx + 1}
-                    </Text>
-                    <Text style={styles.bannerTitle}>{unit.title}</Text>
-                    {unit.description ? (
-                      <Text style={styles.bannerDesc}>{unit.description}</Text>
-                    ) : null}
+              <View style={styles.topicBanner}>
+                <View style={styles.topicBannerHead}>
+                  <View style={styles.romanBadge}>
+                    <Text style={styles.romanText}>{index + 1}</Text>
                   </View>
-
-                  <View
-                    style={[
-                      styles.crownBox,
-                      { backgroundColor: theme.crownBg },
-                    ]}
-                  >
-                    <Text style={styles.crownEmoji}>👑</Text>
-                    <Text style={styles.crownCount}>
-                      {doneCount}/{lessons.length}
+                  <View style={styles.topicBannerText}>
+                    <Text style={styles.topicKicker}>
+                      ТЕМА {index + 1} · {topic.lessons_practised}/
+                      {topic.lessons_total} УРОКОВ
                     </Text>
+                    <Text style={styles.topicTitle}>{topic.title}</Text>
                   </View>
                 </View>
+                {topic.summary ? (
+                  <Text style={styles.topicSummary}>{topic.summary}</Text>
+                ) : null}
 
-                {lessons.length > 0 ? (
+                <View style={styles.topicTrack}>
                   <View
                     style={[
-                      styles.bannerTrack,
-                      { backgroundColor: theme.trackBg },
+                      styles.topicFill,
+                      {
+                        width: `${Math.min(100, Math.max(4, topic.practice_priority))}%`,
+                        backgroundColor: brand.gold,
+                      },
                     ]}
-                  >
-                    <View
-                      style={[
-                        styles.bannerFill,
-                        { width: `${Math.max(pct, pct > 0 ? 10 : 0)}%` },
-                      ]}
-                    >
-                      <View style={styles.bannerShine} />
-                    </View>
+                  />
+                </View>
+                <Text style={styles.topicMeta}>
+                  {topic.state === 'NOT_ASSESSED'
+                    ? 'Тема ещё не проверялась — 50% это середина, а не оценка'
+                    : `Приоритет практики ${topic.practice_priority}% · ответов ${topic.n}, ошибок ${topic.errors}`}
+                </Text>
+              </View>
+
+              {(topic.lessons ?? []).map((lesson) => (
+                <PressableScale
+                  key={lesson.lesson_id}
+                  style={styles.lessonRow}
+                  onPress={() =>
+                    navigation.navigate('Lesson', {
+                      lessonId: lesson.lesson_id,
+                      title: lesson.title,
+                    })
+                  }
+                >
+                  <View style={[styles.lessonPuck, lesson.practised && styles.lessonPuckDone]}>
+                    <Text style={styles.lessonPuckText}>{lesson.practised ? '✓' : lesson.order}</Text>
                   </View>
-                ) : null}
-              </View>
-
-              {/* Чистая S-образная тропа уроков на сливочной бумаге */}
-              <View style={styles.pathContainer}>
-                {lessons.map((lesson, lIdx) => {
-                  const isLocked = !lesson.completed && globalSeenIncomplete;
-                  const isCurrent = !lesson.completed && !globalSeenIncomplete;
-                  if (!lesson.completed) globalSeenIncomplete = true;
-
-                  const offsetX = SNAKE_OFFSETS[lIdx % SNAKE_OFFSETS.length];
-                  const nextOffsetX =
-                    lIdx < lessons.length - 1
-                      ? SNAKE_OFFSETS[(lIdx + 1) % SNAKE_OFFSETS.length]
-                      : offsetX;
-                  const midOffsetX = Math.round((offsetX + nextOffsetX) / 2);
-
-                  return (
-                    <View key={lesson.id} style={styles.nodeWrapper}>
-                      <View
-                        style={[
-                          styles.nodeColumn,
-                          { transform: [{ translateX: offsetX }] },
-                        ]}
-                      >
-                        {/* Плашка «НАЧАТЬ» над текущим уроком */}
-                        {isCurrent && (
-                          <View style={styles.startTooltipWrap}>
-                            <View style={styles.startTooltip}>
-                              <Text style={styles.startTooltipText}>
-                                НАЧАТЬ
-                              </Text>
-                            </View>
-                            <View style={styles.startTooltipTail} />
-                          </View>
-                        )}
-
-                        <View
-                          style={[
-                            styles.puckAnchor,
-                            isCurrent && styles.currentHalo,
-                          ]}
-                        >
-                          <Pressable
-                            disabled={isLocked}
-                            onPress={() =>
-                              navigation.navigate('Lesson', {
-                                lessonId: lesson.id,
-                                title: lesson.title,
-                              })
-                            }
-                            style={({ pressed }) => [
-                              styles.puck,
-                              lesson.completed
-                                ? styles.puckDone
-                                : isLocked
-                                ? styles.puckLocked
-                                : styles.puckCurrent,
-                              pressed && !isLocked && styles.puckPressed,
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.puckInnerRing,
-                                isLocked && styles.puckInnerRingLocked,
-                              ]}
-                            />
-                            <Text
-                              style={[
-                                styles.puckIcon,
-                                lesson.completed && styles.puckIconDone,
-                                isCurrent && styles.puckIconCurrent,
-                                isLocked && styles.puckIconLocked,
-                              ]}
-                            >
-                              {lesson.completed ? '👑' : isLocked ? '🔒' : '★'}
-                            </Text>
-                          </Pressable>
-
-                          {/* Золотая награда +XP и хвойная отметка у пройденного урока */}
-                          {lesson.completed && lesson.xp_reward ? (
-                            <View style={styles.xpFloatingBadge}>
-                              <Text style={styles.xpFloatingText}>
-                                +{lesson.xp_reward} XP
-                              </Text>
-                            </View>
-                          ) : null}
-                          {lesson.completed ? (
-                            <View style={styles.doneCheckDot}>
-                              <Text style={styles.doneCheckText}>✓</Text>
-                            </View>
-                          ) : null}
-                        </View>
-
-                        <Pressable
-                          disabled={isLocked}
-                          onPress={() =>
-                            navigation.navigate('Lesson', {
-                              lessonId: lesson.id,
-                              title: lesson.title,
-                            })
-                          }
-                          style={[
-                            styles.nodeLabelPill,
-                            isCurrent && styles.nodeLabelPillCurrent,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.lessonTitle,
-                              isCurrent && styles.lessonTitleCurrent,
-                              isLocked && styles.lessonTitleLocked,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {lesson.title}
-                          </Text>
-                        </Pressable>
-                      </View>
-
-                      {/* Аккуратные пунктирные точки-вехи между уроками */}
-                      {lIdx < lessons.length - 1 ? (
-                        <View
-                          style={[
-                            styles.connectorWrap,
-                            { transform: [{ translateX: midOffsetX }] },
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.connectorDot,
-                              lesson.completed && styles.connectorDotDone,
-                            ]}
-                          />
-                          <View
-                            style={[
-                              styles.connectorDotSmall,
-                              lesson.completed && styles.connectorDotDone,
-                            ]}
-                          />
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
+                  <View style={styles.lessonText}>
+                    <Text style={styles.lessonTitle}>{lesson.title}</Text>
+                    <Text style={styles.lessonGoal} numberOfLines={2}>
+                      {lesson.goal}
+                    </Text>
+                  </View>
+                  <Text style={styles.lessonChevron}>›</Text>
+                </PressableScale>
+              ))}
             </View>
-          );
-        })
-      )}
-    </ScrollView>
+          ))
+        )}
+
+        {path.data?.editorial_note ? (
+          <Text style={styles.editorialNote}>{path.data.editorial_note}</Text>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    paddingBottom: 112,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    padding: 24,
-    gap: 12,
-  },
-  stateHint: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.subtext,
-  },
-  stateCard: {
-    width: '100%',
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderBottomWidth: 4,
-    borderColor: brand.rule,
-    padding: 24,
-    alignItems: 'center',
-    gap: 10,
-  },
-  errorText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  errorDetail: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.subtext,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    marginTop: 6,
-    height: 46,
-    paddingHorizontal: 26,
-    borderRadius: 14,
-    backgroundColor: brand.red,
-    borderBottomWidth: 4,
-    borderBottomColor: brand.redDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnPressed: {
-    transform: [{ translateY: 2 }],
-    borderBottomWidth: 2,
-  },
-  retryBtnText: {
-    color: brand.creamText,
-    fontSize: 14,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-
-  /* Шапка */
-  header: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 6,
-    gap: 14,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  titleBody: {
-    flex: 1,
-  },
-  docKicker: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: brand.muted,
-    marginBottom: 2,
-  },
-  titleLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  title: {
-    fontSize: 27,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.4,
-  },
-  titleSprig: {
-    marginTop: 2,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.subtext,
-    marginTop: 3,
-    lineHeight: 18,
-  },
-
-  /* Две чистые карточки быстрых действий */
-  questRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  questCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderBottomWidth: 3.5,
-    borderColor: brand.rule,
-    padding: 13,
-    gap: 5,
-  },
-  questCardPrimary: {
-    borderColor: brand.goldBorder,
-  },
-  questPressed: {
-    transform: [{ translateY: 2 }],
-    borderBottomWidth: 1.5,
-  },
-  questTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 3,
-  },
-  sealMiniRed: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: brand.red,
-    borderBottomWidth: 2,
-    borderBottomColor: brand.redDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sealMiniText: {
-    color: brand.creamText,
-    fontSize: 14,
-    fontWeight: '800',
-    fontFamily: serifFamily,
-  },
-  sealMiniGold: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: brand.goldSoft,
-    borderWidth: 1.2,
-    borderColor: brand.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sealMiniDarkText: {
-    color: brand.goldInk,
-    fontSize: 13,
-    fontWeight: '800',
-    fontFamily: serifFamily,
-  },
-  goldTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: brand.goldSoft,
-    borderWidth: 1,
-    borderColor: brand.goldBorder,
-  },
-  goldTagText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: brand.goldInk,
-    letterSpacing: 0.5,
-  },
-  infoTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: brand.infoSoft,
-    borderWidth: 1,
-    borderColor: brand.infoBorder,
-  },
-  infoTagText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: brand.infoInk,
-    letterSpacing: 0.5,
-  },
-  questTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  questDesc: {
-    fontSize: 11.5,
-    fontWeight: '500',
-    color: colors.subtext,
-    lineHeight: 15.5,
-  },
-
-  emptyCard: {
-    margin: 18,
-    padding: 28,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: brand.rule,
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptySign: {
-    fontSize: 28,
-    fontFamily: serifFamily,
-    color: brand.gold,
-  },
-  emptyText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.subtext,
-  },
-
-  /* Глава (Unit) */
-  unitSection: {
-    marginTop: 12,
-    paddingHorizontal: 18,
-  },
-  chapterDivider: {
-    marginBottom: 14,
-    paddingHorizontal: 10,
-  },
-  unitBanner: {
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, paddingBottom: 60, gap: 16 },
+  headerCard: {
     position: 'relative',
+    backgroundColor: brand.red,
     borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 15,
-    borderWidth: 1.5,
-    borderColor: 'rgba(217, 168, 73, 0.45)',
     borderBottomWidth: 5,
-    gap: 11,
-  },
-  bannerGarland: {
-    paddingRight: 32,
-  },
-  bannerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  bannerTextWrap: {
-    flex: 1,
-    gap: 3,
-  },
-  bannerEyebrow: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  bannerTitle: {
-    fontSize: 18.5,
-    fontWeight: '800',
-    color: brand.creamText,
-    lineHeight: 23,
-    letterSpacing: -0.2,
-  },
-  bannerDesc: {
-    fontSize: 12.5,
-    fontWeight: '500',
-    color: 'rgba(252, 248, 240, 0.84)',
-    lineHeight: 17,
-    marginTop: 1,
-  },
-  crownBox: {
-    minWidth: 50,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(241, 217, 153, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    gap: 2,
-  },
-  crownEmoji: {
-    fontSize: 16,
-  },
-  crownCount: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: brand.creamText,
-  },
-  bannerTrack: {
-    height: 9,
-    borderRadius: 999,
+    borderBottomColor: brand.redDark,
+    padding: 20,
+    paddingRight: 34,
+    gap: 10,
     overflow: 'hidden',
   },
-  bannerFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: brand.gold,
-  },
-  bannerShine: {
-    height: 3,
-    marginHorizontal: 4,
-    marginTop: 1.5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(252, 248, 240, 0.45)',
-  },
-
-  /* Тропа уроков */
-  pathContainer: {
-    alignItems: 'center',
-    paddingTop: 22,
-    paddingBottom: 10,
-  },
-  nodeWrapper: {
-    alignItems: 'center',
-  },
-  nodeColumn: {
-    alignItems: 'center',
-  },
-  startTooltipWrap: {
-    alignItems: 'center',
-    marginBottom: 7,
-  },
-  startTooltip: {
-    backgroundColor: colors.card,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderBottomWidth: 3,
-    borderColor: brand.red,
-  },
-  startTooltipText: {
-    fontSize: 11.5,
+  headerGarland: { position: 'absolute', top: 6, left: 0, right: 0, opacity: 0.5 },
+  headerEyebrow: {
+    fontSize: 9.5,
     fontWeight: '800',
-    letterSpacing: 0.9,
-    color: brand.red,
+    letterSpacing: 1.1,
+    color: brand.goldLight,
   },
-  startTooltipTail: {
-    width: 9,
-    height: 9,
-    backgroundColor: colors.card,
-    borderRightWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: brand.red,
-    transform: [{ rotate: '45deg' }],
-    marginTop: -5,
-  },
-
-  puckAnchor: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  currentHalo: {
-    padding: 8,
-    borderRadius: 999,
-    backgroundColor: brand.redSoft,
-    borderWidth: 2,
-    borderColor: brand.red,
-  },
-  puck: {
-    width: 72,
-    height: 68,
-    borderRadius: 36,
-    borderBottomWidth: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  puckDone: {
-    backgroundColor: brand.gold,
-    borderBottomColor: brand.goldDark,
-  },
-  puckCurrent: {
-    backgroundColor: brand.red,
-    borderBottomColor: brand.redDark,
-  },
-  puckLocked: {
-    backgroundColor: colors.paper,
-    borderBottomColor: brand.ruleStrong,
-  },
-  puckPressed: {
-    transform: [{ translateY: 3 }],
-    borderBottomWidth: 3,
-  },
-  puckInnerRing: {
-    position: 'absolute',
-    width: 56,
-    height: 52,
-    borderRadius: 28,
-    borderWidth: 1.2,
-    borderColor: 'rgba(252, 248, 240, 0.42)',
-  },
-  puckInnerRingLocked: {
-    borderColor: 'rgba(150, 133, 113, 0.25)',
-  },
-  puckIcon: {
-    fontSize: 24,
-  },
-  puckIconDone: {
-    fontSize: 24,
-  },
-  puckIconCurrent: {
-    fontSize: 25,
-    color: brand.creamText,
-  },
-  puckIconLocked: {
-    fontSize: 20,
-    opacity: 0.65,
-  },
-
-  /* Золотой XP и хвойная галочка выполненного урока */
-  xpFloatingBadge: {
-    position: 'absolute',
-    top: -7,
-    right: -24,
-    backgroundColor: brand.goldSoft,
-    borderWidth: 1.5,
-    borderColor: brand.gold,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-  },
-  xpFloatingText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: brand.goldInk,
-  },
-  doneCheckDot: {
-    position: 'absolute',
-    bottom: 2,
-    left: -4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: brand.pine,
-    borderWidth: 2,
-    borderColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneCheckText: {
-    fontSize: 11,
+  headerTitle: {
+    fontSize: 23,
     fontWeight: '900',
     color: brand.creamText,
+    fontFamily: serifFamily,
   },
-
-  nodeLabelPill: {
-    marginTop: 8,
-    maxWidth: 196,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
+  headerNote: { fontSize: 13, lineHeight: 19, color: brand.creamText, opacity: 0.92 },
+  headerBtn: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: brand.gold,
+    borderRadius: 14,
+    borderBottomWidth: 3,
+    borderBottomColor: brand.goldDark,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
-  nodeLabelPillCurrent: {
+  headerBtnText: { fontSize: 13.5, fontWeight: '900', color: brand.ink },
+  goalCard: {
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: brand.rule,
+    padding: 16,
+    gap: 8,
   },
-  lessonTitle: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  lessonTitleCurrent: {
+  goalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  goalKicker: {
+    fontSize: 9.5,
     fontWeight: '800',
-    color: brand.ink,
+    letterSpacing: 1,
+    color: brand.goldInk,
   },
-  lessonTitleLocked: {
-    color: colors.locked,
-    fontWeight: '600',
+  goalValue: { fontSize: 13.5, fontWeight: '900', color: colors.text },
+  goalTrack: {
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.track,
+    overflow: 'hidden',
   },
-
-  connectorWrap: {
-    height: 22,
+  goalFill: { height: '100%', borderRadius: 5, backgroundColor: brand.pine },
+  goalHint: { fontSize: 11.5, color: colors.subtext, fontWeight: '600' },
+  topicSection: { gap: 10 },
+  topicBanner: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
+    borderColor: brand.rule,
+    padding: 16,
+    gap: 10,
+  },
+  topicBannerHead: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  romanBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
-  connectorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: brand.ruleStrong,
+  romanText: { fontSize: 16, fontWeight: '900', color: brand.goldLight, fontFamily: serifFamily },
+  topicBannerText: { flex: 1, gap: 2 },
+  topicKicker: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: brand.muted,
   },
-  connectorDotSmall: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: brand.ruleStrong,
+  topicTitle: { fontSize: 18, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
+  topicSummary: { fontSize: 13, lineHeight: 19, color: colors.subtext },
+  topicTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.track,
+    overflow: 'hidden',
   },
-  connectorDotDone: {
-    backgroundColor: brand.gold,
+  topicFill: { height: '100%', borderRadius: 4 },
+  topicMeta: { fontSize: 11, lineHeight: 16, color: colors.subtext, fontWeight: '600' },
+  lessonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    padding: 14,
+  },
+  lessonPuck: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: brand.cream,
+    borderWidth: 2,
+    borderColor: brand.ruleStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lessonPuckDone: { backgroundColor: brand.pine, borderColor: brand.pineDark },
+  lessonPuckText: { fontSize: 13.5, fontWeight: '900', color: colors.text },
+  lessonText: { flex: 1, gap: 2 },
+  lessonTitle: { fontSize: 14.5, fontWeight: '800', color: colors.text },
+  lessonGoal: { fontSize: 11.5, lineHeight: 16, color: colors.subtext },
+  lessonChevron: { fontSize: 20, color: brand.muted, fontWeight: '800' },
+  editorialNote: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
+    color: brand.muted,
+    fontStyle: 'italic',
   },
 });

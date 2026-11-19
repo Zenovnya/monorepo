@@ -4,14 +4,16 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { lexbearApi } from '../api/lexbear';
+import { PressableScale } from '../components/PressableScale';
 import { gamificationApi } from '../api/gamification';
-import { progressApi } from '../api/progress';
+import { adaptiveApi } from '../api/adaptive';
+import { userApi } from '../api/user';
 import {
   brand,
   KhokhlomaCorners,
@@ -26,7 +28,7 @@ import { colors } from '../theme/colors';
 const ROW_SEAL = {
   bear: { label: '§', tone: 'red' },
   league: { label: 'I', tone: 'gold' },
-  articles: { label: 'ст', tone: 'red' },
+  reviews: { label: '↻', tone: 'gold' },
   shop: { label: '✦', tone: 'gold' },
 };
 
@@ -38,10 +40,24 @@ const ROW_SEAL = {
  */
 export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
 
-  const { data: articles } = useQuery({
-    queryKey: ['lexbear-articles'],
-    queryFn: lexbearApi.articles,
+  // Редактирование имени: до этого сменить имя было нельзя вообще —
+  // в профиле навсегда оставался дефолт «Юрист».
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(user?.name ?? '');
+  const [nameError, setNameError] = useState(null);
+
+  const saveName = useMutation({
+    mutationFn: (value) => userApi.updateMe(value),
+    onSuccess: (profile) => {
+      setUser({ name: profile.name });
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+      setEditingName(false);
+      setNameError(null);
+    },
+    onError: () => setNameError('Не удалось сохранить имя. Попробуйте ещё раз.'),
   });
 
   const { data: gamification } = useQuery({
@@ -49,10 +65,13 @@ export default function ProfileScreen({ navigation }) {
     queryFn: gamificationApi.me,
   });
 
-  const { data: progress } = useQuery({
-    queryKey: ['progress-overview'],
-    queryFn: progressApi.overview,
+  // Прогресс по темам: единственный источник правды о том, что пройдено.
+  // Раньше здесь читался /progress по старым урокам — их больше нет.
+  const { data: overview } = useQuery({
+    queryKey: ['adaptive-overview'],
+    queryFn: adaptiveApi.overview,
   });
+  const topics = overview?.topics ?? [];
 
   const { data: achData } = useQuery({
     queryKey: ['gamification-achievements'],
@@ -60,8 +79,8 @@ export default function ProfileScreen({ navigation }) {
   });
   const achievements = achData?.achievements ?? [];
 
-  const learnedCount = (articles ?? []).filter((a) => a.learned).length;
-  const totalCrowns = progress?.total_crowns ?? 0;
+  const lessonsPractised = topics.reduce((sum, t) => sum + t.lessons_practised, 0);
+  const mistakesRecent = topics.reduce((sum, t) => sum + t.errors, 0);
   const level = gamification?.level ?? user?.level ?? 1;
 
   const prevLevelRef = useRef(level);
@@ -90,14 +109,14 @@ export default function ProfileScreen({ navigation }) {
     },
     {
       icon: '👑',
-      value: totalCrowns,
-      label: 'Короны',
+      value: lessonsPractised,
+      label: 'Уроки',
       accent: brand.goldInk,
     },
     {
-      icon: '📖',
-      value: learnedCount,
-      label: 'Статьи',
+      icon: '⚖️',
+      value: mistakesRecent,
+      label: 'Ошибки',
       accent: brand.pine,
     },
   ];
@@ -109,14 +128,19 @@ export default function ProfileScreen({ navigation }) {
       hint: 'Костюмы, галстуки, кабинет',
     },
     {
+      key: 'topics',
+      title: 'Темы и уроки',
+      hint: '6 тем, 30 уроков и приоритет практики',
+    },
+    {
       key: 'league',
       title: 'Лига',
       hint: 'Рейтинг и награды недели',
     },
     {
-      key: 'articles',
-      title: 'Мои статьи',
-      hint: `Изучено статей: ${learnedCount}`,
+      key: 'reviews',
+      title: 'Повторить',
+      hint: 'Кейсы, срок повторения которых наступил',
     },
     {
       key: 'shop',
@@ -134,8 +158,8 @@ export default function ProfileScreen({ navigation }) {
   const navigate = (key) => {
     const map = {
       bear: 'Bear',
+      topics: 'Learn',
       league: 'League',
-      articles: 'Articles',
       shop: 'Shop',
       premium: 'Premium',
     };
@@ -155,18 +179,17 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}
       <View style={styles.coverBanner}>
-        <Pressable
+        <PressableScale
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Настройки"
-          style={({ pressed }) => [
+          style={[
             styles.settingsBtn,
-            pressed && styles.smallPressed,
           ]}
           onPress={() => navigation.navigate('Settings')}
         >
           <Text style={styles.settingsIcon}>⚙️</Text>
-        </Pressable>
+        </PressableScale>
 
         <KhokhlomaMedallion size={146}>
           <AnimatedMascot
@@ -186,7 +209,75 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Имя, золотой чин лиги и информационная плашка уровня (#7298BC) */}
       <View style={styles.identitySection}>
-        <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+        {editingName ? (
+          <View style={styles.nameEditRow}>
+            <TextInput
+              value={nameDraft}
+              onChangeText={(t) => {
+                setNameDraft(t);
+                setNameError(null);
+              }}
+              maxLength={40}
+              autoFocus
+              placeholder="Как вас зовут?"
+              placeholderTextColor={colors.locked}
+              style={styles.nameInput}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (nameDraft.trim()) saveName.mutate(nameDraft.trim());
+              }}
+            />
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Сохранить имя"
+              disabled={!nameDraft.trim() || saveName.isPending}
+              onPress={() => saveName.mutate(nameDraft.trim())}
+              style={[
+                styles.nameSaveBtn,
+                (!nameDraft.trim() || saveName.isPending) && { opacity: 0.45 },
+              ]}
+            >
+              {saveName.isPending ? (
+                <ActivityIndicator size="small" color={colors.card} />
+              ) : (
+                <Text style={styles.nameSaveText}>OK</Text>
+              )}
+            </PressableScale>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Отменить"
+              onPress={() => {
+                setEditingName(false);
+                setNameDraft(user?.name ?? '');
+                setNameError(null);
+              }}
+              style={[
+                styles.nameCancelBtn,
+              ]}
+            >
+              <Text style={styles.nameCancelText}>✕</Text>
+            </PressableScale>
+          </View>
+        ) : (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Изменить имя"
+            onPress={() => {
+              setNameDraft(user?.name ?? '');
+              setEditingName(true);
+            }}
+            style={[
+              styles.nameRow,
+            ]}
+          >
+            <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
+            <Text style={styles.namePencil}>✎</Text>
+          </PressableScale>
+        )}
+
+        {nameError ? (
+          <Text style={styles.nameError}>{nameError}</Text>
+        ) : null}
         <View style={styles.pillsRow}>
           <View style={styles.leaguePill}>
             <Text style={styles.leaguePillText}>
@@ -201,10 +292,9 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Парадная лаковая карточка LexBear Plus (чернильный лак + золото и красный хохломы) */}
       {premiumRow && (
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={[
             styles.superCard,
-            pressed && styles.superPressed,
           ]}
           onPress={() => navigate(premiumRow.key)}
         >
@@ -218,7 +308,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.superCtaCircle}>
             <Text style={styles.superCtaArrow}>→</Text>
           </View>
-        </Pressable>
+        </PressableScale>
       )}
 
       {/* Чистая сетка «Обзор» 2×2 */}
@@ -274,13 +364,12 @@ export default function ProfileScreen({ navigation }) {
         {regularRows.map((r, idx) => {
           const seal = ROW_SEAL[r.key] || ROW_SEAL.bear;
           return (
-            <Pressable
+            <PressableScale
               key={r.key}
               onPress={() => navigate(r.key)}
-              style={({ pressed }) => [
+              style={[
                 styles.navRow,
                 idx < regularRows.length - 1 && styles.rowDivider,
-                pressed && styles.navRowPressed,
               ]}
             >
               <WaxSeal label={seal.label} tone={seal.tone} size={38} />
@@ -289,7 +378,7 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.navHint}>{r.hint}</Text>
               </View>
               <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>
@@ -298,6 +387,68 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  namePencil: {
+    fontSize: 15,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  nameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nameInput: {
+    minWidth: 150,
+    maxWidth: 230,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: brand.gold,
+    backgroundColor: colors.card,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  nameSaveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: brand.pine,
+    minWidth: 46,
+    alignItems: 'center',
+  },
+  nameSaveText: {
+    color: colors.card,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  nameCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+  },
+  nameCancelText: {
+    color: colors.subtext,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  nameError: {
+    marginTop: 8,
+    color: brand.red,
+    fontSize: 12.5,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

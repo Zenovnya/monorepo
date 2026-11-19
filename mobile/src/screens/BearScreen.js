@@ -4,11 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
 import {
@@ -147,11 +148,10 @@ export default function BearScreen() {
       </View>
 
       {/* Главная кнопка действия — Лаковый красный (#C9362B) */}
-      <Pressable
-        style={({ pressed }) => [
+      <PressableScale
+        style={[
           styles.petBtn,
           (busy || isLoadingPet) && styles.btnBusy,
-          pressed && !busy && !isLoadingPet && styles.btnPressed,
         ]}
         disabled={busy || isLoadingPet}
         onPress={handlePet}
@@ -160,7 +160,7 @@ export default function BearScreen() {
         <View style={styles.petBadge}>
           <Text style={styles.petBadgeText}>{petCount}</Text>
         </View>
-      </Pressable>
+      </PressableScale>
 
       {/* Чистые вкладки кабинета */}
       <View style={styles.tabs}>
@@ -171,19 +171,18 @@ export default function BearScreen() {
         ].map(([k, l]) => {
           const active = tab === k;
           return (
-            <Pressable
+            <PressableScale
               key={k}
-              style={({ pressed }) => [
+              style={[
                 styles.tab,
                 active && styles.tabActive,
-                pressed && styles.tabPressed,
               ]}
               onPress={() => setTab(k)}
             >
               <Text style={[styles.tabText, active && styles.tabTextActive]}>
                 {l}
               </Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>

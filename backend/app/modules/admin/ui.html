@@ -67,6 +67,7 @@
   <div class="tabs">
     <button data-tab="cases" class="active" onclick="switchTab('cases')">Кейсы</button>
     <button data-tab="lessons" onclick="switchTab('lessons')">Уроки</button>
+    <button data-tab="review" onclick="switchTab('review')">Юрпроверка</button>
     <button data-tab="reload" onclick="switchTab('reload')">Загрузка из JSON</button>
   </div>
 
@@ -157,6 +158,34 @@
     </div>
   </section>
 
+  <!-- ================= REVIEW ================= -->
+  <section id="tab-review" class="hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <strong>Юридическая проверка кейсов</strong>
+        <button class="ghost" onclick="loadReview()">Обновить</button>
+      </div>
+      <p class="muted">
+        Пользователю показываются <b>только проверенные</b> кейсы. Статус
+        <code>imported</code> ставится при загрузке из JSON и означает
+        «загружено, юристом не смотрели»: такой кейс не попадает ни в ленту
+        «Следующий кейс», ни в диагностику.
+      </p>
+      <div id="reviewSummary" class="muted" style="margin:8px 0 12px">Загрузка…</div>
+      <div class="row" style="margin-bottom:12px">
+        <label style="margin:0"><input type="radio" name="reviewFilter" value="" checked
+          onchange="loadReview()" style="width:auto"> все</label>
+        <label style="margin:0"><input type="radio" name="reviewFilter" value="imported"
+          onchange="loadReview()" style="width:auto"> импортированные</label>
+        <label style="margin:0"><input type="radio" name="reviewFilter" value="in_review"
+          onchange="loadReview()" style="width:auto"> в проверке</label>
+        <label style="margin:0"><input type="radio" name="reviewFilter" value="approved"
+          onchange="loadReview()" style="width:auto"> проверенные</label>
+      </div>
+      <div id="reviewList" class="muted">Загрузка…</div>
+    </div>
+  </section>
+
   <!-- ================= RELOAD ================= -->
   <section id="tab-reload" class="hide">
     <div class="card">
@@ -212,10 +241,13 @@ async function api(path, opts = {}) {
 }
 
 function switchTab(name) {
-  ['cases', 'lessons', 'reload'].forEach(n => {
+  ['cases', 'lessons', 'review', 'reload'].forEach(n => {
     document.getElementById('tab-' + n).classList.toggle('hide', n !== name);
     document.querySelector(`[data-tab="${n}"]`).classList.toggle('active', n === name);
   });
+  // Данные подтягиваем при открытии вкладки: держать их в памяти страницы
+  // незачем, а модератор всегда видит свежий статус.
+  if (name === 'review') loadReview();
 }
 
 // ---------- cases ----------
@@ -289,6 +321,10 @@ async function saveCase() {
     options,
   };
   if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  // codex обязателен: GET /lexbear/cases отбрасывает кейсы без него
+  // (условие `if c.title and c.codex`), и кейс молча исчезает из приложения.
+  if (!body.codex) return toast('Укажите кодекс — без него кейс не покажется в приложении');
+  if (!body.case_text) return toast('Текст дела обязателен');
   try { await api('/admin/content/cases', { method: 'PUT', body: JSON.stringify(body) });
     toast('Сохранено'); hide('caseForm'); loadCases();
   } catch (e) { toast('Ошибка: ' + e.message); }
@@ -348,6 +384,7 @@ async function saveLesson() {
     cards, questions,
   };
   if (!body.slug || !body.title) return toast('slug и заголовок обязательны');
+  if (!cards.length) return toast('Добавьте хотя бы одну карточку теории');
   try { await api('/admin/content/units/' + encodeURIComponent(unitCode) + '/lessons',
       { method: 'PUT', body: JSON.stringify(body) });
     toast('Урок сохранён'); hide('lessonForm'); loadLessons();
@@ -360,6 +397,77 @@ async function delLesson(slug) {
   } catch (e) { toast('Ошибка: ' + e.message); }
 }
 
+// ---------- review (юридическая проверка) ----------
+const REVIEW_LABELS = {
+  imported: { text: 'импортирован', cls: 'off' },
+  in_review: { text: 'в проверке', cls: '' },
+  approved: { text: 'проверен', cls: 'on' },
+};
+
+async function loadReview() {
+  const list = document.getElementById('reviewList');
+  const summary = document.getElementById('reviewSummary');
+  const filter = document.querySelector('input[name="reviewFilter"]:checked');
+  const status = filter ? filter.value : '';
+  try {
+    // Сводку и список тянем параллельно: сводка отвечает на вопрос «почему у
+    // пользователя пусто», список — «что конкретно проверить».
+    const [stats, rows] = await Promise.all([
+      api('/admin/content/adaptive/review/summary'),
+      api('/admin/content/adaptive/review' + (status ? '?review_status=' + encodeURIComponent(status) : '')),
+    ]);
+    summary.innerHTML =
+      `Всего кейсов: <b>${stats.total}</b> · видно пользователю: ` +
+      `<b style="color:${stats.visible_to_users ? 'var(--ok, #315B46)' : 'var(--danger)'}">${stats.visible_to_users}</b>` +
+      ` · скрыто проверкой: <b>${stats.hidden_by_review}</b>` +
+      (stats.visible_to_users === 0
+        ? '<br><span style="color:var(--danger)">Лента «Следующий кейс» и диагностика сейчас пусты: ни один кейс не проверен.</span>'
+        : '');
+
+    if (!rows.length) { list.innerHTML = 'Кейсов с таким статусом нет.'; return; }
+    list.innerHTML = `<table><tr><th>Кейс</th><th>slug</th><th>Статус</th><th>Проверил</th><th></th></tr>` +
+      rows.map(r => {
+        const meta = REVIEW_LABELS[r.review_status] || { text: r.review_status, cls: '' };
+        return `<tr>
+          <td>${esc(r.title)}</td>
+          <td class="muted">${esc(r.slug)}</td>
+          <td><span class="pill ${meta.cls}">${esc(meta.text)}</span></td>
+          <td class="muted">${r.reviewed_by ? esc(r.reviewed_by) + '<br>' + esc(r.reviewed_at || '') : '—'}</td>
+          <td class="row">
+            ${r.review_status !== 'in_review'
+              ? `<button class="ghost" onclick="setReview('${esc(r.slug)}','in_review')">В проверку</button>`
+              : ''}
+            ${r.review_status !== 'approved'
+              ? `<button class="primary" onclick="setReview('${esc(r.slug)}','approved')">Одобрить</button>`
+              : `<button class="ghost" onclick="setReview('${esc(r.slug)}','imported')">Снять с показа</button>`}
+          </td></tr>`;
+      }).join('');
+  } catch (e) {
+    list.innerHTML = `<span style="color:var(--danger)">Ошибка: ${esc(e.message)}</span>`;
+  }
+}
+
+async function setReview(slug, status) {
+  // Проверяющего спрашиваем обязательно: статус approved без имени — это
+  // «кто-то нажал кнопку», а не проверка юристом.
+  let by = '';
+  if (status === 'approved') {
+    by = prompt('Кто проверил кейс? (ФИО или логин юриста)', localStorage.getItem('lb_reviewer') || '');
+    if (by === null) return;
+    by = by.trim();
+    if (!by) { toast('Укажите, кто проверил'); return; }
+    localStorage.setItem('lb_reviewer', by);
+  }
+  try {
+    await api('/admin/content/adaptive/review/' + encodeURIComponent(slug) +
+      '?review_status=' + encodeURIComponent(status) +
+      (by ? '&reviewed_by=' + encodeURIComponent(by) : ''),
+      { method: 'POST' });
+    toast('Статус обновлён: ' + (REVIEW_LABELS[status] || {}).text);
+    loadReview();
+  } catch (e) { toast('Ошибка: ' + e.message); }
+}
+
 // ---------- reload ----------
 async function reloadContent() {
   const prune = document.getElementById('prune').checked;
@@ -369,6 +477,8 @@ async function reloadContent() {
     const r = await api('/admin/content/reload?prune=' + prune, { method: 'POST' });
     out.textContent = JSON.stringify(r.report, null, 2);
     toast('Готово'); loadCases(); loadUnits(); loadLessons();
+    // После импорта все кейсы снова imported — сводка должна это показать.
+    if (!document.getElementById('tab-review').classList.contains('hide')) loadReview();
   } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
 }
 

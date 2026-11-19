@@ -21,6 +21,10 @@ services:
       POSTGRES_USER: lexbear
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: lexbear
+    # Порт наружу настраивается: если на 5432 уже висит локальный Postgres,
+    # поставьте POSTGRES_PORT=5433 в .env — иначе compose не поднимется.
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -64,6 +68,10 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       # За обратным прокси (nginx) включите, чтобы rate-limit видел реальный IP.
       TRUST_PROXY_HEADERS: "false"
+      # Почта (Resend) для сброса пароля. Пустой ключ = письма не отправляются.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-LexBear <onboarding@resend.dev>}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:19006}
     # Миграции Alembic перед запуском, затем Uvicorn.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
     ports:

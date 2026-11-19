@@ -112,3 +112,15 @@ async def test_confirm_payment_missing_raises(session):
 def test_verify_signature():
     # Пустой секрет -> не проходит.
     assert service._verify_signature(b"{}", "sig") is False
+
+@pytest.mark.asyncio
+async def test_create_payment_reports_unconfigured_checkout() -> None:
+    """Ответ платежа сообщает, настроен ли реальный шлюз.
+
+    По умолчанию активен ManualProvider: checkout.invalid — мёртвая ссылка.
+    Без этого флага клиент открывал её и молчал.
+    """
+    from app.modules.payments.providers import get_payment_provider
+
+    provider = get_payment_provider()
+    assert provider.is_configured() is False

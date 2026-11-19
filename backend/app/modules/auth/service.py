@@ -4,6 +4,7 @@
 """
 
 import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -16,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.modules.auth.models import RefreshToken, User
+from app.modules.auth.models import PasswordResetToken, RefreshToken, User
 from app.modules.auth.schemas import UserRegister
 
 settings = get_settings()
@@ -24,6 +25,14 @@ settings = get_settings()
 
 class AuthError(Exception):
     """Базовое исключение модуля аутентификации."""
+
+
+class InvalidResetTokenError(AuthError):
+    """Токен сброса пароля недействителен, истёк или уже использован."""
+
+
+class WeakPasswordError(AuthError):
+    """Пароль не соответствует требованиям."""
 
 
 class InvalidCredentialsError(AuthError):
@@ -145,10 +154,15 @@ async def register(session: AsyncSession, data: UserRegister) -> User:
     if existing is not None:
         raise EmailAlreadyRegisteredError("Пользователь с таким email уже существует")
 
+    display_name = (data.username or "").strip()[:40]
     user = User(
         email=data.email,
         username=data.username,
         hashed_password=await hash_password_async(data.password),
+        # Имя профиля по умолчанию — то, что ввёл пользователь при регистрации.
+        # Иначе `name` остаётся дефолтом модели («Юрист»), и в интерфейсе
+        # пользователь видит не своё имя, а заглушку.
+        name=display_name or "Юрист",
     )
     session.add(user)
     await session.commit()
@@ -293,3 +307,96 @@ def get_bearer_token(
             detail="Отсутствует Bearer-токен",
         )
     return authorization.split(" ", 1)[1].strip()
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    """Приводит дату из БД к aware-UTC.
+
+    Postgres (TIMESTAMPTZ) возвращает aware datetime, но некоторые драйверы и
+    SQLite отдают naive — сравнение с aware ``datetime.now(timezone.utc)``
+    падает с TypeError. Правим здесь, а не в каждом месте вызова.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def hash_reset_token(value: str) -> str:
+    """sha256-хеш значения токена сброса (в БД хранится только он)."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+async def create_password_reset_token(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> str | None:
+    """Создаёт одноразовый токен сброса и возвращает его значение.
+
+    Все предыдущие неиспользованные токены пользователя удаляются: запросить
+    сброс дважды — нормальная ситуация, и старая ссылка не должна оставаться
+    рабочей.
+    """
+    previous = await session.scalars(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user_id,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    for stale in previous.all():
+        await session.delete(stale)
+
+    raw = secrets.token_urlsafe(32)
+    session.add(
+        PasswordResetToken(
+            user_id=user_id,
+            token_hash=hash_reset_token(raw),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(minutes=settings.password_reset_ttl_minutes),
+        )
+    )
+    await session.flush()
+    return raw
+
+
+async def reset_password(
+    session: AsyncSession,
+    raw_token: str,
+    new_password: str,
+) -> User:
+    """Меняет пароль по одноразовому токену.
+
+    После успешной смены токен помечается использованным, а ВСЕ refresh-токены
+    пользователя отзываются: если аккаунт увели, сброс пароля должен выкинуть
+    злоумышленника из всех сессий.
+    """
+    if len(new_password or "") < 8:
+        raise WeakPasswordError("Пароль должен быть не короче 8 символов")
+
+    record = await session.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == hash_reset_token(raw_token)
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if record is None or record.used_at is not None:
+        raise InvalidResetTokenError("Ссылка недействительна или уже использована")
+    if _as_aware_utc(record.expires_at) <= now:
+        raise InvalidResetTokenError("Срок действия ссылки истёк")
+
+    user = await session.get(User, record.user_id)
+    if user is None:
+        raise InvalidResetTokenError("Ссылка недействительна")
+
+    user.hashed_password = await hash_password_async(new_password)
+    record.used_at = now
+
+    # Отзываем все сессии пользователя.
+    active = await session.scalars(
+        select(RefreshToken).where(RefreshToken.user_id == user.id)
+    )
+    for token in active.all():
+        await session.delete(token)
+
+    await session.commit()
+    await session.refresh(user)
+    return user

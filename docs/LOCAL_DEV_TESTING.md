@@ -175,30 +175,43 @@ Get-NetFirewallRule -DisplayName "LexBear API (8000)"
 
 ---
 
-## 6. Сид контента вручную (опционально)
+## 6. Проверка контента (сида в БД больше нет)
 
-Сид встроен в `dev-start.ps1`, но можно вызвать напрямую. Нужен админ-токен:
+Контент — файл `backend/app/content_packs/themes.json`, поэтому «сидить» нечего:
+достаточно запустить API. Пак проверяется при старте теми же правилами, что и
+импорт, а вручную это делается так:
+
+```powershell
+cd backend
+python -m app.modules.adaptive.seed
+```
+
+Ответ — сводка (6 тем, 30 уроков, 90 карточек, 72 нормы) или ненулевой код
+возврата с кодом ошибки (`MISSING_SIGNOFF`, `ANSWER_KEY`, `PAIRS` и т. п.),
+если пак битый. Через API — то же самое:
 
 ```powershell
 Invoke-RestMethod -Method Post `
-  -Uri http://localhost:8000/lexbear/seed `
+  -Uri http://localhost:8000/admin/content/pack/validate `
   -Headers @{ "X-Admin-Token" = "lexbear-admin-dev-token" }
 ```
 
-Ответы:
-
-- `{"skipped": true}` — контент уже есть (норма при повторном запуске);
-- `{"skipped": false, ...}` — контент загружен; в ответе отчёт по пакам.
-
-Проверить, что контент реально в БД:
+Проверить, что контент реально доезжает до пользователя (нужен любой
+access-токен):
 
 ```powershell
-$env:PGPASSWORD='postgres'
-& 'C:\Program Files\PostgreSQL\16\bin\psql.exe' -h 127.0.0.1 -p 5433 -U postgres -d lexbear `
-  -c "select (select count(*) from units) as units, (select count(*) from lexbear_lessons) as lessons;"
+Invoke-RestMethod -Uri http://localhost:8000/adaptive `
+  -Headers @{ Authorization = "Bearer <access_token>" }
 ```
 
-Ожидаемо: `units = 5`, `lessons = 6`.
+Ожидаемо: 6 тем (`CIV`, `POL`, `BUY`, `DEBT`, `HOME`, `WORK`) и поле
+`editorial_note` с пометкой о том, что юридическая экспертиза не проводилась.
+
+**Важно про базу.** Таблиц контента больше нет — миграция 0026 удаляет 26
+таблиц старого курса и прогресс по нему. Миграции проходят только на
+Postgres: на sqlite `alembic upgrade head` падает на 0005 и 0026
+(Postgres-специфичный DDL). Тесты схему не мигрируют, а создают через
+`Base.metadata.create_all`.
 
 ---
 
@@ -210,8 +223,8 @@ $env:PGPASSWORD='postgres'
 4. **Регистрация:** email вида `you@example.com` (валидатор **отклоняет** резервированные
    домены вроде `test.local`), пароль от 8 символов.
    - Успех = сразу открывается основной экран, в ответе приходят `access_token` и `refresh_token`.
-5. **Карта обучения:** должна быть непустой (5 юнитов / 6 уроков).
-   - Пусто → контент не засижен, см. раздел 6.
+5. **Учёба:** должно быть 6 тем и 30 уроков из пака.
+   - Пусто → пак не прошёл проверку, см. раздел 6.
 6. **Урок и ответ на вопрос:** ответ сохраняется, растёт прогресс.
 7. **Кейс:** откройте кейс, отправьте решение.
 8. **Профиль/XP:** XP и достижения обновляются.
@@ -267,7 +280,7 @@ Get-NetTCPConnection -LocalPort 8000 -State Listen |
 | `/health` → `database: fail` | БД не поднята | Запустите `scripts\dev-db.ps1`, проверьте порт 5433 |
 | Регистрация → **500** | Упала миграция/таблица | `dev-start.ps1` теперь падает громко; проверьте `alembic upgrade head` |
 | Регистрация → **422** | Невалидный email | Домен не из резервированных: `you@example.com`, не `you@test.local` |
-| «Карта обучения» пустая | Контент не засижен | Раздел 6, `POST /lexbear/seed` |
+| «Карта обучения» пустая | Пак не прошёл проверку или не загрузился | Раздел 6, `python -m app.modules.adaptive.seed` |
 | Телефон не видит API | Не тот IP / firewall | Проверьте `mobile\.env`, раздел 5 |
 | Консоль «висит» после `PostgreSQL bin: ...` | `pg_ctl start` при живом/полу-живом кластере задаёт вопрос `(Y/N)` и ждёт ввода; `-w` его не отключает | **Исправлено** — устаревший `postmaster.pid` удаляется, запуск идёт через `Start-Process` с stdin из пустого файла и таймаутом 45 с |
 | БД циклически падает, в `pg.log` — `исключением 0xC0000142` | Windows не смогла инициализировать DLL процесса postmaster (антивирус / другой PostgreSQL / повреждённые «зависшие» процессы) | `Get-Process postgres,pg_ctl \| Stop-Process -Force`; перезапустить `dev-db.ps1`. Если повторяется — исключить `.local\pgdata` в антивирусе или пересоздать кластер (`Remove-Item .local\pgdata -Recurse` + повторный запуск) |

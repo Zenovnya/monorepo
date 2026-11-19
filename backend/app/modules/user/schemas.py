@@ -20,8 +20,59 @@ class OnboardOut(BaseModel):
     daily_goal: int
 
 
+class ProfileIn(BaseModel):
+    """Частичное обновление профиля.
+
+    Оба поля необязательны: клиент присылает только то, что меняет.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    # Цель XP в день. Раньше задавалась только в онбординге (минуты × 2),
+    # хотя и онбординг, и настройки обещали «темп можно изменить».
+    daily_goal: int | None = Field(default=None, ge=1, le=500)
+
+
+class ProfileOut(BaseModel):
+    """Текущий профиль пользователя."""
+
+    name: str
+    email: str
+    username: str | None = None
+    gems: int = 0
+    xp: int = 0
+    level: int = 1
+    streak: int = 0
+    lives: int = 5
+    league: str = "Бронза"
+    daily_goal: int = 10
+
+
 class PetBearOut(BaseModel):
     """Результат поглаживания мишки."""
 
     bear_mood: int
     pet_count: int
+
+class DeleteAccountIn(BaseModel):
+    """Подтверждение удаления аккаунта.
+
+    Пароль обязателен: удаление необратимо, и одного украденного access-токена
+    (у него срок 15 минут) для него недостаточно.
+    """
+
+    password: str = Field(min_length=1, max_length=256)
+
+
+class DeleteAccountOut(BaseModel):
+    """Результат удаления аккаунта."""
+
+    deleted: bool = True
+    email: str
+    leftover_rows: int = 0
+    # Отключены ли автосписания. ``False`` значит, что подписки не было или
+    # шлюз не подтвердил отмену — это важно не скрывать: пользователь должен
+    # знать, если платёж придётся отменять через поддержку.
+    had_subscription: bool = False
+    autopayment_stopped: bool = False
+    # Сколько незавершённых платежей удалось отменить.
+    canceled_payments: int = 0

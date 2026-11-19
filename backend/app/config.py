@@ -61,12 +61,31 @@ class Settings(BaseSettings):
     # Общий секрет для проверки HMAC-подписи webhook платёжного шлюза.
     payments_webhook_secret: str = ""
     # URL возврата пользователя после оплаты (в приложение/на страницу).
-    payments_return_url: str = ""
+    # По умолчанию ведём в deep link приложения: после оплаты в браузере
+    # пользователь должен вернуться в приложение, а не остаться на пустой
+    # странице шлюза. Схема совпадает с app.json (mobile/app.json scheme).
+    payments_return_url: str = "lapazakona://payment-return"
 
-    # --- ЮKassa (наследие; используется провайдером yookassa, если включён) ---
+    # --- ЮKassa (используется провайдером yookassa при PAYMENT_PROVIDER=yookassa) ---
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_webhook_secret: str = ""
+    # Разрешать шлюзу сохранять способ оплаты. Без этого автопродление
+    # подписки невозможно: ЮKassa не сможет списать деньги без пользователя.
+    # Выключайте, если автосписания не планируются.
+    payments_save_payment_method: bool = True
+
+    # --- Почта (Resend) ---
+    # Сброс пароля и другие письма. Без ключа письма не отправляются,
+    # а /auth/forgot-password отвечает успешно (не раскрывая, есть ли email).
+    resend_api_key: str = ""
+    # Адрес отправителя. Домен должен быть подтверждён в Resend.
+    # Для тестов Resend разрешает onboarding@resend.dev.
+    email_from: str = "LexBear <onboarding@resend.dev>"
+    # Базовый адрес приложения для ссылок в письмах.
+    app_base_url: str = "http://localhost:19006"
+    # Сколько живёт ссылка сброса пароля.
+    password_reset_ttl_minutes: int = 30
 
     # --- Аналитика ---
     amplitude_api_key: str = ""

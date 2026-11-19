@@ -14,9 +14,18 @@ export const gamificationApi = {
   // Список достижений
   achievements: () => apiClient.get('/gamification/achievements').then((r) => r.data),
 
+  // Прогресс по ежедневной цели (XP за сегодня против daily_goal)
+  dailyGoal: () => apiClient.get('/gamification/daily-goal').then((r) => r.data),
+
   // Таблица лидеров лиги текущего пользователя
   leaderboard: (limit = 30) =>
     apiClient.get('/gamification/leaderboard', { params: { limit } }).then((r) => r.data),
+
+  // Доначислить жизни, накопившиеся по таймеру (идемпотентно).
+  // Нужен экрану «жизни закончились»: держим его открытым и обновляем
+  // счётчик, не перезагружая всё состояние геймификации.
+  regenerateLives: () =>
+    apiClient.post('/gamification/lives/regenerate').then((r) => r.data),
 
   // Покупка товара за гемы
   purchaseShopItem: (item) =>

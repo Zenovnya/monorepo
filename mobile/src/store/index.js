@@ -73,6 +73,14 @@ export const useAuthStore = create((set, get) => ({
   // Обновление данных юзера отдельно (частичное обновление полей)
   setUser: (patch) => set((state) => ({ user: { ...(state.user || {}), ...patch } })),
 
+  // Одноразовое уведомление для экрана входа. Нужно для событий, которые
+  // происходят, когда приложение уже разлогинено: например удаление аккаунта,
+  // при котором не удалось отменить автоплатёж. Alert на вебе молчит, поэтому
+  // сообщение живёт в сторе и показывается следующим экраном.
+  notice: null,
+  setNotice: (notice) => set({ notice }),
+  clearNotice: () => set({ notice: null }),
+
   logout: async () => {
     await tokenStorage.deleteItemAsync('accessToken');
     await tokenStorage.deleteItemAsync('refreshToken');

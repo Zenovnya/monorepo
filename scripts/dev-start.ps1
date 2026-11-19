@@ -85,17 +85,33 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 # --- 4/5 Сид контента ------------------------------------------------------
 if (-not $SkipSeed) {
     Write-Host '==> 5/5 Сид контента (идемпотентно)'
+    $headers = @{ 'X-Admin-Token' = $env:ADMIN_TOKEN }
+    if (-not $headers['X-Admin-Token']) { $headers['X-Admin-Token'] = 'lexbear-admin-dev-token' }
+
+    # ВАЖНО: раньше ошибка проверки контента проглатывалась в catch, скрипт
+    # печатал «Готово. Бэкенд поднят», а приложение показывало пустые темы.
+    # Теперь ошибка видна и останавливает запуск с подсказкой.
+    #
+    # Сида в БД больше нет: контент — файл backend/app/content_packs/themes.json,
+    # он проверяется теми же правилами, что и импорт. Ручки /lexbear/seed и
+    # /admin/content/reload-adaptive удалены вместе со старым контентом.
+    $seedOk = $true
     try {
-        $headers = @{ 'X-Admin-Token' = $env:ADMIN_TOKEN }
-        if (-not $headers['X-Admin-Token']) { $headers['X-Admin-Token'] = 'lexbear-admin-dev-token' }
-        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lexbear/seed' -Headers $headers -TimeoutSec 120
-        Write-Host ("Сид: " + ($r | ConvertTo-Json -Compress -Depth 4))
+        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/admin/content/pack/validate' -Headers $headers -TimeoutSec 180
+        Write-Host ("Пакет контента: " + ($r | ConvertTo-Json -Compress -Depth 4))
     } catch {
-        Write-Host "Сид не выполнен: $($_.Exception.Message)"
-        Write-Host '(API уже работает — контент можно залить позже вручную, см. инструкцию)'
+        $seedOk = $false
+        Write-Host "ОШИБКА проверки пака: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host 'Проверьте: backend/app/content_packs/themes.json, лог .local\backend.err.log.'
+        Write-Host 'Проверить локально: cd backend; python -m app.modules.adaptive.seed'
+    }
+
+    if (-not $seedOk) {
+        Write-Host ''
+        Write-Host 'Пакет контента не прошёл проверку — практика в приложении будет пустой.' -ForegroundColor Yellow
     }
 } else {
-    Write-Host '==> 5/5 Сид пропущен (-SkipSeed)'
+    Write-Host '==> 5/5 Проверка контента пропущена (-SkipSeed)'
 }
 
 # --- LAN-адреса для телефона ----------------------------------------------

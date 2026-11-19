@@ -26,8 +26,14 @@
 |---|---|---|
 | `DATABASE_URL` | Строка подключения к PostgreSQL (асинхронный драйвер) | `postgresql+asyncpg://user:pass@host:5432/lexbear` |
 | `REDIS_URL` | URL Redis для кэширования | `redis://default:pass@host:6379` |
-| `SECRET_KEY` | Секрет для JWT-токенов | — |
+| `JWT_SECRET_KEY` | Секрет для JWT-токенов, **минимум 32 символа** | `openssl rand -hex 32` |
+| `ADMIN_TOKEN` | Токен админки контента (`X-Admin-Token`) | `openssl rand -hex 24` |
 | `AMPLITUDE_API_KEY` | API-ключ Amplitude (аналитика) | — |
+
+> **`JWT_SECRET_KEY`, а не `SECRET_KEY`.** Раньше здесь стояло `SECRET_KEY`,
+> но `app/config.py` читает `jwt_secret_key`, и при `DEBUG=false` приложение
+> отказывается стартовать, если значение короче 32 символов. Деплой по старой
+> инструкции падал на старте с ошибкой валидации настроек.
 
 Опциональные переменные:
 

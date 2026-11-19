@@ -1,1 +1,57 @@
+name: Ошибка в юридическом контенте
+description: Кейс, урок или статья дают неверный ответ либо устаревшую норму
+labels: ["content", "legal-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Юридический контент проверяется по `docs/legal-content-policy.md`.
+        Если в опубликованном кейсе нашлась ошибка, авторы сначала снимают его
+        с показа (вкладка «Юрпроверка» → «Снять с показа»), а потом правят —
+        так пользователи не учатся по неверному разбору, пока идёт работа.
 
+  - type: input
+    id: where
+    attributes:
+      label: Где ошибка
+      description: Slug кейса/урока или экран в приложении.
+      placeholder: kase / uk-159-3-krupny / «Общение с полицией», урок 12
+    validations:
+      required: true
+
+  - type: textarea
+    id: text
+    attributes:
+      label: Что написано сейчас
+      description: Дословная цитата — по ней проще найти место в `content_packs`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: correct
+    attributes:
+      label: Как должно быть и на основании чего
+      description: |
+        Ссылка на норму (статья, пункт) и, если есть, судебная практика.
+        Без ссылки на норму правка не принимается: «мне кажется» — не основание.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Насколько опасно
+      options:
+        - Совет может навредить (уголовная или административная ответственность)
+        - Совет юридически неверен, но не опасен
+        - Устаревшая норма или опечатка
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Подтверждение
+      options:
+        - label: Я понимаю, что до правки кейс будет снят с показа
+          required: true

@@ -16,6 +16,17 @@ export const authApi = {
       })
       .then((r) => r.data),
 
+  // Запрос письма со ссылкой сброса пароля. Ответ не раскрывает,
+  // существует ли такой аккаунт.
+  forgotPassword: (email) =>
+    apiClient.post('/auth/forgot-password', { email }).then((r) => r.data),
+
+  // Установка нового пароля по одноразовому токену из письма.
+  resetPassword: (token, password) =>
+    apiClient
+      .post('/auth/reset-password', { token, password })
+      .then((r) => r.data),
+
   // Обновляет пару токенов по refresh-токену.
   refresh: (refreshToken) =>
     apiClient

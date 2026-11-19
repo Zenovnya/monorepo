@@ -1,1 +1,45 @@
+# Автоматические PR на обновление зависимостей.
+#
+# Зачем: `pip-audit` в CI ловит уязвимые версии, но не обновляет их. Без
+# dependabot уязвимость находят на ревью или, хуже, в проде.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      prefix: "deps(backend)"
 
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mobile
+    commit-message:
+      prefix: "deps(mobile)"
+    # Expo обновляется связкой: отдельный bump react-native или expo-* ломает
+    # совместимость, поэтому такие пакеты обновляем вручную через `expo install`.
+    ignore:
+      - dependency-name: expo
+      - dependency-name: react-native
+      - dependency-name: react
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "deps(ci)"

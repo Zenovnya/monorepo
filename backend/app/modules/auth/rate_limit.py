@@ -38,3 +38,11 @@ auth_login_rate_limit = Depends(
 auth_register_rate_limit = Depends(
     _rate_limit("auth_register", max_requests=10, window_seconds=60)
 )
+# Сброс пароля: письма стоят денег и могут использоваться для спама чужому
+# адресу, поэтому лимит жёсткий.
+auth_forgot_rate_limit = Depends(
+    _rate_limit("auth_forgot", max_requests=3, window_seconds=300)
+)
+auth_reset_rate_limit = Depends(
+    _rate_limit("auth_reset", max_requests=10, window_seconds=300)
+)

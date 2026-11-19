@@ -1,22 +1,43 @@
 """Роуты модуля аутентификации."""
 
+import logging
+from urllib.parse import quote
+
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.modules.auth import service
 from app.modules.auth.rate_limit import (
+    auth_forgot_rate_limit,
     auth_login_rate_limit,
     auth_register_rate_limit,
+    auth_reset_rate_limit,
 )
 from app.modules.auth.schemas import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LogoutRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     TokenPair,
     UserLogin,
     UserRead,
     UserRegister,
 )
+
+from sqlalchemy import select
+
+from app.config import get_settings
+from app.email_service import (
+    EmailNotConfiguredError,
+    build_password_reset_email,
+    send_email,
+)
+from app.modules.auth.models import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -130,3 +151,78 @@ async def get_current_user(
         return await service.get_user_by_id(session, user_id)
     except service.AuthError as exc:
         raise _to_http_error(exc) from exc
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    dependencies=[auth_forgot_rate_limit],
+)
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Отправляет письмо со ссылкой сброса пароля.
+
+    Ответ одинаковый независимо от того, зарегистрирован email или нет:
+    иначе эндпоинт превращается в проверялку существующих аккаунтов.
+    Ошибки отправки письма тоже не пробрасываются наружу — они логируются.
+    """
+    settings = get_settings()
+    user = await session.scalar(select(User).where(User.email == data.email))
+
+    if user is not None and user.is_active:
+        raw_token = await service.create_password_reset_token(session, user.id)
+        await session.commit()
+
+        link = (
+            f"{settings.app_base_url.rstrip('/')}/reset-password"
+            f"?token={quote(raw_token)}"
+        )
+        message = build_password_reset_email(
+            name=user.name,
+            link=link,
+            ttl_minutes=settings.password_reset_ttl_minutes,
+        )
+        try:
+            await send_email(
+                to=user.email,
+                subject=message["subject"],
+                html=message["html"],
+                text=message["text"],
+            )
+        except EmailNotConfiguredError:
+            # Почта не настроена: токен создан, но письма нет. Сообщаем только
+            # в лог, чтобы не раскрывать состояние инфраструктуры.
+            logger.warning(
+                "Сброс пароля запрошен, но RESEND_API_KEY не задан — письмо не отправлено"
+            )
+        except httpx.HTTPError:
+            logger.warning("Resend недоступен, письмо со сбросом не отправлено")
+
+    return ForgotPasswordResponse()
+
+
+@router.post(
+    "/reset-password",
+    response_model=UserRead,
+    dependencies=[auth_reset_rate_limit],
+)
+async def reset_password(
+    data: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Устанавливает новый пароль по одноразовому токену из письма."""
+    try:
+        user = await service.reset_password(session, data.token, data.password)
+    except service.WeakPasswordError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except service.InvalidResetTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return user

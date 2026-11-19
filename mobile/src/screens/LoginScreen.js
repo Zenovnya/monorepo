@@ -6,8 +6,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
-import Animated, { SlideInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -24,6 +25,7 @@ import {
 } from '../components/KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 import { useLogin } from '../hooks/useAuth';
+import { useAuthStore } from '../store';
 import { useNavigation } from '@react-navigation/native';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -38,6 +40,11 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState({});
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [hasError, setHasError] = useState(false);
+  // Одноразовое уведомление (например, «автоплатёж не отменён» после удаления
+  // аккаунта). Alert на вебе не показывается, поэтому сообщение приходит
+  // через стор и живёт на экране входа.
+  const notice = useAuthStore((s) => s.notice);
+  const clearNotice = useAuthStore((s) => s.clearNotice);
 
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
@@ -94,7 +101,7 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
-          entering={ZoomIn.duration(600).springify().damping(8)}
+          entering={FadeIn.duration(220).easing(Easing.out(Easing.quad))}
           style={styles.mascotWrap}
         >
           <KhokhlomaMedallion size={138}>
@@ -109,21 +116,30 @@ export default function LoginScreen() {
 
         <Text style={styles.brandWordmark}>§ LEXBEAR</Text>
 
-        <Animated.Text
-          entering={SlideInUp.delay(200).springify().damping(9).mass(0.6)}
-          style={styles.title}
-        >
-          Здравствуйте!
-        </Animated.Text>
-        <Animated.Text
-          entering={SlideInUp.delay(280).springify().damping(9).mass(0.6)}
-          style={styles.subtitle}
-        >
-          Войдите, чтобы продолжить обучение
-        </Animated.Text>
+        <Text style={styles.title}>Здравствуйте!</Text>
+        <Text style={styles.subtitle}>Войдите, чтобы продолжить обучение</Text>
+
+        {notice ? (
+          <Animated.View
+            entering={FadeInDown.duration(240).easing(Easing.out(Easing.cubic))}
+            style={styles.noticeCard}
+            accessibilityRole="alert"
+          >
+            <Text style={styles.noticeTitle}>{notice.title}</Text>
+            <Text style={styles.noticeText}>{notice.text}</Text>
+            <Pressable
+              onPress={clearNotice}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Скрыть уведомление"
+            >
+              <Text style={styles.noticeDismiss}>Понятно</Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
 
         <Animated.View
-          entering={SlideInUp.delay(350).springify().damping(11).mass(0.8)}
+          entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))}
           style={styles.formBlock}
         >
           <AnimatedInput
@@ -159,7 +175,14 @@ export default function LoginScreen() {
               onChange={setRemember}
               label="Запомнить меня"
             />
-            <Text style={styles.link}>Забыли?</Text>
+            <Pressable
+              onPress={() => navigation.navigate('ForgotPassword')}
+              accessibilityRole="button"
+              accessibilityLabel="Забыли пароль"
+              hitSlop={8}
+            >
+              <Text style={styles.link}>Забыли?</Text>
+            </Pressable>
           </View>
 
           <AnimatedButton
@@ -171,7 +194,6 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View
-          entering={SlideInUp.delay(500).springify().damping(11)}
           style={styles.dividerWrap}
         >
           <KhokhlomaDivider label="или" />
@@ -179,7 +201,6 @@ export default function LoginScreen() {
 
         <View style={styles.socialRow}>
           <Animated.View
-            entering={ZoomIn.delay(600).springify().damping(8)}
             style={styles.socialItem}
           >
             <SocialButton
@@ -195,7 +216,6 @@ export default function LoginScreen() {
             />
           </Animated.View>
           <Animated.View
-            entering={ZoomIn.delay(680).springify().damping(8)}
             style={styles.socialItem}
           >
             <SocialButton
@@ -211,7 +231,7 @@ export default function LoginScreen() {
         </View>
 
         <Animated.View
-          entering={SlideInUp.delay(780).springify().damping(11)}
+          entering={FadeIn.duration(240).easing(Easing.out(Easing.quad))}
           style={styles.footerBlock}
         >
           <View style={styles.switchCard}>
@@ -236,6 +256,31 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  noticeCard: {
+    backgroundColor: '#FDECEA',
+    borderColor: brand.red,
+    borderWidth: 2,
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+    marginTop: 8,
+  },
+  noticeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.red,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text,
+  },
+  noticeDismiss: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '800',
+    color: brand.red,
+  },
   root: {
     flex: 1,
     backgroundColor: colors.background,

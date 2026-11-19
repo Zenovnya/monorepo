@@ -11,7 +11,9 @@ from app.modules.auth import service as auth_service
 from app.modules.auth.models import User
 from app.modules.gamification import service
 from app.modules.gamification.schemas import (
+    DailyGoalRead,
     GamificationRead,
+    LivesRead,
     LeaderboardRead,
     ShopPurchaseIn,
     ShopPurchaseOut,
@@ -76,6 +78,28 @@ async def gamification_add_xp(
     return result
 
 
+@router.post("/lives/regenerate", response_model=LivesRead)
+async def regenerate_lives_endpoint(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Доначисляет жизни, накопившиеся со времени последней траты.
+
+    Отдельный роут нужен клиенту, который держит экран урока открытым: он
+    обновляет счётчик без перезагрузки состояния геймификации (и без сброса
+    кэша 120 секунд). Идемпотентно: повторный вызов ничего не добавит.
+    """
+    user_id = _get_current_user_id(authorization)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    service.regenerate_lives(user)
+    await session.commit()
+
+    return service.lives_state(user)
+
+
 @router.get("/achievements")
 async def gamification_achievements(
     authorization: str = Depends(auth_service.get_bearer_token),
@@ -95,6 +119,22 @@ async def gamification_achievements(
             for a in achievements
         ]
     }
+
+
+@router.get("/daily-goal", response_model=DailyGoalRead)
+async def gamification_daily_goal(
+    authorization: str = Depends(auth_service.get_bearer_token),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Прогресс по ежедневной цели (XP за сегодня против daily_goal)."""
+    user_id = _get_current_user_id(authorization)
+    try:
+        return await service.get_daily_progress(session, user_id)
+    except service.GamificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/leaderboard", response_model=LeaderboardRead)
@@ -129,7 +169,7 @@ async def gamification_shop_purchase(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
-    except service.InsufficientGemsError as exc:
+    except (service.InsufficientGemsError, service.ItemAlreadyOwnedError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

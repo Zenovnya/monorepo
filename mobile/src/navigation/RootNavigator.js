@@ -5,24 +5,25 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { useAuthStore } from '../store';
 import { colors } from '../theme/colors';
+import { TabBarIcon } from './TabBarIcon';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import LearnScreen from '../screens/LearnScreen';
-import CasesScreen from '../screens/CasesScreen';
+import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
 import BearScreen from '../screens/BearScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LessonScreen from '../screens/LessonScreen';
-import CaseDetailScreen from '../screens/CaseDetailScreen';
 import LeagueScreen from '../screens/LeagueScreen';
-import ArticlesScreen from '../screens/ArticlesScreen';
 import ShopScreen from '../screens/ShopScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
-import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
-import AssessmentScreen from '../screens/AssessmentScreen';
-import LearningProgressScreen from '../screens/LearningProgressScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
+import PaymentReturnScreen from '../screens/PaymentReturnScreen';
+import DeleteAccountScreen from '../screens/DeleteAccountScreen';
+import NoLivesScreen from '../screens/NoLivesScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -48,12 +49,12 @@ function MainTabs() {
       <Tab.Screen
         name="Learn"
         component={LearnScreen}
-        options={{ tabBarLabel: 'Учёба', tabBarIcon: () => <Text style={{ fontSize: 22 }}>🎓</Text> }}
+        options={{ tabBarLabel: 'Учёба', tabBarIcon: ({ focused }) => <TabBarIcon glyph="🎓" focused={focused} /> }}
       />
       <Tab.Screen
-        name="Cases"
-        component={CasesScreen}
-        options={{ tabBarLabel: 'Кейсы', tabBarIcon: () => <Text style={{ fontSize: 22 }}>⚖️</Text> }}
+        name="Adaptive"
+        component={AdaptiveLearningScreen}
+        options={{ tabBarLabel: 'Адаптивное', tabBarIcon: ({ focused }) => <TabBarIcon glyph="⚖️" focused={focused} /> }}
       />
       <Tab.Screen
         name="Bear"
@@ -63,7 +64,7 @@ function MainTabs() {
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: 'Профиль', tabBarIcon: () => <Text style={{ fontSize: 22 }}>👤</Text> }}
+        options={{ tabBarLabel: 'Профиль', tabBarIcon: ({ focused }) => <TabBarIcon glyph="👤" focused={focused} /> }}
       />
     </Tab.Navigator>
   );
@@ -82,24 +83,36 @@ function AuthStack() {
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+      />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
     </Stack.Navigator>
   );
 }
 
 function MainStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Плавный переход вместо резкой смены экрана. Первый экран (табы)
+        // не анимируем: он должен появляться сразу после сплэша.
+        animation: 'slide_from_right',
+        animationDuration: 280,
+        gestureEnabled: true,
+      }}
+    >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Lesson" component={LessonScreen} />
-      <Stack.Screen name="CaseDetail" component={CaseDetailScreen} />
       <Stack.Screen name="League" component={LeagueScreen} />
-      <Stack.Screen name="Articles" component={ArticlesScreen} />
       <Stack.Screen name="Shop" component={ShopScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Premium" component={PremiumScreen} />
-      <Stack.Screen name="AdaptiveLearning" component={AdaptiveLearningScreen} />
-      <Stack.Screen name="Assessment" component={AssessmentScreen} />
-      <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
+      <Stack.Screen name="PaymentReturn" component={PaymentReturnScreen} />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
+      <Stack.Screen name="NoLives" component={NoLivesScreen} />
     </Stack.Navigator>
   );
 }

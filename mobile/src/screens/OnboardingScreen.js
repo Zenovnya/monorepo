@@ -4,11 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
+
+  TextInput,
 } from 'react-native';
 import { userApi } from '../api/user';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { PressableScale } from '../components/PressableScale';
 import {
   brand,
   KhokhlomaMedallion,
@@ -38,23 +40,36 @@ const MINUTE_LABELS = {
  * и лаково-красная главная кнопка действия (#C9362B).
  */
 export default function OnboardingScreen() {
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState('rights');
   const [mins, setMins] = useState(10);
+  // Имя можно поправить здесь же: раньше онбординг его не спрашивал вообще,
+  // и бэкенд сохранял только цель и минуты.
+  const [name, setName] = useState(user?.name ?? '');
   const [loading, setLoading] = useState(false);
-  const setUser = useAuthStore((s) => s.setUser);
+
+  const TOTAL_STEPS = 4;
 
   const finish = async () => {
     setLoading(true);
+    const trimmed = name.trim();
     try {
-      await userApi.onboard({ goal, minutes: mins });
-      setUser({ onboarded: true });
+      await userApi.onboard({
+        goal,
+        minutes: mins,
+        ...(trimmed ? { name: trimmed } : {}),
+      });
+      setUser({ onboarded: true, ...(trimmed ? { name: trimmed } : {}) });
     } catch {
-      setUser({ onboarded: true });
+      // Не блокируем вход из-за сети: имя можно поменять в профиле.
+      setUser({ onboarded: true, ...(trimmed ? { name: trimmed } : {}) });
     }
   };
 
-  const progressPct = ((step + 1) / 3) * 100;
+  const progressPct = ((step + 1) / TOTAL_STEPS) * 100;
 
   return (
     <View style={styles.container}>
@@ -63,13 +78,13 @@ export default function OnboardingScreen() {
       {/* Верхняя полоса */}
       <View style={styles.topBar}>
         {step > 0 ? (
-          <Pressable
+          <PressableScale
             onPress={() => setStep((s) => s - 1)}
             hitSlop={10}
             style={styles.backArrowBtn}
           >
             <Text style={styles.backArrow}>←</Text>
-          </Pressable>
+          </PressableScale>
         ) : (
           <View style={styles.backArrowSpacer} />
         )}
@@ -127,13 +142,12 @@ export default function OnboardingScreen() {
               {goals.map((g) => {
                 const isSel = goal === g.key;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={g.key}
                     onPress={() => setGoal(g.key)}
-                    style={({ pressed }) => [
+                    style={[
                       styles.choiceRow,
                       isSel && styles.cardSelected,
-                      pressed && styles.cardPressed,
                     ]}
                   >
                     <View
@@ -154,7 +168,7 @@ export default function OnboardingScreen() {
                         <Text style={styles.checkMark}>✓</Text>
                       </View>
                     ) : null}
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -162,6 +176,39 @@ export default function OnboardingScreen() {
         )}
 
         {/* ШАГ 2: Дневной темп */}
+        {step === 3 && (
+          <View style={styles.quizWrap}>
+            <View style={styles.characterPrompt}>
+              <AnimatedMascot size={84} wave />
+              <View style={styles.sideBubbleWrap}>
+                <View style={styles.sideBubbleTail} />
+                <View style={styles.sideBubble}>
+                  <Text style={styles.sideBubbleText}>
+                    Как к вам обращаться?
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              maxLength={40}
+              placeholder="Ваше имя"
+              placeholderTextColor={colors.locked}
+              returnKeyType="done"
+              onSubmitEditing={finish}
+              style={styles.nameInput}
+              accessibilityLabel="Имя"
+            />
+
+            <Text style={styles.infoFootnote}>
+              Имя видно в профиле и в таблице лиги. Поменять можно в любой
+              момент.
+            </Text>
+          </View>
+        )}
+
         {step === 2 && (
           <View style={styles.quizWrap}>
             <View style={styles.characterPrompt}>
@@ -180,13 +227,12 @@ export default function OnboardingScreen() {
               {minutes.map((m) => {
                 const isSel = mins === m;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={m}
                     onPress={() => setMins(m)}
-                    style={({ pressed }) => [
+                    style={[
                       styles.minRowCard,
                       isSel && styles.cardSelected,
-                      pressed && styles.cardPressed,
                     ]}
                   >
                     <Text
@@ -209,7 +255,7 @@ export default function OnboardingScreen() {
                         {MINUTE_LABELS[m]}
                       </Text>
                     </View>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -223,17 +269,18 @@ export default function OnboardingScreen() {
 
       {/* Главная кнопка — Лаковый красный (#C9362B) */}
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={[
             styles.btnRed,
             loading && styles.btnDisabled,
-            pressed && !loading && styles.btnPressed,
           ]}
-          onPress={step < 2 ? () => setStep((s) => s + 1) : finish}
+          onPress={
+            step < TOTAL_STEPS - 1 ? () => setStep((s) => s + 1) : finish
+          }
           disabled={loading}
         >
           <Text style={styles.btnText}>
-            {step < 2
+            {step < TOTAL_STEPS - 1
               ? step === 0
                 ? 'Начать'
                 : 'Дальше'
@@ -241,13 +288,26 @@ export default function OnboardingScreen() {
               ? 'Готовим путь…'
               : 'Начать путь'}
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  nameInput: {
+    marginTop: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    backgroundColor: colors.card,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

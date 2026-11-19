@@ -48,7 +48,25 @@ export const Skeleton = ({ height = 16, width = '100%', style }) => {
   );
 };
 
-const CenteredState = ({ children }) => <View style={styles.centered}>{children}</View>;
+const CenteredState = ({ children, style, compact }) => (
+  <View style={[styles.centered, compact && styles.centeredCompact, style]}>
+    {children}
+  </View>
+);
+
+/**
+ * Общая шапка состояния: иллюстрация и заголовок.
+ *
+ * ``illustration`` — готовый узел (маскот, сургучная печать): экраны уже
+ * рисуют свою подачу, и заменять её на нейтральную иконку было бы шагом назад.
+ * Компонент отвечает только за расположение и типографику.
+ */
+const StateHead = ({ illustration, title }) => (
+  <>
+    {illustration}
+    <Text style={styles.title}>{title}</Text>
+  </>
+);
 
 /** Ошибка загрузки данных с возможностью повторить. */
 export const ErrorState = ({
@@ -57,9 +75,12 @@ export const ErrorState = ({
   onRetry,
   retryTitle = 'Повторить',
   action,
+  illustration,
+  style,
+  compact = false,
 }) => (
-  <CenteredState>
-    <Text style={styles.title}>{title}</Text>
+  <CenteredState style={style} compact={compact}>
+    <StateHead illustration={illustration} title={title} />
     {message ? <Text style={styles.body}>{message}</Text> : null}
     {action}
     {onRetry ? (
@@ -71,9 +92,17 @@ export const ErrorState = ({
 );
 
 /** Пустой результат: нет кейсов, нет статей, нет достижений. */
-export const EmptyState = ({ title, message, actionTitle, onAction }) => (
-  <CenteredState>
-    <Text style={styles.title}>{title}</Text>
+export const EmptyState = ({
+  title,
+  message,
+  actionTitle,
+  onAction,
+  illustration,
+  style,
+  compact = false,
+}) => (
+  <CenteredState style={style} compact={compact}>
+    <StateHead illustration={illustration} title={title} />
     {message ? <Text style={styles.body}>{message}</Text> : null}
     {onAction ? (
       <View style={styles.action}>
@@ -84,9 +113,10 @@ export const EmptyState = ({ title, message, actionTitle, onAction }) => (
 );
 
 /** Загрузка: спиннер и, опционально, подпись. */
-export const LoadingState = ({ label }) => (
-  <CenteredState>
-    <ActivityIndicator color={colors.text} size="large" />
+export const LoadingState = ({ label, illustration, style, compact = false }) => (
+  <CenteredState style={style} compact={compact}>
+    {illustration}
+    <ActivityIndicator color={colors.text} size={compact ? 'small' : 'large'} />
     {label ? <Text style={[styles.body, styles.loadingLabel]}>{label}</Text> : null}
   </CenteredState>
 );
@@ -99,6 +129,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxl,
     gap: spacing.sm,
+  },
+  // Внутри списка/карточки: не тянется на весь экран и не падает в самый низ.
+  centeredCompact: {
+    flex: 0,
+    paddingVertical: spacing.xl,
   },
   title: { ...typography.title, color: colors.text, textAlign: 'center' },
   body: { ...typography.body, color: colors.subtext, textAlign: 'center' },

@@ -1,1 +1,50 @@
+name: Предложение функции
+description: Новая возможность для пользователя
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Проект на этапе MVP: приоритет — довести существующее до продукта
+        (`docs/mvp-plan.md`). Предложения «добавить ещё» рассматриваются после
+        закрытия текущих этапов.
 
+  - type: textarea
+    id: user-problem
+    attributes:
+      label: Проблема пользователя
+      description: |
+        Что человек не может сделать сейчас. Описывайте ситуацию, а не решение:
+        «не понимаю, почему кейс скрыт» лучше, чем «добавить кнопку».
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+      description: Как это может выглядеть. Чем проще — тем лучше.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Что уже есть и почему не подходит
+      description: |
+        Проверьте, не решается ли задача текущими экранами и ручками API.
+        Дублирующая функция хуже отсутствующей.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: cost
+    attributes:
+      label: Оценка объёма
+      options:
+        - Только мобилка
+        - Только backend
+        - И мобилка, и backend
+        - Нужны новые данные или платежи
+    validations:
+      required: true
