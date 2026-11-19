@@ -4,14 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 
 import { gamificationApi } from '../api/gamification';
 import { useAuthStore } from '../store';
-import { colors } from '../theme/colors';
+import { colors } from '../theme/tokens';
 
 /**
  * Верхняя панель статистики: стрик, XP, гемы, жизни.
  *
- * Жизни берём из `/gamification/me`, а не из auth-store: стор заполняется
- * один раз при гидратации сессии и после первого же неправильного ответа
- * показывал устаревшее «5». Тот же ключ запроса используют урок, магазин и
+ * Редизайн (техзадание §1.1): убраны тяжёлые черные обводки вокруг
+ * показателей. Иконки и цифры стоят свободно на легких полупрозрачных
+ * подложках без рамок. Панель — sticky сверху с тонкой разделительной
+ * линией (borderBottomWidth: 1, #E6DFD3).
+ *
+ * Жизни берутся из /gamification/me, а не из auth-store: стор заполняется
+ * один раз при гидратации и после первого неправильного ответа показывал
+ * устаревшее значение. Тот же ключ запроса используют урок, магазин и
  * экран «жизни закончились», поэтому любая инвалидация обновляет и шапку.
  */
 export function TopStats() {
@@ -21,7 +26,6 @@ export function TopStats() {
   const { data } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
-    // Пока запас не полный, раз в минуту подтягиваем восстановленную жизнь.
     refetchInterval: (query) => {
       const lives = query.state.data?.lives;
       const max = query.state.data?.max_lives ?? 5;
@@ -34,27 +38,27 @@ export function TopStats() {
   const xp = data?.xp ?? user?.xp ?? 0;
   const gems = data?.gems ?? user?.gems ?? 0;
 
-  // Держим стор в согласии с сервером — на него опираются другие экраны.
   useEffect(() => {
     if (typeof data?.lives !== 'number') return;
     if (user?.lives === data.lives) return;
     setUser({ lives: data.lives });
   }, [data?.lives, user?.lives, setUser]);
 
+  const stats = [
+    { icon: '🔥', value: streak, tint: colors.streakTint },
+    { icon: '⭐', value: `${xp} XP`, tint: colors.successTint },
+    { icon: '💎', value: gems, tint: colors.skyTint },
+    { icon: '❤️', value: lives, tint: colors.errorTint },
+  ];
+
   return (
     <View style={styles.row}>
-      <View style={[styles.chip, { backgroundColor: '#FFF4D1' }]}>
-        <Text style={styles.chipText}>🔥 {streak}</Text>
-      </View>
-      <View style={[styles.chip, { backgroundColor: '#E8F6EE' }]}>
-        <Text style={styles.chipText}>⭐ {xp} XP</Text>
-      </View>
-      <View style={[styles.chip, { backgroundColor: '#DFF1FB' }]}>
-        <Text style={styles.chipText}>💎 {gems}</Text>
-      </View>
-      <View style={[styles.chip, { backgroundColor: '#FDE3DF' }]}>
-        <Text style={styles.chipText}>❤️ {lives}</Text>
-      </View>
+      {stats.map((stat, index) => (
+        <View key={index} style={[styles.chip, { backgroundColor: stat.tint }]}>
+          <Text style={styles.chipIcon}>{stat.icon}</Text>
+          <Text style={styles.chipText}>{stat.value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -65,16 +69,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
     gap: 8,
   },
   chip: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
     borderRadius: 999,
-    borderWidth: 2,
-    borderColor: colors.border,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
   },
+  chipIcon: { fontSize: 14 },
   chipText: { fontSize: 13, fontWeight: '800', color: colors.text },
 });
+
+export default TopStats;

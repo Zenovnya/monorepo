@@ -3,14 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Edit2, Medal } from 'lucide-react-native';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { PressableScale } from '../components/PressableScale';
+import { TactilePressable } from '../components/TactilePressable';
+import { ScreenWrapper } from '../components/ScreenWrapper';
 import { gamificationApi } from '../api/gamification';
 import { adaptiveApi } from '../api/adaptive';
 import { userApi } from '../api/user';
@@ -43,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   // Редактирование имени: до этого сменить имя было нельзя вообще —
   // в профиле навсегда оставался дефолт «Юрист».
@@ -124,16 +127,6 @@ export default function ProfileScreen({ navigation }) {
 
   const rows = [
     {
-      key: 'bear',
-      title: 'Оформление мишки',
-      hint: 'Костюмы, галстуки, кабинет',
-    },
-    {
-      key: 'topics',
-      title: 'Темы и уроки',
-      hint: '6 тем, 30 уроков и приоритет практики',
-    },
-    {
       key: 'league',
       title: 'Лига',
       hint: 'Рейтинг и награды недели',
@@ -183,26 +176,25 @@ export default function ProfileScreen({ navigation }) {
   const premiumRow = rows.find((r) => r.gold);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <ScreenWrapper scroll contentStyle={styles.content}>
       <PaperGrain />
 
       {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}
       <View style={styles.coverBanner}>
-        <PressableScale
+        <TactilePressable
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Настройки"
           style={[
             styles.settingsBtn,
+            { marginTop: insets.top + 4 },
           ]}
           onPress={() => navigation.navigate('Settings')}
+          haptic
+          scale={0.92}
         >
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </PressableScale>
+          <Edit2 size={18} color={colors.text} />
+        </TactilePressable>
 
         <KhokhlomaMedallion size={146}>
           <AnimatedMascot
@@ -272,7 +264,7 @@ export default function ProfileScreen({ navigation }) {
             </PressableScale>
           </View>
         ) : (
-          <PressableScale
+          <TactilePressable
             accessibilityRole="button"
             accessibilityLabel="Изменить имя"
             onPress={() => {
@@ -282,34 +274,52 @@ export default function ProfileScreen({ navigation }) {
             style={[
               styles.nameRow,
             ]}
+            haptic
+            scale={0.96}
           >
             <Text style={styles.name}>{user?.name || 'Юрист'}</Text>
-            <Text style={styles.namePencil}>✎</Text>
-          </PressableScale>
+            <View style={styles.editBadge}>
+              <Edit2 size={14} color={colors.text} />
+            </View>
+          </TactilePressable>
         )}
 
         {nameError ? (
           <Text style={styles.nameError}>{nameError}</Text>
         ) : null}
         <View style={styles.pillsRow}>
-          <View style={styles.leaguePill}>
+          <TactilePressable
+            accessibilityRole="button"
+            accessibilityLabel="Лига"
+            style={styles.leaguePill}
+            haptic
+            scale={0.96}
+          >
             <Text style={styles.leaguePillText}>
               🏆 {user?.league || 'Бронза'}
             </Text>
-          </View>
-          <View style={styles.levelPill}>
+          </TactilePressable>
+          <TactilePressable
+            accessibilityRole="button"
+            accessibilityLabel="Уровень"
+            style={styles.levelPill}
+            haptic
+            scale={0.96}
+          >
             <Text style={styles.levelPillText}>Уровень {level}</Text>
-          </View>
+          </TactilePressable>
         </View>
       </View>
 
       {/* Парадная лаковая карточка LexBear Plus (чернильный лак + золото и красный хохломы) */}
       {premiumRow && (
-        <PressableScale
+        <TactilePressable
           style={[
             styles.superCard,
           ]}
           onPress={() => navigate(premiumRow.key)}
+          haptic
+          scale={0.97}
         >
           <KhokhlomaCorners variant="onDark" size="sm" inset={7} />
           <WaxSeal label="+" tone="red" size={44} />
@@ -321,28 +331,49 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.superCtaCircle}>
             <Text style={styles.superCtaArrow}>→</Text>
           </View>
-        </PressableScale>
+        </TactilePressable>
       )}
 
-      {/* Чистая сетка «Обзор» 2×2 */}
+      {/* Чистая сетка «Обзор» 2×2 — объёмные карточки с 3D-бортиком */}
       <DocumentSectionHeader title="Обзор" style={styles.sectionHeader} />
       <View style={styles.metricsGrid}>
-        {metrics.map((m) => (
-          <View key={m.label} style={styles.metricCard}>
-            <Text style={[styles.metricIcon, { color: brand.gold }]}>
-              {m.icon}
-            </Text>
-            <View style={styles.metricBody}>
-              <Text style={[styles.metricValue, { color: m.accent }]}>
-                {m.value}
+        {metrics.map((m) => {
+          const isMistakes = m.label === 'Ошибки';
+          const content = (
+            <>
+              <Text style={[styles.metricIcon, { color: brand.gold }]}>
+                {m.icon}
               </Text>
-              <Text style={styles.metricLabel}>{m.label}</Text>
-            </View>
-          </View>
-        ))}
+              <View style={styles.metricBody}>
+                <Text style={[styles.metricValue, { color: m.accent }]}>
+                  {m.value}
+                </Text>
+                <Text style={styles.metricLabel}>{m.label}</Text>
+              </View>
+              {isMistakes ? (
+                <View style={styles.metricArrow}>
+                  <Text style={styles.metricArrowText}>→</Text>
+                </View>
+              ) : null}
+            </>
+          );
+          return (
+            <TactilePressable
+              key={m.label}
+              accessibilityRole="button"
+              accessibilityLabel={m.label}
+              style={styles.metricCard}
+              onPress={isMistakes ? () => navigate('Adaptive') : undefined}
+              haptic={isMistakes}
+              scale={0.97}
+            >
+              {content}
+            </TactilePressable>
+          );
+        })}
       </View>
 
-      {/* Рамки достижений — точечные красно-золотые уголки хохломы и сургучные медали */}
+      {/* Блок «Достижения» — сетка медалей в стиле Chess.com */}
       {achievements.length > 0 && (
         <View>
           <DocumentSectionHeader
@@ -350,23 +381,28 @@ export default function ProfileScreen({ navigation }) {
             meta={`${achievements.length} наград`}
             style={styles.sectionHeader}
           />
-          <View style={styles.achList}>
-            {achievements.map((a, idx) => (
-              <View key={a.code} style={styles.achFrame}>
-                <KhokhlomaCorners variant="light" size="sm" inset={6} />
-                <WaxSeal
-                  label="★"
-                  size={44}
-                  tone={idx % 2 === 0 ? 'gold' : 'red'}
-                />
-                <View style={styles.achBody}>
-                  <Text style={styles.achTitle}>{a.title}</Text>
+          <View style={styles.achGrid}>
+            {achievements.map((a, idx) => {
+              const tone = idx % 2 === 0 ? 'gold' : 'red';
+              const color =
+                tone === 'gold' ? brand.goldBorder : brand.redDark;
+              const bg = tone === 'gold' ? brand.goldSoft : brand.redSoft;
+              return (
+                <View key={a.code} style={[styles.medalCard, { borderColor: color }]}>
+                  <View style={[styles.medalInner, { backgroundColor: bg }]}>
+                    <Medal size={24} color={color} />
+                  </View>
+                  <Text style={styles.medalTitle} numberOfLines={2}>
+                    {a.title}
+                  </Text>
                   {a.description ? (
-                    <Text style={styles.achDesc}>{a.description}</Text>
+                    <Text style={styles.medalDesc} numberOfLines={2}>
+                      {a.description}
+                    </Text>
                   ) : null}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
       )}
@@ -395,7 +431,7 @@ export default function ProfileScreen({ navigation }) {
           );
         })}
       </View>
-    </ScrollView>
+    </ScreenWrapper>
   );
 }
 
@@ -406,9 +442,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  namePencil: {
-    fontSize: 15,
-    color: colors.subtext,
+  editBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 2,
   },
   nameEditRow: {
@@ -523,11 +565,13 @@ const styles = StyleSheet.create({
   },
   leaguePill: {
     paddingHorizontal: 11,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: brand.goldSoft,
-    borderWidth: 1.2,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
     borderColor: brand.gold,
+    borderBottomColor: brand.goldBorder,
   },
   leaguePillText: {
     fontSize: 12,
@@ -536,11 +580,13 @@ const styles = StyleSheet.create({
   },
   levelPill: {
     paddingHorizontal: 11,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: brand.infoSoft,
-    borderWidth: 1.2,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
     borderColor: brand.infoBorder,
+    borderBottomColor: brand.info,
   },
   levelPillText: {
     fontSize: 12,
@@ -560,8 +606,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: brand.ink,
-    borderWidth: 1.8,
-    borderBottomWidth: 4,
+    borderWidth: 1.5,
+    borderBottomWidth: 5,
     borderColor: brand.gold,
   },
   superPressed: {
@@ -623,10 +669,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderBottomWidth: 3,
+    borderBottomWidth: 4,
     borderColor: brand.rule,
     paddingVertical: 13,
     paddingHorizontal: 14,
+  },
+  metricArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: brand.goldSoft,
+  },
+  metricArrowText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: brand.goldInk,
   },
   metricIcon: {
     fontSize: 20,
@@ -644,38 +703,45 @@ const styles = StyleSheet.create({
     color: colors.subtext,
   },
 
-  /* Рамки достижений с хохломой */
-  achList: {
+  /* Сетка медалей в стиле Chess.com */
+  achGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 18,
     gap: 10,
   },
-  achFrame: {
-    position: 'relative',
-    flexDirection: 'row',
+  medalCard: {
+    width: '48%',
+    flexGrow: 1,
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
     backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1.6,
-    borderBottomWidth: 3.5,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderBottomWidth: 4,
+    paddingVertical: 13,
+    paddingHorizontal: 10,
+  },
+  medalInner: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
     borderColor: brand.gold,
-    paddingVertical: 14,
-    paddingHorizontal: 15,
   },
-  achBody: {
-    flex: 1,
-    gap: 2,
-  },
-  achTitle: {
-    fontSize: 14.5,
+  medalTitle: {
+    fontSize: 12.5,
     fontWeight: '800',
     color: colors.text,
+    textAlign: 'center',
   },
-  achDesc: {
-    fontSize: 12.5,
-    fontWeight: '500',
+  medalDesc: {
+    fontSize: 10.5,
+    fontWeight: '600',
     color: colors.subtext,
-    lineHeight: 17.5,
+    textAlign: 'center',
   },
 
   /* Разделы */

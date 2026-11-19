@@ -7,6 +7,8 @@ export { AnimatedCheckbox } from './AnimatedCheckbox';
 export { AnimatedInput } from './AnimatedInput';
 export { AnimatedSwitch } from './AnimatedSwitch';
 export { PressableScale } from './PressableScale';
+export { TactilePressable } from './TactilePressable';
+export { ScreenWrapper } from './ScreenWrapper';
 export { AnimatedMascot } from './AnimatedMascot';
 export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';

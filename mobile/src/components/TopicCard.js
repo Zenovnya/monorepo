@@ -20,7 +20,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { PressableScale } from './PressableScale';
+import { TactilePressable } from './TactilePressable';
 import { brand, serifFamily } from './KhokhlomaOrnament';
 import { colors } from '../theme/colors';
 
@@ -50,9 +50,10 @@ export function TopicCard({ topic, index, onPress, expanded, children }) {
 
   return (
     <View style={styles.card}>
-      <PressableScale
+      <TactilePressable
         onPress={onPress}
         scale={0.985}
+        borderDepth={4}
         style={styles.head}
         accessibilityRole="button"
         accessibilityLabel={`Тема ${index + 1}: ${topic.title}. Пройдено ${done} из ${total} уроков`}
@@ -71,19 +72,18 @@ export function TopicCard({ topic, index, onPress, expanded, children }) {
           </Text>
 
           <View style={styles.progressRow}>
-            <View style={styles.pips}>
-              {Array.from({ length: Math.min(total, 6) }, (_, pipIndex) => (
-                <View
-                  key={pipIndex}
-                  style={[
-                    styles.pip,
-                    // Закрашиваем только реально пройденные уроки; если уроков
-                    // больше шести, «шестой» показывает остаток.
-                    pipIndex < Math.round((done / Math.max(total, 1)) * Math.min(total, 6)) &&
-                      styles.pipDone,
-                  ]}
-                />
-              ))}
+            <View style={styles.track}>
+              <View
+                style={[
+                  styles.fill,
+                  {
+                    width: `${Math.min(
+                      100,
+                      Math.round((done / Math.max(total, 1)) * 100),
+                    )}%`,
+                  },
+                ]}
+              />
             </View>
             <Text style={styles.count}>
               {done}/{total}
@@ -92,7 +92,7 @@ export function TopicCard({ topic, index, onPress, expanded, children }) {
         </View>
 
         <Text style={styles.chevron}>{expanded ? '⌃' : '⌄'}</Text>
-      </PressableScale>
+      </TactilePressable>
 
       {expanded ? <View style={styles.body}>{children}</View> : null}
     </View>
@@ -136,17 +136,16 @@ const styles = StyleSheet.create({
     fontFamily: serifFamily,
     lineHeight: 20,
   },
-  focus: { fontSize: 11.5, fontWeight: '700', color: brand.subtext },
+  focus: { fontSize: 11.5, fontWeight: '700', color: colors.subtext },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  pips: { flexDirection: 'row', gap: 4, flex: 1 },
-  pip: {
-    height: 6,
+  track: {
     flex: 1,
-    maxWidth: 22,
-    borderRadius: 3,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.track,
+    overflow: 'hidden',
   },
-  pipDone: { backgroundColor: brand.pine },
+  fill: { height: '100%', borderRadius: 5, backgroundColor: brand.pine },
   count: { fontSize: 10.5, fontWeight: '900', color: brand.subtext },
   chevron: { fontSize: 16, color: brand.muted, fontWeight: '900', paddingLeft: 2 },
   body: {
