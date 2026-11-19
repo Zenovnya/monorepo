@@ -22,6 +22,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.adaptive import constants as c
+from app.modules.auth.models import User
+from app.modules.adaptive.constants import XP_PER_COUNTED_ANSWER
 from app.modules.adaptive import engine
 from app.modules.adaptive.errors import EngineError
 from app.modules.adaptive.models import (
@@ -134,6 +136,9 @@ async def _load(
         ).all()
     )
     state = to_engine_state(root, attempts, observations, seen)
+    # Без этого id попытки снова стал бы `a{seq}` и столкнулся бы с чужим
+    # первичным ключом. Префикс стабилен: он от id пользователя.
+    state.user_key = user_id.hex
     return root, state, pack
 
 
@@ -398,9 +403,27 @@ async def answer(
         raise _translate(exc) from exc
     await _save(session, root, state, before)
     await _refresh_priorities(session, root, state, pack)
+
+    xp_awarded = 0
+    if result.get("counted") and result.get("correct") is True:
+        # XP за зачтённый самостоятельный правильный ответ. Подсказка,
+        # пропуск, разбор и повтор засчитываются — за них XP не даём: то есть
+        # XP отражает именно самостоятельное решение.
+        xp_awarded = XP_PER_COUNTED_ANSWER
+        from app.modules.gamification import service as gamification_service
+
+        user = await session.get(User, user_id)
+        if user is not None:
+            await gamification_service.add_xp(session, user, xp_awarded)
+
     await session.commit()
 
     result["attempt_id"] = attempt_id
+    if xp_awarded:
+        # Клиент показывает «+20 XP»: без этого XP начислился на сервере, а
+        # на экране всё оставалось нулём, и выглядело это как «XP не
+        # начисляется».
+        result["xp_gained"] = xp_awarded
     if result.get("status") == "answered":
         # Разбор показывается после ответа — здесь и только здесь.
         item = pack.items[state.attempts[attempt_id].item_id]
@@ -456,11 +479,19 @@ async def overview(
                 "title": topic["title"],
                 "order": topic["order"],
                 "summary": topic.get("summary"),
+                "focus": topic.get("focus"),
                 "weight_pct": row.weight_pct,
                 "n": row.n,
                 "errors": row.errors,
                 "correct_count": row.correct_count,
                 "practice_priority": round(float(row.need) * 100, 1),
+                # Настоящий прогресс темы — сколько уроков пройдено. Раньше
+                # полоса показывала practice_priority: у темы без ответов он
+                # начинался с 50 %, а после пары правильных ответов падал до
+                # 25 % — то есть «прогресс» уменьшался по мере прохождения.
+                "progress_pct": round(
+                    len(done) / len(lessons) * 100, 1
+                ) if lessons else 0.0,
                 "priority": round(float(row.priority), 3),
                 "state": row.state,
                 "lessons_total": len(lessons),

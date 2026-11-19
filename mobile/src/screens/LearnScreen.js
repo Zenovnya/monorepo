@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -7,13 +7,13 @@ import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LessonSnake } from '../components/LessonSnake';
+import { TopicCard } from '../components/TopicCard';
 import { PressableScale } from '../components/PressableScale';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TopStats } from '../components/TopStats';
 import {
   brand,
   serifFamily,
-  KhokhlomaDivider,
   KhokhlomaGarland,
   PaperGrain,
   RibbonBookmark,
@@ -41,6 +41,11 @@ export default function LearnScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   // 20 — padding контента, 16 — padding карточки темы с каждой стороны.
   const snakeWidth = width - 20 * 2 - 16 * 2;
+
+  // Раскрыта одна тема за раз: список из шести раскрытых троп — это экран,
+  // который невозможно пролистать. Первую тему с непройденными уроками
+  // открываем сами: чаще всего человек хочет продолжить, а не выбирать.
+  const [openTopic, setOpenTopic] = useState(null);
 
   const path = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
   const dailyGoal = useQuery({ queryKey: ['gamification-daily-goal'], queryFn: gamificationApi.dailyGoal });
@@ -143,62 +148,33 @@ export default function LearnScreen({ navigation }) {
             message="Разборы появятся здесь, как только их опубликуют. Адаптивная практика доступна уже сейчас."
           />
         ) : (
-          topics.map((topic, index) => (
-            <View key={topic.topic_id} style={styles.topicSection}>
-              {index > 0 ? <KhokhlomaDivider /> : null}
-
-              <View style={styles.topicBanner}>
-                <View style={styles.topicBannerHead}>
-                  <View style={styles.romanBadge}>
-                    <Text style={styles.romanText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.topicBannerText}>
-                    <Text style={styles.topicKicker}>
-                      ТЕМА {index + 1} · {topic.lessons_practised}/
-                      {topic.lessons_total} УРОКОВ
-                    </Text>
-                    <Text style={styles.topicTitle}>{topic.title}</Text>
-                  </View>
-                </View>
-                {topic.summary ? (
-                  <Text style={styles.topicSummary}>{topic.summary}</Text>
-                ) : null}
-
-                <View style={styles.topicTrack}>
-                  <View
-                    style={[
-                      styles.topicFill,
-                      {
-                        width: `${Math.min(100, Math.max(4, topic.practice_priority))}%`,
-                        backgroundColor: brand.gold,
-                      },
-                    ]}
+          topics.map((topic, index) => {
+            // По умолчанию раскрыта первая тема, где есть что проходить.
+            const fallback = topics.findIndex((t) => t.lessons_practised < t.lessons_total);
+            const isOpen = openTopic === null ? index === Math.max(fallback, 0) : openTopic === index;
+            return (
+              <TopicCard
+                key={topic.topic_id}
+                topic={topic}
+                index={index}
+                expanded={isOpen}
+                onPress={() => setOpenTopic(isOpen ? -1 : index)}
+              >
+                {topic.lessons?.length ? (
+                  <LessonSnake
+                    lessons={topic.lessons}
+                    width={snakeWidth}
+                    onPick={(lesson) =>
+                      navigation.navigate('Lesson', {
+                        lessonId: lesson.lesson_id,
+                        title: lesson.title,
+                      })
+                    }
                   />
-                </View>
-                <Text style={styles.topicMeta}>
-                  {topic.state === 'NOT_ASSESSED'
-                    ? 'Тема ещё не проверялась — 50% это середина, а не оценка'
-                    : `Приоритет практики ${topic.practice_priority}% · ответов ${topic.n}, ошибок ${topic.errors}`}
-                </Text>
-              </View>
-
-              {/* Уроки — волнистой тропой вниз, а не ровным списком: так видно
-                  последовательность и то, где ты сейчас. Раньше здесь был
-                  плоский список карточек-строк, и путь читался как оглавление. */}
-              {topic.lessons?.length ? (
-                <LessonSnake
-                  lessons={topic.lessons}
-                  width={snakeWidth}
-                  onPick={(lesson) =>
-                    navigation.navigate('Lesson', {
-                      lessonId: lesson.lesson_id,
-                      title: lesson.title,
-                    })
-                  }
-                />
-              ) : null}
-            </View>
-          ))
+                ) : null}
+              </TopicCard>
+            );
+          })
         )}
 
         {path.data?.editorial_note ? (

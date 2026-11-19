@@ -113,6 +113,7 @@ class ActionResultRead(BaseModel):
     options: list[dict] | None = None
     legal_basis_ids: list[str] | None = None
     assistance: str | None = None
+    xp_gained: int = 0
 
 
 class LessonProgressRead(BaseModel):
@@ -128,11 +129,16 @@ class TopicProgressRead(BaseModel):
     title: str
     order: int
     summary: str | None = None
+    # Короткий акцент темы («Гарантии и границы»). Нужен интерфейсу: карточка
+    # темы показывает одну строку вместо summary в три строки — иначе список
+    # тем превращается в текст, который никто не читает.
+    focus: str | None = None
     weight_pct: int
     n: int
     errors: int
     correct_count: int
     practice_priority: float
+    progress_pct: float
     priority: float
     state: str
     lessons_total: int

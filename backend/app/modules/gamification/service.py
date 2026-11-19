@@ -16,6 +16,11 @@ XP_PER_LEVEL = 100
 # Ключ кэша состояния геймификации.
 _GAMIFICATION_CACHE_TTL = 120  # секунды
 
+# Кристаллы при повышении уровня. Gems раньше нельзя было получить иначе, чем
+# купив за деньги: за уроки и кейсы кристаллы не начислялись, и магазин был
+# недостижим для обычного прохождения.
+GEMS_PER_LEVEL = 10
+
 
 class GamificationError(Exception):
     """Базовое исключение модуля геймификации."""
@@ -307,6 +312,13 @@ async def add_xp(
     new_level = level_from_xp(user.xp)
     leveled_up = new_level > user.level
     user.level = new_level
+    gems_gained = 0
+    if leveled_up:
+        # Повышение уровня — единственный способ заработать кристаллы, помимо
+        # покупки. Если их не начислять, кристаллы существуют только как
+        # расходная валюта, и прогресс по кристаллам останется нулевым.
+        gems_gained = GEMS_PER_LEVEL
+        user.gems = (user.gems or 0) + gems_gained
     await session.flush()
 
     # Инвалидируем кэш состояния геймификации.
@@ -317,6 +329,8 @@ async def add_xp(
         "level": user.level,
         "streak": user.streak,
         "leveled_up": leveled_up,
+        "gems": user.gems,
+        "gems_gained": gems_gained,
     }
 
 

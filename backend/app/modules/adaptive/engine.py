@@ -115,6 +115,9 @@ class State:
 
     seq: int = 0
     open_attempt_id: str | None = None
+    # Чей это id. Нужен, чтобы id попытки был уникален глобально, а не только
+    # внутри пользователя (см. `_attempt_public_id`).
+    user_key: str = ""
     attempts: dict[str, Attempt] = field(default_factory=dict)
     seen_families: list[str] = field(default_factory=list)
     observations: list[Observation] = field(default_factory=list)
@@ -123,6 +126,25 @@ class State:
     def next_seq(self) -> int:
         self.seq += 1
         return self.seq
+
+    def next_attempt_id(self, seq: int) -> str:
+        """Идентификатор попытки, уникальный глобально.
+
+        Реальный дефект: id был просто ``a{seq}``, где seq считается внутри
+        пользователя. ``adaptive_attempts.id`` — первичный ключ таблицы, значит
+        первый же пользователь занимал ``a1``, и у всех остальных выдача падала:
+
+            UNIQUE constraint failed: adaptive_attempts.id ('a1', ...)
+
+        Клиент получал 500 на /adaptive/next. Выглядело это как «часть уроков
+        не открывает кейсы»: кому достался свободный номер — работал, кому нет —
+        нет.
+
+        Префикс — короткая часть id пользователя. Длина: 2 + 8 + 1 + до 6 цифр
+        ≈ 17 символов, колонка ``String(32)`` вмещает.
+        """
+        prefix = self.user_key[:8] or "anon"
+        return f"a{prefix}-{seq}"
 
 
 # --- Метрики темы ----------------------------------------------------------
@@ -461,7 +483,7 @@ def issue(
 
     seq = state.next_seq()
     attempt = Attempt(
-        id=f"a{seq}",
+        id=state.next_attempt_id(seq),
         item_id=item["id"],
         content_version=item["content_version"],
         evidence_family_id=family,
