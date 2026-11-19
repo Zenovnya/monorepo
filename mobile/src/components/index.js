@@ -11,6 +11,7 @@ export { AnimatedMascot } from './AnimatedMascot';
 export { Confetti } from './Confetti';
 export { SocialButton } from './SocialButton';
 export { SpeechBubble } from './SpeechBubble';
+export { MascotPrompt } from './MascotPrompt';
 export { LegalText } from './LegalText';
 export { MascotToastProvider, useMascotToast } from './MascotToast';
 export { LockPremium } from './LockPremium';

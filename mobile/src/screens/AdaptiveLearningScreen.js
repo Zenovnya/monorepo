@@ -3,9 +3,11 @@ import { PressableScale } from '../components/PressableScale';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { describeLoadError } from '../api/client';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { MascotPrompt } from '../components/MascotPrompt';
 import {
   brand,
   serifFamily,
@@ -37,10 +39,15 @@ import { colors } from '../theme/colors';
  */
 export default function AdaptiveLearningScreen() {
   const queryClient = useQueryClient();
+  // Верхний отступ считаем сами: экран лежит в навигаторе без шапки
+  // (headerShown: false), поэтому content начинался от самого верха окна и на
+  // iPhone уезжал под вырез.
+  const insets = useSafeAreaInsets();
   const [topicId, setTopicId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
   const meta = useQuery({ queryKey: ['adaptive-meta'], queryFn: adaptiveApi.meta });
   const overview = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
@@ -53,13 +60,20 @@ export default function AdaptiveLearningScreen() {
   });
 
   const act = useMutation({
-    mutationFn: ({ action, optionId }) => adaptiveApi.act(nextQuery.data.attemptId, { action, optionId }),
+    // attempt_id, а не attemptId: сервер отдаёт snake_case (NextRead.attempt_id),
+    // и прежнее обращение давало undefined — axios собирал /attempts/undefined/actions,
+    // сервер отвечал 422, а экран молчал. Кнопка «Ответить» выглядела мёртвой.
+    mutationFn: ({ action, optionId }) =>
+      adaptiveApi.act(nextQuery.data.attempt_id, { action, optionId }),
     onSuccess: (data) => {
       setResult(data);
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
     },
+    // Без этого сбой ответа был невидим: нажатие не давало ничего, и выглядело
+    // это как «кнопка не работает», а не как ошибка. Показываем причину.
+    onError: (error) => setActionError(describeLoadError(error, 'ответ')),
   });
 
   // Темы мемоизируются вместе с картой: `?? []` создавал бы новый массив на
@@ -73,12 +87,13 @@ export default function AdaptiveLearningScreen() {
   const data = nextQuery.data;
   const choice = data?.choice;
   const item = data?.item ?? data?.preview;
-  const attemptId = data?.attemptId;
+  const attemptId = data?.attempt_id;
   const canAnswer = Boolean(attemptId) && choice?.kind !== 'review';
 
   const reset = () => {
     setSelected(null);
     setResult(null);
+    setActionError(null);
     nextQuery.refetch();
   };
 
@@ -133,7 +148,13 @@ export default function AdaptiveLearningScreen() {
     <View style={styles.container}>
       <PaperGrain />
       <ScrollView
-        contentContainerStyle={[styles.content, result && { paddingBottom: 40 }]}
+        contentContainerStyle={[
+          styles.content,
+          // Дыра под вырез и статус-бар: без неё заголовок и кнопка «Тема»
+          // начинались от верхней кромки окна.
+          { paddingTop: 20 + insets.top },
+          result && { paddingBottom: 40 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.categoryRow}>
@@ -269,6 +290,23 @@ export default function AdaptiveLearningScreen() {
           </View>
         ) : null}
 
+        {/* Мишка задаёт вопрос. Текст пузыря короткий и про действие
+            («выберите вариант»), а не пересказ ситуации: пересказ дублировал
+            бы карточку выше и отодвигал варианты ответа. */}
+        {item ? (
+          <MascotPrompt
+            text={
+              result
+                ? result.correct === true
+                  ? 'Верно. Разбор ниже.'
+                  : 'Разберём, почему так.'
+                : 'Как поступите?'
+            }
+            result={result}
+            assisted={Boolean(result?.assistance)}
+          />
+        ) : null}
+
         {item ? <Text style={styles.prompt}>{item.question}</Text> : null}
 
         {item
@@ -281,7 +319,10 @@ export default function AdaptiveLearningScreen() {
                 <PressableScale
                   key={option.id}
                   disabled={Boolean(result) || !canAnswer || act.isPending}
-                  onPress={() => setSelected(option.id)}
+                  onPress={() => {
+                    setActionError(null);
+                    setSelected(option.id);
+                  }}
                   style={[
                     styles.option,
                     isSelected && !result && styles.optionSelected,
@@ -306,6 +347,12 @@ export default function AdaptiveLearningScreen() {
           >
             <Text style={styles.primaryBtnText}>Ответить</Text>
           </PressableScale>
+        ) : null}
+
+        {actionError ? (
+          <View style={styles.actionError}>
+            <Text style={styles.actionErrorText}>{actionError}</Text>
+          </View>
         ) : null}
 
         {item && canAnswer && !result ? (
@@ -412,6 +459,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: { padding: 20, paddingBottom: 60, gap: 14 },
+  actionError: {
+    backgroundColor: brand.redSoft,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.red,
+    padding: 12,
+  },
+  actionErrorText: { fontSize: 13, fontWeight: '700', color: brand.redDark, lineHeight: 18 },
   categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categorySign: { fontSize: 16, color: brand.red, fontWeight: '900' },
   categoryLabel: {
