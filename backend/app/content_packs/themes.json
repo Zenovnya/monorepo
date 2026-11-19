@@ -101,7 +101,8 @@
    ],
    "guide_id": "CIV01_G",
    "control_id": "CIV01_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Квартира по Конституции"
   },
   "CIV02": {
    "id": "CIV02",
@@ -135,7 +136,8 @@
    ],
    "guide_id": "CIV02_G",
    "control_id": "CIV02_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Вход без согласия"
   },
   "CIV03": {
    "id": "CIV03",
@@ -174,7 +176,8 @@
    ],
    "guide_id": "CIV03_G",
    "control_id": "CIV03_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Запрет митинга"
   },
   "CIV04": {
    "id": "CIV04",
@@ -207,7 +210,8 @@
    ],
    "guide_id": "CIV04_G",
    "control_id": "CIV04_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Вина по обвинению"
   },
   "CIV05": {
    "id": "CIV05",
@@ -243,7 +247,8 @@
    ],
    "guide_id": "CIV05_G",
    "control_id": "CIV05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Омбудсмен и суд"
   },
   "POL01": {
    "id": "POL01",
@@ -276,7 +281,8 @@
    ],
    "guide_id": "POL01_G",
    "control_id": "POL01_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Проверка документов"
   },
   "POL02": {
    "id": "POL02",
@@ -311,7 +317,8 @@
    ],
    "guide_id": "POL02_G",
    "control_id": "POL02_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "48 часов в отделе"
   },
   "POL03": {
    "id": "POL03",
@@ -343,7 +350,8 @@
    ],
    "guide_id": "POL03_G",
    "control_id": "POL03_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Досмотр рюкзака"
   },
   "POL04": {
    "id": "POL04",
@@ -383,7 +391,8 @@
    ],
    "guide_id": "POL04_G",
    "control_id": "POL04_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Свидетель и супруг"
   },
   "POL05": {
    "id": "POL05",
@@ -418,7 +427,8 @@
    ],
    "guide_id": "POL05_G",
    "control_id": "POL05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Угон или кража"
   },
   "BUY01": {
    "id": "BUY01",
@@ -461,7 +471,8 @@
    "guide_id": "BUY01_G",
    "control_id": "BUY01_C",
    "legacy_scenario_id": "DEFECT_PHONE_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Дефектный телефон"
   },
   "BUY02": {
    "id": "BUY02",
@@ -495,7 +506,8 @@
    ],
    "guide_id": "BUY02_G",
    "control_id": "BUY02_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Обмен в магазине"
   },
   "BUY03": {
    "id": "BUY03",
@@ -532,7 +544,8 @@
    "guide_id": "BUY03_G",
    "control_id": "BUY03_C",
    "legacy_scenario_id": "ONLINE_RETURN_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Покупка онлайн"
   },
   "BUY04": {
    "id": "BUY04",
@@ -568,7 +581,8 @@
    "guide_id": "BUY04_G",
    "control_id": "BUY04_C",
    "legacy_scenario_id": "AIR_REFUND_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Отмена рейса"
   },
   "BUY05": {
    "id": "BUY05",
@@ -600,7 +614,8 @@
    ],
    "guide_id": "BUY05_G",
    "control_id": "BUY05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Тур без трансфера"
   },
   "DEBT01": {
    "id": "DEBT01",
@@ -636,7 +651,8 @@
    "guide_id": "DEBT01_G",
    "control_id": "DEBT01_C",
    "legacy_scenario_id": "COLLECTION_CALL_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Звонки коллекторов"
   },
   "DEBT02": {
    "id": "DEBT02",
@@ -670,7 +686,8 @@
    "guide_id": "DEBT02_G",
    "control_id": "DEBT02_C",
    "legacy_scenario_id": "LOAN_DEMAND_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Долг по расписке"
   },
   "DEBT03": {
    "id": "DEBT03",
@@ -704,7 +721,8 @@
    ],
    "guide_id": "DEBT03_G",
    "control_id": "DEBT03_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Судебная давность"
   },
   "DEBT04": {
    "id": "DEBT04",
@@ -741,7 +759,8 @@
    "guide_id": "DEBT04_G",
    "control_id": "DEBT04_C",
    "legacy_scenario_id": "ORDER_OBJECTION_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Судебный приказ"
   },
   "DEBT05": {
    "id": "DEBT05",
@@ -773,7 +792,8 @@
    ],
    "guide_id": "DEBT05_G",
    "control_id": "DEBT05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Иск о долге"
   },
   "HOME01": {
    "id": "HOME01",
@@ -815,7 +835,8 @@
    "guide_id": "HOME01_G",
    "control_id": "HOME01_C",
    "legacy_scenario_id": "FLOOD_DAMAGE_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Залив квартиры"
   },
   "HOME02": {
    "id": "HOME02",
@@ -849,7 +870,8 @@
    ],
    "guide_id": "HOME02_G",
    "control_id": "HOME02_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "УК бездействует"
   },
   "HOME03": {
    "id": "HOME03",
@@ -881,7 +903,8 @@
    ],
    "guide_id": "HOME03_G",
    "control_id": "HOME03_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Приватизация"
   },
   "HOME04": {
    "id": "HOME04",
@@ -913,7 +936,8 @@
    ],
    "guide_id": "HOME04_G",
    "control_id": "HOME04_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Самовольная перепланировка"
   },
   "HOME05": {
    "id": "HOME05",
@@ -946,7 +970,8 @@
    ],
    "guide_id": "HOME05_G",
    "control_id": "HOME05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Бронь квартиры"
   },
   "WORK01": {
    "id": "WORK01",
@@ -978,7 +1003,8 @@
    ],
    "guide_id": "WORK01_G",
    "control_id": "WORK01_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Работа без договора"
   },
   "WORK02": {
    "id": "WORK02",
@@ -1010,7 +1036,8 @@
    ],
    "guide_id": "WORK02_G",
    "control_id": "WORK02_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Задержка зарплаты"
   },
   "WORK03": {
    "id": "WORK03",
@@ -1052,7 +1079,8 @@
    "guide_id": "WORK03_G",
    "control_id": "WORK03_C",
    "legacy_scenario_id": "WORK_ABSENCE_001",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Прогул и увольнение"
   },
   "WORK04": {
    "id": "WORK04",
@@ -1086,7 +1114,8 @@
    ],
    "guide_id": "WORK04_G",
    "control_id": "WORK04_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Увольнение по соглашению"
   },
   "WORK05": {
    "id": "WORK05",
@@ -1118,7 +1147,8 @@
    ],
    "guide_id": "WORK05_G",
    "control_id": "WORK05_C",
-   "expert_approved_on": "2026-11-19"
+   "expert_approved_on": "2026-11-19",
+   "short_title": "Сокращение штата"
   }
  },
  "items": {

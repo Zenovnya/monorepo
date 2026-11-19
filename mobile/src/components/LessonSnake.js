@@ -57,6 +57,27 @@ function Connector({ from, to, state }) {
 }
 
 /**
+ * Позиция краткой подписи чекпоинта: слева или справа от медальона.
+ *
+ * Сторону выбирает по доступному пространству — медальон ближе к краю
+ * полотна не может «вытянуть» подпись за край. Если с обеих сторон не
+ * хватает, подпись убирается внутрь: отступ по вертикали снижает риск
+ * перекрытия точек пути.
+ */
+function checkpointLabelPos(point, width) {
+  const top = Math.max(4, point.y - NODE / 2 - 6);
+  const rightGap = width - (point.x + NODE / 2);
+  const leftGap = point.x - NODE / 2;
+  if (rightGap >= LABEL_WIDTH + 8) {
+    return { left: point.x + NODE / 2 + 8, top };
+  }
+  if (leftGap >= LABEL_WIDTH + 8) {
+    return { left: point.x - NODE / 2 - LABEL_WIDTH - 8, top };
+  }
+  return { left: Math.max(4, Math.min(width - LABEL_WIDTH - 4, point.x - LABEL_WIDTH / 2)), top };
+}
+
+/**
  * @param {Array}    lessons  Уроки темы: { lesson_id, title, order, practised }.
  * @param {number}   width    Доступная ширина.
  * @param {Function} onPick   (lesson) => void
@@ -119,29 +140,25 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
         );
       })}
 
-      {/* Подписи под медальонами: отдельным слоем, потому что текст выходит за
-          круг и ломал бы центровку номера. */}
-      {items.map((lesson, index) => {
-        const point = points[index];
-        const isNext = index === nextIndex;
-        return (
-          <View
-            key={`label-${lesson.lesson_id}`}
-            pointerEvents="none"
-            style={[
-              styles.labelWrap,
-              { left: point.x - LABEL_WIDTH / 2, top: point.y + NODE / 2 + 2 },
-            ]}
-          >
-            <Text
-              style={[styles.label, isNext && styles.labelNext]}
-              numberOfLines={2}
-            >
-              {lesson.title}
-            </Text>
-          </View>
-        );
-      })}
+      {/* Краткая подпись только рядом с чекпоинтом — следующим уроком.
+
+          Длинные названия под каждым медальоном наваливались на тропу и
+          не помещались. Теперь подпись — короткое название (`short_title`)
+          рядом с медальоном, который сейчас звучит, и остальные помечено
+          только состоянием. */}
+      {nextIndex >= 0 ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.checkpointWrap,
+            checkpointLabelPos(points[nextIndex], width),
+          ]}
+        >
+          <Text style={styles.checkpointLabel} numberOfLines={1}>
+            {items[nextIndex].short_title ?? items[nextIndex].title}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -188,15 +205,20 @@ const styles = StyleSheet.create({
     borderColor: brand.goldBorder,
     opacity: 0.9,
   },
-  labelWrap: { position: 'absolute', width: LABEL_WIDTH, alignItems: 'center' },
-  label: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '700',
-    color: brand.muted,
-    textAlign: 'center',
+  // Подпись чекпоинта: лежит рядом с медальоном, а не под тротой, чтобы
+  // не перекрывать точки пути. Смещается в сторону от центра, чтобы
+  // не выйти за край полотна.
+  checkpointWrap: {
+    position: 'absolute',
+    width: LABEL_WIDTH,
+    alignItems: 'flex-start',
   },
-  labelNext: { color: brand.ink, fontWeight: '800' },
+  checkpointLabel: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    color: brand.ink,
+  },
 });
 
 export default LessonSnake;

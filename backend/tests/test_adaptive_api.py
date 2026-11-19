@@ -388,3 +388,31 @@ async def test_overview_progress_is_topic_completion(api) -> None:
     overview = (await client.get("/adaptive/overview", headers=headers)).json()
     # Зачтённый ответ должен прибавить прогресс (хотя бы одной теме).
     assert any(t["progress_pct"] > 0 for t in overview["topics"])
+
+
+async def test_parallel_attempts_do_not_crash_on_state_creation(api) -> None:
+    """Два парных запроса при создании состояния не должны падать с 500.
+
+    Реальный дефект: два парных запроса от нового пользователя (нажатие
+    кнопки + повторный рендер) оба видели «статьи нет» и оба пытались
+    создать строку состояния. IntegrityError уходил в 500, и клиент
+    показывал «Сервер не смог отдать проверку. Мы уже разбираемся».
+    """
+    import asyncio
+
+    client, _ = api
+    headers = _headers(uuid.uuid4())
+
+    async def open_check():
+        return await client.post(
+            "/adaptive/attempts",
+            json={"item_id": "CIV01_C", "mode": "check", "origin": "lesson"},
+            headers=headers,
+        )
+
+    responses = await asyncio.gather(open_check(), open_check())
+    codes = sorted(r.status_code for r in responses)
+    # Один запрос создаёт попытку (200), другой находит уже открытую —
+    # ни один не должен вернуть 5xx.
+    assert codes == [200, 400], codes
+    assert all(code < 500 for code in codes)

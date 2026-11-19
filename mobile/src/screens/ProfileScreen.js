@@ -159,6 +159,12 @@ export default function ProfileScreen({ navigation }) {
     const map = {
       bear: 'Bear',
       topics: 'Learn',
+      // «Повторить» — кейсы со сроком повторения. Открытие ведёт на экран
+      // адаптивной практики: там уже есть режим повтора (выбор с kind ===
+      // 'review'), и отдельный экран только бы дублировал его. Раньше
+      // ключа reviews в map не было — navigation.navigate(undefined)
+      // падал с ошибкой, и кнопка «Повторить» выглядела как сломанная.
+      reviews: 'Adaptive',
       league: 'League',
       shop: 'Shop',
       premium: 'Premium',
