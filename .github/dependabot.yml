@@ -29,10 +29,47 @@ updates:
       prefix: "deps(mobile)"
     # Expo обновляется связкой: отдельный bump react-native или expo-* ломает
     # совместимость, поэтому такие пакеты обновляем вручную через `expo install`.
+    #
+    # Список ниже закрывает целые семейства, а не отдельные пакеты. Причина —
+    # dependabot не знает про `bundledNativeModules.json` и присылает версии из
+    # другого мажорного SDK: в проекте на SDK 54 приходили expo-notifications
+    # 58.1.9, @expo/metro-runtime 58.0.17, babel-preset-expo 58.0.25 (у него
+    # peer expo-widgets ^58.0.28, которого в проекте нет), async-storage 3.1.1
+    # и react-native-worklets 0.13.1. У нативных модулей peer-зависимости
+    # заданы как `*`, поэтому `npm ci` и eslint на таких PR ЗЕЛЁНЫЕ — поломка
+    # видна только на `expo start` или EAS-сборке, где диагностика дороже.
+    #
+    # Обновление нативного модуля = обновление SDK: `npx expo install --check`
+    # и `npx expo-doctor`, отдельной задачей. Добавление нового пакета в список
+    # не нужно — семейства покрыты масками.
     ignore:
+      # Ядро Expo и React Native.
       - dependency-name: expo
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
       - dependency-name: react-native
       - dependency-name: react
+      # react-dom/react-native-web обязаны совпадать по версии с react и
+      # react-native: SDK 54 пинит 19.1.0 и ~0.21.0. Bump в одиночку ломает
+      # рендер на вебе (две копии React).
+      - dependency-name: react-dom
+      - dependency-name: react-native-web
+      # Все `expo-*` (expo-notifications, expo-constants, expo-font, ...).
+      - dependency-name: expo-*
+      # Все `@expo/*` (@expo/metro-runtime, @expo/vector-icons, ...).
+      - dependency-name: '@expo/*'
+      # Нативные модули с собственным мажором вне SDK.
+      - dependency-name: babel-preset-expo
+      - dependency-name: react-native-worklets
+      - dependency-name: react-native-reanimated
+      - dependency-name: react-native-gesture-handler
+      - dependency-name: react-native-screens
+      - dependency-name: react-native-safe-area-context
+      - dependency-name: react-native-svg
+      - dependency-name: '@react-native-async-storage/async-storage'
+      - dependency-name: '@react-native-community/*'
+      # ВНИМАНИЕ: @react-navigation/* SDK НЕ пинит — эти пакеты обновляются
+      # свободно, поэтому их здесь нет. Их обновления приходят обычным PR и
+      # проверяются по changelog: ломаются редко, но ломаются именно в мажоре.
 
   - package-ecosystem: github-actions
     directory: /
