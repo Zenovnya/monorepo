@@ -232,3 +232,60 @@ async def test_review_after_all_fresh_cases_used(api) -> None:
     # Повтор не открывает попытку сам: иначе «показать ещё» списывало бы
     # единственную открытую попытку.
     assert exhausted.get("attempt_id") is None
+
+
+async def test_two_users_can_each_open_their_first_attempt(api) -> None:
+    """Первый кейс открывается у второго пользователя тоже.
+
+    Реальный дефект: движок нумеровал попытки внутри пользователя (`a1`, `a2`),
+    а `adaptive_attempts.id` — глобальный первичный ключ. Первый, кто занял
+    `a1`, ломал выдачу всем остальным:
+
+        sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError)
+        UNIQUE constraint failed: adaptive_attempts.id
+        [parameters: ('a1', ...)]
+
+    Клиент получал 500 на /adaptive/next, а экран показывал «не удалось
+    загрузить практику». Дальше `a2` занимал следующий пользователь, и дефект
+    выглядел как «какие-то уроки открываются, какие-то нет» — ровно то, что
+    видит человек.
+
+    Прежний тест `test_client_cannot_answer_someone_elses_attempt` этого не
+    ловил: он открывал попытку только у первого пользователя, а второй лишь
+    пытался ответить чужой.
+    """
+    client, _ = api
+    first = _headers(uuid.uuid4())
+    second = _headers(uuid.uuid4())
+
+    opened_first = await client.get("/adaptive/next", headers=first)
+    assert opened_first.status_code == 200, opened_first.text
+
+    # Второй пользователь — тоже «первая попытка», значит тот же seq=1.
+    opened_second = await client.get("/adaptive/next", headers=second)
+    assert opened_second.status_code == 200, opened_second.text
+    assert opened_second.json()["attempt_id"]
+
+    # И ответ второго не должен задевать попытку первого.
+    answered = await client.post(
+        f"/adaptive/attempts/{opened_second.json()['attempt_id']}/actions",
+        json={"action": "answer", "option_id": "A"},
+        headers=second,
+    )
+    assert answered.status_code == 200, answered.text
+
+    still_first = await client.get("/adaptive/next", headers=first)
+    assert still_first.status_code == 200, still_first.text
+
+
+async def test_many_users_do_not_collide_on_attempt_ids(api) -> None:
+    """Пять пользователей подряд: id попыток не совпадают между ними."""
+    client, _ = api
+    seen: set[str] = set()
+    for _ in range(5):
+        response = await client.get("/adaptive/next", headers=_headers(uuid.uuid4()))
+        assert response.status_code == 200, response.text
+        attempt_id = response.json()["attempt_id"]
+        assert attempt_id, response.text
+        assert attempt_id not in seen, f"id попытки повторился: {attempt_id}"
+        seen.add(attempt_id)

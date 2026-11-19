@@ -134,6 +134,9 @@ async def _load(
         ).all()
     )
     state = to_engine_state(root, attempts, observations, seen)
+    # Без этого id попытки снова стал бы `a{seq}` и столкнулся бы с чужим
+    # первичным ключом. Префикс стабилен: он от id пользователя.
+    state.user_key = user_id.hex
     return root, state, pack
 
 
