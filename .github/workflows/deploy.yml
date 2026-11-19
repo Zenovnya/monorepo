@@ -15,6 +15,17 @@ on:
       - 'backend/**'
       - 'mobile/**'
       - '.github/workflows/deploy.yml'
+      # Правки в корне и скриптах тоже ломают сборку/CI: `scripts/ci-smoke.sh`
+      # запускается этим же workflow, `.gitignore` и корневой `package.json`
+      # влияют на `npm ci`, а `.github/dependabot.yml` — на то, какие PR
+      # приходят. Без этих строк PR, меняющий только их, остаётся без проверок
+      # вовсе (так случилось с чисткой node_modules).
+      - 'scripts/**'
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.gitignore'
+      - '.github/**'
   workflow_dispatch:
 
 jobs:
