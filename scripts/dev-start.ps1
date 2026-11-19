@@ -41,16 +41,29 @@ if (-not $python) {
 Write-Host "Python: $python"
 
 # --- 0/5 Зависимости бэкенда ------------------------------------------------
+#
+# ВАЖНО: здесь проверяется ТОЛЬКО наличие пакетов, а не импорт `app.main`.
+# Импорт приложения требует настроек (JWT_SECRET_KEY >= 32 символов), а
+# backend/.env создаёт шаг 2 — то есть на первом запуске его ещё нет.
+# Раньше проверка делала `import app.main`, падала на Settings, скрипт считал
+# это «зависимости не установлены» и запускал `pip install -r requirements.txt`
+# заново — на каждой попытке. Настоящая причина при этом пряталась в `*> $null`,
+# и человек видел только Traceback из PowerShell.
 Write-Host '==> 1/5 Проверка зависимостей бэкенда'
-Push-Location $backend
-try {
-    & $python -c 'import uvicorn, app.main' *> $null
-    $depsOk = ($LASTEXITCODE -eq 0)
-} finally {
-    Pop-Location
+
+# Список — то, без чего приложение не стартует. Версии не сверяем: это работа
+# pip; здесь важно лишь отличить «пакетов нет» от «пакеты есть, но настройки
+# ещё не созданы».
+$requiredModules = @('uvicorn', 'fastapi', 'sqlalchemy', 'alembic', 'pydantic_settings', 'redis', 'asyncpg')
+$missing = @()
+foreach ($module in $requiredModules) {
+    & $python -c "import $module" *> $null
+    if ($LASTEXITCODE -ne 0) { $missing += $module }
 }
-if (-not $depsOk) {
-    Write-Host 'Зависимости не установлены. Ставлю requirements.txt (это долго, один раз)...'
+
+if ($missing.Count -gt 0) {
+    Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+    Write-Host 'Ставлю requirements.txt (это долго, один раз)...'
     & $python -m pip install --disable-pip-version-check -r (Join-Path $backend 'requirements.txt')
     if ($LASTEXITCODE -ne 0) {
         Write-Host 'Не удалось установить зависимости. Попробуйте вручную:'

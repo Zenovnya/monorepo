@@ -56,17 +56,23 @@ if (-not $python) {
     Write-Host 'Python не найден. Установите Python 3.12+ и добавьте его в PATH.'
     exit 1
 }
-# Проверяем зависимости до старта — иначе получим «не запустился» без причины.
-# Импорт делаем из backend/, иначе 'app' не найдётся в sys.path.
-Push-Location $backend
-try {
-    & $python -c 'import uvicorn, app.main' *> $null
-    $depsOk = ($LASTEXITCODE -eq 0)
-} finally {
-    Pop-Location
+# Проверяем наличие пакетов до старта — иначе получим «не запустился» без
+# причины.
+#
+# Здесь намеренно НЕ проверяется `import app.main`: импорт требует настроек
+# (JWT_SECRET_KEY >= 32 символов), а backend/.env может ещё не существовать —
+# его создаёт dev-db.ps1. Из-за этого скрипт сообщал «не удалось
+# импортировать uvicorn/app.main» на исправных зависимостях, и человек шёл
+# переустанавливать пакеты. Если настройки битые, это увидит уже сам uvicorn —
+# в .local\backend.err.log, с настоящей причиной.
+$requiredModules = @('uvicorn', 'fastapi', 'sqlalchemy', 'alembic', 'pydantic_settings', 'redis', 'asyncpg')
+$missing = @()
+foreach ($module in $requiredModules) {
+    & $python -c "import $module" *> $null
+    if ($LASTEXITCODE -ne 0) { $missing += $module }
 }
-if (-not $depsOk) {
-    Write-Host "Не удалось импортировать uvicorn/app.main через $python."
+if ($missing.Count -gt 0) {
+    Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
     Write-Host "Установите зависимости: cd backend; $python -m pip install -r requirements.txt"
     exit 1
 }
