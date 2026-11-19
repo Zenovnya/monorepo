@@ -416,3 +416,44 @@ async def test_parallel_attempts_do_not_crash_on_state_creation(api) -> None:
     # ни один не должен вернуть 5xx.
     assert codes == [200, 400], codes
     assert all(code < 500 for code in codes)
+
+
+async def test_parallel_answers_do_not_crash(api) -> None:
+    """Два парных ответа на одну попытку не должны падать с 500.
+
+    Реальный дефект: два парных запроса (нажатие «Ответить» + повторный
+    рендер, StrictMode, две вкладки) оба прочитали одно состояние и оба
+    вставили наблюдение с одним attempt_id — IntegrityError уходил в 500,
+    и клиент показывал «Сервер не смог отдать ответ. Мы уже разбираемся»,
+    хотя ответ уже приняли.
+    """
+    import asyncio
+
+    client, _ = api
+    headers = _headers(uuid.uuid4())
+
+    # Открыть попытку на конкретной проверке — иначе выбор движка
+    # зависит от состояния и тест недетерминирован.
+    opened = (
+        await client.post(
+            "/adaptive/attempts",
+            json={"item_id": "CIV01_C", "mode": "check", "origin": "lesson"},
+            headers=headers,
+        )
+    ).json()
+    attempt_id = opened["attempt_id"]
+    correct = get_pack().items["CIV01_C"]["correct_option_id"]
+
+    async def answer():
+        return await client.post(
+            f"/adaptive/attempts/{attempt_id}/actions",
+            json={"action": "answer", "option_id": correct},
+            headers=headers,
+        )
+
+    responses = await asyncio.gather(answer(), answer())
+    codes = sorted(r.status_code for r in responses)
+    # Оба ответа завершаются успешно: один принимает, второй видит, что
+    # попытка уже закрыта (already_closed) — ни один не должен вернуть 5xx.
+    assert codes == [200, 200], codes
+    assert all(code < 500 for code in codes)

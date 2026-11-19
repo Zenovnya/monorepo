@@ -91,6 +91,35 @@ def _translate(exc: EngineError) -> AdaptiveError:
 # --- Загрузка и сохранение состояния --------------------------------------
 
 
+async def _run_write(
+    session: AsyncSession,
+    fn,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Запускает сценарий записи с одним повтором при конфликте уникальности.
+
+    На SQLite нет строковых блокировок: два парных запроса (нажатие
+    «Ответить» + повторный рендер, StrictMode, две вкладки) могут оба
+    прочитать одно и то же состояние и оба вставить одну и ту же строку —
+    ``adaptive_states``, ``adaptive_observations.attempt_id``,
+    ``adaptive_seen_family``, ``adaptive_topic_priority``. Без повтора
+    IntegrityError уходил в 500, и клиент показывал «Сервер не смог отдать
+    ответ. Мы уже разбираемся», хотя всё было в порядке: просто второй
+    запрос проиграл гонку. При конфликте откатываемся и запускаем сценарий
+    заново — на свежем состоянии он видит чужие изменения и завершается
+    корректно (попытка уже закрыта — returns уже_closed).
+    """
+    for attempt in range(2):
+        try:
+            return await fn(session, *args, **kwargs)
+        except IntegrityError:
+            await session.rollback()
+            if attempt == 1:
+                raise
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
 async def _load(
     session: AsyncSession, user_id: uuid.UUID, *, lock: bool = False
 ) -> tuple[AdaptiveState, engine.State, Pack]:
@@ -314,6 +343,19 @@ async def choose_next(
     ``open_attempt=False`` — только спросить решение (экран темы), не занимая
     единственную открытую попытку.
     """
+    return await _run_write(
+        session, _choose_next, user_id, topic_id, lesson_id, open_attempt, sandbox
+    )
+
+
+async def _choose_next(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    topic_id: str | None,
+    lesson_id: str | None,
+    open_attempt: bool,
+    sandbox: bool,
+) -> dict[str, Any]:
     root, state, pack = await _load(session, user_id, lock=True)
     before = await _snapshot(session, user_id)
     try:
@@ -375,6 +417,17 @@ async def open_attempt(
     sandbox: bool = False,
 ) -> dict[str, Any]:
     """Открывает попытку по уже выбранной карточке (например, повтор)."""
+    return await _run_write(session, _open_attempt, user_id, item_id, mode, origin, sandbox)
+
+
+async def _open_attempt(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    item_id: str,
+    mode: str,
+    origin: str,
+    sandbox: bool,
+) -> dict[str, Any]:
     root, state, pack = await _load(session, user_id, lock=True)
     before = await _snapshot(session, user_id)
     try:
@@ -403,6 +456,19 @@ async def answer(
     sandbox: bool = False,
 ) -> dict[str, Any]:
     """Принимает ответ, подсказку, пропуск или показ разбора."""
+    return await _run_write(
+        session, _answer, user_id, attempt_id, action, option_id, sandbox
+    )
+
+
+async def _answer(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    attempt_id: str,
+    action: str,
+    option_id: str | None,
+    sandbox: bool,
+) -> dict[str, Any]:
     root, state, pack = await _load(session, user_id, lock=True)
     if attempt_id not in state.attempts:
         # Попытка другого пользователя — то же, что несуществующая: не
