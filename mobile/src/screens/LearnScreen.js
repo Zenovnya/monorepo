@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { LessonSnake } from '../components/LessonSnake';
 import { PressableScale } from '../components/PressableScale';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TopStats } from '../components/TopStats';
@@ -31,6 +33,15 @@ import { colors } from '../theme/colors';
  * пятый урок раньше первого ничего не защищает — он только мешает.
  */
 export default function LearnScreen({ navigation }) {
+  // Ширина нужна тропе: она считает узлы от фактической ширины окна, а не от
+  // магической константы, и одинаково выглядит на телефоне и на планшете.
+  const { width } = useWindowDimensions();
+  // Верхний отступ: табы без шапки (headerShown: false), иначе панель XP
+  // уезжала под вырез.
+  const insets = useSafeAreaInsets();
+  // 20 — padding контента, 16 — padding карточки темы с каждой стороны.
+  const snakeWidth = width - 20 * 2 - 16 * 2;
+
   const path = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
   const dailyGoal = useQuery({ queryKey: ['gamification-daily-goal'], queryFn: gamificationApi.dailyGoal });
 
@@ -66,7 +77,10 @@ export default function LearnScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <PaperGrain />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: 20 + insets.top }]}
+        showsVerticalScrollIndicator={false}
+      >
         <TopStats />
 
         <View style={styles.headerCard}>
@@ -168,29 +182,21 @@ export default function LearnScreen({ navigation }) {
                 </Text>
               </View>
 
-              {(topic.lessons ?? []).map((lesson) => (
-                <PressableScale
-                  key={lesson.lesson_id}
-                  style={styles.lessonRow}
-                  onPress={() =>
+              {/* Уроки — волнистой тропой вниз, а не ровным списком: так видно
+                  последовательность и то, где ты сейчас. Раньше здесь был
+                  плоский список карточек-строк, и путь читался как оглавление. */}
+              {topic.lessons?.length ? (
+                <LessonSnake
+                  lessons={topic.lessons}
+                  width={snakeWidth}
+                  onPick={(lesson) =>
                     navigation.navigate('Lesson', {
                       lessonId: lesson.lesson_id,
                       title: lesson.title,
                     })
                   }
-                >
-                  <View style={[styles.lessonPuck, lesson.practised && styles.lessonPuckDone]}>
-                    <Text style={styles.lessonPuckText}>{lesson.practised ? '✓' : lesson.order}</Text>
-                  </View>
-                  <View style={styles.lessonText}>
-                    <Text style={styles.lessonTitle}>{lesson.title}</Text>
-                    <Text style={styles.lessonGoal} numberOfLines={2}>
-                      {lesson.goal}
-                    </Text>
-                  </View>
-                  <Text style={styles.lessonChevron}>›</Text>
-                </PressableScale>
-              ))}
+                />
+              ) : null}
             </View>
           ))
         )}
@@ -303,32 +309,6 @@ const styles = StyleSheet.create({
   },
   topicFill: { height: '100%', borderRadius: 4 },
   topicMeta: { fontSize: 11, lineHeight: 16, color: colors.subtext, fontWeight: '600' },
-  lessonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: brand.rule,
-    padding: 14,
-  },
-  lessonPuck: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: brand.cream,
-    borderWidth: 2,
-    borderColor: brand.ruleStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lessonPuckDone: { backgroundColor: brand.pine, borderColor: brand.pineDark },
-  lessonPuckText: { fontSize: 13.5, fontWeight: '900', color: colors.text },
-  lessonText: { flex: 1, gap: 2 },
-  lessonTitle: { fontSize: 14.5, fontWeight: '800', color: colors.text },
-  lessonGoal: { fontSize: 11.5, lineHeight: 16, color: colors.subtext },
-  lessonChevron: { fontSize: 20, color: brand.muted, fontWeight: '800' },
   editorialNote: {
     marginTop: 4,
     fontSize: 11,

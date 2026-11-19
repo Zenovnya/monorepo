@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { MascotPrompt } from '../components/MascotPrompt';
 import { PressableScale } from '../components/PressableScale';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import {
@@ -33,6 +35,9 @@ import { colors } from '../theme/colors';
 export default function LessonScreen({ route, navigation }) {
   const { lessonId } = route.params ?? {};
   const queryClient = useQueryClient();
+  // Отступ от выреза считаем сами: у стека headerShown: false, и кнопка
+  // «Назад» упиралась в верхнюю кромку экрана.
+  const insets = useSafeAreaInsets();
 
   const [phase, setPhase] = useState('theory'); // theory | check
   const [selected, setSelected] = useState(null);
@@ -40,6 +45,7 @@ export default function LessonScreen({ route, navigation }) {
   const [attemptId, setAttemptId] = useState(null);
   const [result, setResult] = useState(null);
   const [hint, setHint] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const lesson = useQuery({
     queryKey: ['adaptive-lesson', lessonId],
@@ -57,6 +63,7 @@ export default function LessonScreen({ route, navigation }) {
       setSelected(null);
       setResult(null);
       setHint(null);
+      setActionError(null);
       setPhase('check');
     },
   });
@@ -64,6 +71,7 @@ export default function LessonScreen({ route, navigation }) {
   const act = useMutation({
     mutationFn: ({ action, optionId }) => adaptiveApi.act(attemptId, { action, optionId }),
     onSuccess: (data) => {
+      setActionError(null);
       if (data.status === 'open') {
         setHint(data.assistance);
         return;
@@ -71,6 +79,9 @@ export default function LessonScreen({ route, navigation }) {
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
     },
+    // Сбой ответа раньше был невидим: нажатие «Ответить» не давало ничего, и
+    // это читалось как «кнопка не работает». Теперь причина на экране.
+    onError: (error) => setActionError(describeLoadError(error, 'ответ')),
   });
 
   if (!lessonId) {
@@ -119,9 +130,29 @@ export default function LessonScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <PaperGrain />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PressableScale onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
-          <Text style={styles.backText}>‹ Назад</Text>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          // 20 + вырез: кнопка «Назад» больше не начинается под статус-баром.
+          { paddingTop: 12 + insets.top },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Кнопка «Назад».
+            Раньше это был голый текст «‹ Назад» высотой ~20pt у самого верха
+            экрана: попасть в него пальцем было тяжело, а на iPhone с вырезом он
+            ещё и оказывался под ним. Теперь это плашка 44×44 (минимальный
+            размер цели по гайдлайнам Apple) с hitSlop, отодвинутая от выреза. */}
+        <PressableScale
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          accessibilityRole="button"
+          accessibilityLabel="Назад в меню"
+          scale={0.92}
+        >
+          <Text style={styles.backIcon}>←</Text>
+          <Text style={styles.backText}>Назад</Text>
         </PressableScale>
 
         <View style={styles.categoryRow}>
@@ -195,6 +226,19 @@ export default function LessonScreen({ route, navigation }) {
         {checking ? (
           <View style={styles.checkCard}>
             <Text style={styles.cardEyebrow}>ПРОВЕРКА</Text>
+            {/* Тот же маскот, что и в кейсах: вопрос задаёт Мишка. */}
+            <MascotPrompt
+              text={
+                result
+                  ? result.correct === true
+                    ? 'Верно!'
+                    : 'Сейчас разберём.'
+                  : 'Что выберете?'
+              }
+              result={result}
+              assisted={Boolean(hint)}
+              size={68}
+            />
             <Text style={styles.checkQuestion}>{card?.question}</Text>
             {(card?.options ?? []).map((option) => {
               const isSelected = selected === option.id;
@@ -220,6 +264,12 @@ export default function LessonScreen({ route, navigation }) {
                 </PressableScale>
               );
             })}
+
+            {actionError ? (
+              <View style={styles.actionError}>
+                <Text style={styles.actionErrorText}>{actionError}</Text>
+              </View>
+            ) : null}
 
             {!result ? (
               <View style={styles.rowButtons}>
@@ -285,8 +335,30 @@ export default function LessonScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: 20, paddingBottom: 60, gap: 14 },
-  backBtn: { alignSelf: 'flex-start' },
-  backText: { fontSize: 14, fontWeight: '800', color: colors.subtext },
+  actionError: {
+    backgroundColor: brand.redSoft,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: brand.red,
+    padding: 12,
+  },
+  actionErrorText: { fontSize: 13, fontWeight: '700', color: brand.redDark, lineHeight: 18 },
+  backBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    // Не меньше 44: это минимальная цель, в которую человек попадает пальцем.
+    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+  },
+  backIcon: { fontSize: 17, fontWeight: '900', color: colors.text, marginTop: -1 },
+  backText: { fontSize: 14.5, fontWeight: '800', color: colors.text },
   categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categorySign: { fontSize: 16, color: brand.red, fontWeight: '900' },
   categoryLabel: {
