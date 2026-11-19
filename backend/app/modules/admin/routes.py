@@ -45,6 +45,46 @@ async def pack_summary() -> dict:
     }
 
 
+@router.get("/pack/structure")
+async def pack_structure() -> dict:
+    """Структура пака: темы с уроками второго уровня.
+
+    Отдельная ручка, а не расширение ``/pack``: сводка нужна деплой-скриптам и
+    должна оставаться короткой, а эта — для страницы админки. Данные берутся из
+    того же загруженного пака, поэтому расхождению с содержимым взяться неоткуда.
+    """
+    pack = get_pack()
+    topics = []
+    for topic_id, topic in pack.topics.items():
+        lessons = pack.lessons_of(topic_id)
+        topics.append(
+            {
+                "topic_id": topic_id,
+                "title": topic["title"],
+                "order": topic["order"],
+                "weight_pct": topic.get("weight_pct"),
+                "summary": topic.get("summary"),
+                "lessons": [
+                    {
+                        "lesson_id": lesson["id"],
+                        "order": lesson["order"],
+                        "title": lesson["title"],
+                        "goal": lesson["goal"],
+                        "legal_review_status": lesson["legal_review_status"],
+                        "control_item_id": lesson["control_id"],
+                    }
+                    for lesson in lessons
+                ],
+            }
+        )
+    topics.sort(key=lambda row: row["order"])
+    return {
+        "ok": True,
+        "release_key": pack.release_key,
+        "topics": topics,
+    }
+
+
 @router.post("/pack/validate")
 async def validate_pack() -> dict:
     """Проверяет пак по тем же правилам, что и импорт.
