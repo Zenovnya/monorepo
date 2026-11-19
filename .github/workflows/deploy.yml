@@ -8,6 +8,16 @@ on:
       - 'backend/**'
       - 'mobile/**'
       - '.github/workflows/deploy.yml'
+      # То же, что для pull_request: правки скриптов и корня тоже ломают
+      # сборку. Раньше список расширили только для PR, и мерж, меняющий
+      # лишь scripts/**, приезжал в main без единого прогона CI
+      # (так прошёл #52 — «Run migrations» и смоук не выполнялись).
+      - 'scripts/**'
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.gitignore'
+      - '.github/**'
   pull_request:
     branches:
       - main
