@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -103,7 +104,7 @@ def test_exit_code_reflects_result(tmp_path) -> None:
         [sys.executable, str(_SCRIPT), str(bad)], capture_output=True, text=True
     )
     assert result.returncode == 1
-    assert "nope-not-a-package-xyz" in result.stdout
+    assert json.loads(result.stdout)["missing"] == ["nope-not-a-package-xyz"]
 
 
 def test_never_reports_false_success_on_empty_file(tmp_path) -> None:
@@ -117,3 +118,67 @@ def test_never_reports_false_success_on_empty_file(tmp_path) -> None:
         [sys.executable, str(_SCRIPT), str(empty)], capture_output=True, text=True
     )
     assert result.returncode == 2
+
+
+def _run(script: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(script), *args], capture_output=True, text=True
+    )
+
+
+def test_stdout_is_one_json_object(tmp_path, check_deps) -> None:
+    """stdout — ровно один JSON-объект, а не текст.
+
+    Контракт важен: .ps1 разбирает вывод и считает элементами `missing`.
+    Раньше формат был «одно имя на строку», и любая посторонняя строка в
+    stdout стала бы «отсутствующим пакетом».
+    """
+    ok = _run(_SCRIPT)
+    assert ok.returncode == 0, ok.stderr
+    parsed = json.loads(ok.stdout)  # не разбирается — тест падает
+    assert parsed["missing"] == []
+    # Число берём из файла, а не константой: иначе тест ломается каждый раз,
+    # когда в requirements.txt добавляют пакет.
+    expected = len(
+        check_deps.parse_requirement_names(_REQUIREMENTS.read_text(encoding="utf-8"))
+    )
+    assert parsed["checked"] == expected
+
+    bad = tmp_path / "bad.txt"
+    bad.write_text("fastapi\nnope-not-a-package-xyz\n", encoding="utf-8")
+    failed = _run(_SCRIPT, str(bad))
+    assert failed.returncode == 1
+    parsed = json.loads(failed.stdout)
+    assert parsed["checked"] == 2
+    assert parsed["missing"] == ["nope-not-a-package-xyz"]
+
+
+def test_human_text_never_reaches_stdout_alone() -> None:
+    """Коды 0 и 1 пишут в stdout только JSON — человеческий текст идёт в stderr.
+
+    Иначе PowerShell, собирая имена из stdout, печатает фразу целиком:
+    «Не установлены пакеты: все 17 пакетов установлены».
+    """
+    result = _run(_SCRIPT)
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert lines[0].startswith("{"), lines[0]
+
+
+def test_powershell_parses_the_report_like_the_script_does(tmp_path) -> None:
+    """Проверяем саму логику разбора, которую выполняет ConvertFrom-Json.
+
+    PowerShell в песочнице нет, поэтому повторяем его шаги на Python:
+    «нет вывода или мусор в stdout» не должен превращаться в список имён.
+    """
+    bad = tmp_path / "bad.txt"
+    bad.write_text("nope-not-a-package-xyz", encoding="utf-8")
+    result = _run(_SCRIPT, str(bad))
+    parsed = json.loads(result.stdout)
+    missing = [name for name in parsed["missing"] if name]
+    assert missing == ["nope-not-a-package-xyz"]
+
+    # Текст вместо JSON (так было до правки) не должен давать имён вообще.
+    garbage = "Не установлены пакеты: всё хорошо"
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(garbage)

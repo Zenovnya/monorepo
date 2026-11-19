@@ -59,21 +59,90 @@ $checker = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\check_deps.py'
 $requirements = Join-Path $backend 'requirements.txt'
 # Вывод читаем ДО проверки кода возврата: так $LASTEXITCODE гарантированно
 # относится к check_deps.py, а не к чему-то внутри подвыражения.
-$missingOutput = & $python $checker $requirements 2>$null
-$depsMissing = ($LASTEXITCODE -ne 0)
-$missing = @($missingOutput | Where-Object { $_ -and $_.Trim() })
+$depsJson = & $python $checker $requirements 2>$null
+$depsExit = $LASTEXITCODE
 
-if ($depsMissing) {
-    if ($missing.Count -gt 0) {
-        Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
-    } else {
-        Write-Host 'Проверка зависимостей не прошла (см. вывод выше).'
+$missing = @()
+$checkedCount = 0
+try {
+    # Один JSON с массивом missing. Прежний формат (имя на строку) не позволял
+    # отличить имена от любого другого текста в stdout: при сбое окружения
+    # чекер мог напечатать что угодно, и это ушло бы в «Не установлены пакеты».
+    # Если JSON не разбирается — говорим прямо, а не показываем мусор как имена.
+    $report = ($depsJson -join "`n") | ConvertFrom-Json
+    $checkedCount = [int]$report.checked
+    $missing = @($report.missing | Where-Object { $_ })
+} catch {
+    if ($depsExit -ne 0) {
+        Write-Host 'Проверка зависимостей не вернула разбираемый отчёт.' -ForegroundColor Yellow
+        Write-Host "Код возврата: $depsExit. Проверьте вручную:"
+        Write-Host "  $python `"$checker`" `"$requirements`""
+        exit 1
     }
+}
+
+if ($depsExit -ne 0) {
+    Write-Host ("Отсутствуют пакеты ({0} из {1}): {2}" -f $missing.Count, $checkedCount, ($missing -join ', '))
+
+    # Ставим через `$python -m pip`: установка идёт в окружение этого же
+    # интерпретатора — того, которым потом запускаются alembic, API и тесты.
+    #
+    # У pip есть флаг `--python <interp>` для того же, но он появился не во
+    # всех версиях, а на старом pip просто не существует — скрипт упал бы с
+    # «no such option» вместо установки. `-m pip` работает везде, а совпадение
+    # окружения всё равно перепроверяется ниже.
     Write-Host 'Ставлю requirements.txt (это долго, один раз)...'
-    & $python -m pip install --disable-pip-version-check -r (Join-Path $backend 'requirements.txt')
+    & $python -m pip install --disable-pip-version-check -r $requirements
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'Не удалось установить зависимости. Попробуйте вручную:'
-        Write-Host "  cd backend; $python -m pip install -r requirements.txt"
+        Write-Host ''
+        Write-Host 'Не удалось установить зависимости.' -ForegroundColor Red
+        Write-Host 'Если в выводе выше SSLError / CERTIFICATE_VERIFY_FAILED, pip не может'
+        Write-Host 'скачать пакеты: соединению мешает TLS-инспекция или прокси (часто на'
+        Write-Host 'рабочих и учебных сетях). Варианты по порядку предпочтения:'
+        Write-Host ''
+        Write-Host '  1) Установить корневой сертификат вашей сети в хранилище Windows:'
+        Write-Host '     сертификат можно взять из вывода pip или у администратора сети.'
+        Write-Host ''
+        Write-Host '  2) Указать pip сертификат явно:'
+        Write-Host '     pip config set global.cert "C:\путь\к\corp-root-ca.pem"'
+        Write-Host ''
+        Write-Host '  3) Разрешить pip использовать хранилище сертификатов Windows'
+        Write-Host '     (pip 24.2+ делает это сам; для pip 22.2-24.1):'
+        Write-Host '     python -m pip config set global.use-feature truststore'
+        Write-Host ''
+        Write-Host '  4) Крайний вариант — отключить проверку для PyPI (небезопасно,'
+        Write-Host '     только в доверенной сети):'
+        Write-Host '     python -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt'
+        Write-Host ''
+        Write-Host "Установить вручную: cd `"$backend`"; `"$python`" -m pip install -r requirements.txt"
+        exit 1
+    }
+
+    # Повторная проверка — по факту, а не по коду возврата pip.
+    #
+    # Успешный код pip означает «pip доволен», а не «пакеты видит $python».
+    # Два случая, когда это расходятся: pip поставил в другое окружение; пакет
+    # уже отмечен установленным, но непригоден (сломанный wheel, не совпал
+    # интерпретатор, — ровно так на машине оказался «установлен» aiosqlite,
+    # которого $python не видел). Без этой проверки шаг считался пройденным, и
+    # ошибка всплывала ниже: на миграциях или на тестах.
+    $afterJson = & $python $checker $requirements 2>$null
+    $afterExit = $LASTEXITCODE
+    if ($afterExit -ne 0) {
+        $stillMissing = @()
+        try {
+            $afterReport = ($afterJson -join "`n") | ConvertFrom-Json
+            $stillMissing = @($afterReport.missing | Where-Object { $_ })
+        } catch {
+            $stillMissing = @()
+        }
+        Write-Host ''
+        Write-Host 'Установка прошла, но пакеты по-прежнему не видны этому Python:' -ForegroundColor Red
+        if ($stillMissing.Count -gt 0) { Write-Host ("  " + ($stillMissing -join ', ')) }
+        Write-Host "Python: $python"
+        Write-Host 'Скорее всего пакеты стоят в другом интерпретаторе. Проверьте:'
+        Write-Host "  `"$python`" -m pip show pydantic-settings"
+        Write-Host "  `"$python`" -m pip install -r `"$requirements`""
         exit 1
     }
 }

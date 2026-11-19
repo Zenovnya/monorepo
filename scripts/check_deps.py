@@ -16,11 +16,24 @@
 3. Это можно проверить тестом — в отличие от кода на PowerShell.
 
 Запуск: python scripts/check_deps.py [путь_к_requirements.txt]
-Код возврата: 0 — всё установлено, 1 — чего-то не хватает (имена в stdout).
+Код возврата:
+  0 — всё установлено;
+  1 — чего-то не хватает, список в stdout;
+  2 — файл требований не найден или пуст (сообщение в stderr).
+
+Вывод на 0 и 1 — одна строка JSON: {"checked": 17, "missing": [...]}.
+
+Почему JSON, а не по одному имени в строке: прежний формат (одно имя на строку)
+нельзя было отличить от любого другого текста. Скрипт читал stdout и считал
+каждую непустую строку именем пакета, поэтому при любом сбое окружения он
+напечатал бы в качестве отсутствующих пакетов что угодно, что попало в stdout.
+Здесь stdout — всегда ровно один JSON-объект; если он не разбирается, скрипт
+говорит об этом прямо, а не выдаёт мусор за имена.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from importlib import metadata
@@ -59,6 +72,11 @@ def missing_packages(names: list[str]) -> list[str]:
     return missing
 
 
+def report(names: list[str], missing: list[str]) -> str:
+    """Одна строка JSON — единственное, что разбирает .ps1."""
+    return json.dumps({"checked": len(names), "missing": missing}, ensure_ascii=False)
+
+
 def main(argv: list[str]) -> int:
     path = Path(argv[1]) if len(argv) > 1 else (
         Path(__file__).resolve().parent.parent / "backend" / "requirements.txt"
@@ -73,12 +91,8 @@ def main(argv: list[str]) -> int:
         return 2
 
     missing = missing_packages(names)
-    if missing:
-        # По одному в строке: PowerShell-скрипт собирает их в сообщение.
-        print("\n".join(missing))
-        return 1
-    print(f"все {len(names)} пакетов установлены")
-    return 0
+    print(report(names, missing))
+    return 1 if missing else 0
 
 
 if __name__ == "__main__":
