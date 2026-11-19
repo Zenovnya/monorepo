@@ -3,7 +3,6 @@
  */
 export { default as apiClient } from './client';
 export { authApi } from './auth';
-export { progressApi } from './progress';
 export { mascotApi } from './mascot';
 export { gamificationApi } from './gamification';
 export { paymentsApi } from './payments';

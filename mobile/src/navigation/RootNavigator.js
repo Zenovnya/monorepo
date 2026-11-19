@@ -19,7 +19,6 @@ import LeagueScreen from '../screens/LeagueScreen';
 import ShopScreen from '../screens/ShopScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
-import ReviewsScreen from '../screens/ReviewsScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import PaymentReturnScreen from '../screens/PaymentReturnScreen';
@@ -112,7 +111,6 @@ function MainStack() {
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Premium" component={PremiumScreen} />
       <Stack.Screen name="PaymentReturn" component={PaymentReturnScreen} />
-      <Stack.Screen name="Reviews" component={ReviewsScreen} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
       <Stack.Screen name="NoLives" component={NoLivesScreen} />
     </Stack.Navigator>

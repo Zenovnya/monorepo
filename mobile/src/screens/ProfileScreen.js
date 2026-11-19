@@ -12,7 +12,7 @@ import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
 import { gamificationApi } from '../api/gamification';
-import { progressApi } from '../api/progress';
+import { adaptiveApi } from '../api/adaptive';
 import { userApi } from '../api/user';
 import {
   brand,
@@ -65,10 +65,13 @@ export default function ProfileScreen({ navigation }) {
     queryFn: gamificationApi.me,
   });
 
-  const { data: progress } = useQuery({
-    queryKey: ['progress-overview'],
-    queryFn: progressApi.overview,
+  // Прогресс по темам: единственный источник правды о том, что пройдено.
+  // Раньше здесь читался /progress по старым урокам — их больше нет.
+  const { data: overview } = useQuery({
+    queryKey: ['adaptive-overview'],
+    queryFn: adaptiveApi.overview,
   });
+  const topics = overview?.topics ?? [];
 
   const { data: achData } = useQuery({
     queryKey: ['gamification-achievements'],
@@ -76,7 +79,8 @@ export default function ProfileScreen({ navigation }) {
   });
   const achievements = achData?.achievements ?? [];
 
-  const totalCrowns = progress?.total_crowns ?? 0;
+  const lessonsPractised = topics.reduce((sum, t) => sum + t.lessons_practised, 0);
+  const mistakesRecent = topics.reduce((sum, t) => sum + t.errors, 0);
   const level = gamification?.level ?? user?.level ?? 1;
 
   const prevLevelRef = useRef(level);
@@ -105,14 +109,14 @@ export default function ProfileScreen({ navigation }) {
     },
     {
       icon: '👑',
-      value: totalCrowns,
-      label: 'Короны',
+      value: lessonsPractised,
+      label: 'Уроки',
       accent: brand.goldInk,
     },
     {
       icon: '⚖️',
-      value: progress?.total_completed ?? 0,
-      label: 'Уроки',
+      value: mistakesRecent,
+      label: 'Ошибки',
       accent: brand.pine,
     },
   ];
@@ -122,6 +126,11 @@ export default function ProfileScreen({ navigation }) {
       key: 'bear',
       title: 'Оформление мишки',
       hint: 'Костюмы, галстуки, кабинет',
+    },
+    {
+      key: 'topics',
+      title: 'Темы и уроки',
+      hint: '6 тем, 30 уроков и приоритет практики',
     },
     {
       key: 'league',
@@ -149,8 +158,8 @@ export default function ProfileScreen({ navigation }) {
   const navigate = (key) => {
     const map = {
       bear: 'Bear',
+      topics: 'Learn',
       league: 'League',
-      reviews: 'Reviews',
       shop: 'Shop',
       premium: 'Premium',
     };
