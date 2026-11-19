@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
+import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
 import {
   brand,
   serifFamily,
@@ -274,7 +275,15 @@ export default function AdaptiveLearningScreen() {
         ) : null}
 
         {item ? (
+          <CaseReaction
+            outcome={result ? (result.correct === true ? 'correct' : result.correct === false ? 'wrong' : null) : null}
+            seed={Number(attemptId?.slice(-3)) || 0}
+          >
           <View style={styles.situationCard}>
+            <OutcomeBadge
+              outcome={result ? (result.correct === true ? 'correct' : result.correct === false ? 'wrong' : null) : null}
+              seed={Number(attemptId?.slice(-3)) || 0}
+            />
             <RibbonBookmark
               color={brand.red}
               symbol="§"
@@ -288,6 +297,7 @@ export default function AdaptiveLearningScreen() {
             </Text>
             <Text style={styles.situation}>{item.situation}</Text>
           </View>
+          </CaseReaction>
         ) : null}
 
         {/* Мишка задаёт вопрос. Текст пузыря короткий и про действие

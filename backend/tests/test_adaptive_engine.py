@@ -18,6 +18,7 @@ import copy
 import importlib.util
 import json
 import random
+import re
 from fractions import Fraction
 from pathlib import Path
 
@@ -430,6 +431,21 @@ def _strip_none(mapping: dict) -> dict:
     return {key: value for key, value in mapping.items() if value is not None}
 
 
+# Идентификатор попытки содержит префикс пользователя, чтобы не сталкиваться на
+# первичном ключе таблицы (см. engine.State.next_attempt_id). Эталон из
+# спецификации нумерует попытки внутри пользователя: `a1`, `a2`. Для сверки
+# логики это правильная модель — префикс относится к хранению, а не к выбору
+# кейса. Поэтому id сравниваем в «эталонном» виде: `a<hex8>-3` → `a3`.
+# `anon` — фолбэк, когда у состояния нет пользователя (движок вызывают напрямую,
+# без сервиса). На сервере префикс всегда hex от id пользователя.
+_ATTEMPT_ID = re.compile(r"^a(?:[0-9a-f]{8}|anon)-(\d+)$")
+
+
+def _same_id(attempt_id: str) -> str:
+    match = _ATTEMPT_ID.match(attempt_id)
+    return f"a{match.group(1)}" if match else attempt_id
+
+
 def _run_scenario(raw: dict, reference, seed: int, steps: int = 60) -> int:
     """Прогоняет одинаковый случайный сценарий через оба движка.
 
@@ -481,7 +497,10 @@ def _run_scenario(raw: dict, reference, seed: int, steps: int = 60) -> int:
             done += 1
             if expected_error:
                 continue
-            assert _strip_none(got) == _strip_none(expected), f"{where} choose: {expected} != {got}"
+            got_choose = _strip_none(got)
+            if got_choose.get("attempt_id"):
+                got_choose = {**got_choose, "attempt_id": _same_id(got_choose["attempt_id"])}
+            assert got_choose == _strip_none(expected), f"{where} choose: {expected} != {got}"
 
         elif op == "issue":
             item_id = rng.choice(sorted(pack.items))
@@ -519,13 +538,16 @@ def _run_scenario(raw: dict, reference, seed: int, steps: int = 60) -> int:
             if not our_state.attempts:
                 continue
             attempt_id = rng.choice(sorted(our_state.attempts))
+            # Эталон знает попытки как `a1`, `a2`: у нас к номеру добавлен
+            # префикс пользователя (см. _same_id).
+            ref_attempt_id = _same_id(attempt_id)
             action = rng.choice(["answer", "answer", "answer", "help", "skip", "reveal"])
             option = None
             if action == "answer":
                 options = [o["id"] for o in pack.items[our_state.attempts[attempt_id].item_id]["options"]]
                 option = rng.choice(options + ["Z"])
             try:
-                expected = reference.act(raw, ref_state, attempt_id, action, option, sandbox=sandbox)
+                expected = reference.act(raw, ref_state, ref_attempt_id, action, option, sandbox=sandbox)
                 expected_error = None
             except (ValueError, KeyError) as exc:
                 expected_error = str(exc)
@@ -545,7 +567,10 @@ def _run_scenario(raw: dict, reference, seed: int, steps: int = 60) -> int:
             expected_cmp = dict(expected)
             if "feedback" in expected_cmp:
                 expected_cmp["options"] = expected_cmp.pop("feedback")
-            assert _strip_none(got) == _strip_none(expected_cmp), (
+            got_cmp = _strip_none(got)
+            if "attempt_id" in got_cmp:
+                got_cmp = {**got_cmp, "attempt_id": _same_id(got_cmp["attempt_id"])}
+            assert got_cmp == _strip_none(expected_cmp), (
                 f"{where} act result: {expected_cmp} != {got}"
             )
 
@@ -553,9 +578,10 @@ def _run_scenario(raw: dict, reference, seed: int, steps: int = 60) -> int:
             if not our_state.attempts:
                 continue
             attempt_id = rng.choice(sorted(our_state.attempts))
+            ref_attempt_id = _same_id(attempt_id)
             expected = False
             for observation in ref_state["observations"]:
-                if observation["attempt_id"] == attempt_id and not observation["voided"]:
+                if observation["attempt_id"] == ref_attempt_id and not observation["voided"]:
                     observation["voided"] = True
                     expected = True
                     break

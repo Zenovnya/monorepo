@@ -128,6 +128,10 @@ class TopicProgressRead(BaseModel):
     title: str
     order: int
     summary: str | None = None
+    # Короткий акцент темы («Гарантии и границы»). Нужен интерфейсу: карточка
+    # темы показывает одну строку вместо summary в три строки — иначе список
+    # тем превращается в текст, который никто не читает.
+    focus: str | None = None
     weight_pct: int
     n: int
     errors: int

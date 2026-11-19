@@ -459,6 +459,7 @@ async def overview(
                 "title": topic["title"],
                 "order": topic["order"],
                 "summary": topic.get("summary"),
+                "focus": topic.get("focus"),
                 "weight_pct": row.weight_pct,
                 "n": row.n,
                 "errors": row.errors,

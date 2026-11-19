@@ -6,6 +6,7 @@ import { adaptiveApi } from '../api/adaptive';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
+import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
 import { PressableScale } from '../components/PressableScale';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import {
@@ -224,7 +225,15 @@ export default function LessonScreen({ route, navigation }) {
         ) : null}
 
         {checking ? (
+          <CaseReaction
+            outcome={result ? (result.correct === true ? 'correct' : result.correct === false ? 'wrong' : null) : null}
+            seed={Number(attemptId?.slice(-3)) || 0}
+          >
           <View style={styles.checkCard}>
+            <OutcomeBadge
+              outcome={result ? (result.correct === true ? 'correct' : result.correct === false ? 'wrong' : null) : null}
+              seed={Number(attemptId?.slice(-3)) || 0}
+            />
             <Text style={styles.cardEyebrow}>ПРОВЕРКА</Text>
             {/* Тот же маскот, что и в кейсах: вопрос задаёт Мишка. */}
             <MascotPrompt
@@ -294,6 +303,7 @@ export default function LessonScreen({ route, navigation }) {
               </PressableScale>
             )}
           </View>
+          </CaseReaction>
         ) : null}
 
         {result ? (
