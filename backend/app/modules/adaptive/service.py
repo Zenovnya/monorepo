@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Any
 
@@ -91,33 +92,55 @@ def _translate(exc: EngineError) -> AdaptiveError:
 # --- Загрузка и сохранение состояния --------------------------------------
 
 
+# Сериализует все сценарии записи состояния одного пользователя.
+# asyncio.Lock в одном процессе гарантирует, что параллельные запросы
+# (нажатие «Ответить» + повторный рендер, StrictMode, две вкладки)
+# не увидят одно и то же состояние одновременно: каждый следующий
+# запрос выполнится после предыдущего на свежем состоянии. Это
+# устраняет гонку уникальности до того, как она дойдёт до IntegrityError.
+_write_locks: dict[uuid.UUID, asyncio.Lock] = {}
+_write_locks_guard = asyncio.Lock()
+
+
+async def _acquire_write_lock(user_id: uuid.UUID) -> asyncio.Lock:
+    lock = _write_locks.get(user_id)
+    if lock is None:
+        async with _write_locks_guard:
+            lock = _write_locks.get(user_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                _write_locks[user_id] = lock
+    return lock
+
+
 async def _run_write(
     session: AsyncSession,
     fn,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    """Запускает сценарий записи с одним повтором при конфликте уникальности.
+    """Запускает сценарий записи с сериализацией и одним повтором при конфликте.
 
-    На SQLite нет строковых блокировок: два парных запроса (нажатие
-    «Ответить» + повторный рендер, StrictMode, две вкладки) могут оба
-    прочитать одно и то же состояние и оба вставить одну и ту же строку —
-    ``adaptive_states``, ``adaptive_observations.attempt_id``,
-    ``adaptive_seen_family``, ``adaptive_topic_priority``. Без повтора
-    IntegrityError уходил в 500, и клиент показывал «Сервер не смог отдать
-    ответ. Мы уже разбираемся», хотя всё было в порядке: просто второй
-    запрос проиграл гонку. При конфликте откатываемся и запускаем сценарий
-    заново — на свежем состоянии он видит чужие изменения и завершается
-    корректно (попытка уже закрыта — returns уже_closed).
+    Сериализация (``asyncio.Lock`` по пользователю) устраняет гонку
+    уникальности ещё до того, как она достигнет базы: параллельные
+    запросы (нажатие «Ответить» + повторный рендер, StrictMode, две
+    вкладки) не могут прочитать одно и то же состояние одновременно —
+    каждый следующий запрос выполняется после предыдущего на свежем
+    состоянии. Если на SQLite всё же возникает ``IntegrityError``
+    (например, из-за двух процессов), повтор запускает сценарий на
+    новом состоянии: на свежем состоянии он видит чужие изменения и
+    завершается корректно (попытка уже закрыта — returns ``already_closed``).
     """
-    for attempt in range(2):
-        try:
-            return await fn(session, *args, **kwargs)
-        except IntegrityError:
-            await session.rollback()
-            if attempt == 1:
-                raise
-    raise RuntimeError("unreachable")  # pragma: no cover
+    lock = await _acquire_write_lock(kwargs.pop("_user_id", None))
+    async with lock:
+        for attempt in range(2):
+            try:
+                return await fn(session, *args, **kwargs)
+            except IntegrityError:
+                await session.rollback()
+                if attempt == 1:
+                    raise
+        raise RuntimeError("unreachable")  # pragma: no cover
 
 
 async def _load(
@@ -344,7 +367,14 @@ async def choose_next(
     единственную открытую попытку.
     """
     return await _run_write(
-        session, _choose_next, user_id, topic_id, lesson_id, open_attempt, sandbox
+        session,
+        _choose_next,
+        user_id,
+        topic_id,
+        lesson_id,
+        open_attempt,
+        sandbox,
+        _user_id=user_id,
     )
 
 
@@ -417,7 +447,16 @@ async def open_attempt(
     sandbox: bool = False,
 ) -> dict[str, Any]:
     """Открывает попытку по уже выбранной карточке (например, повтор)."""
-    return await _run_write(session, _open_attempt, user_id, item_id, mode, origin, sandbox)
+    return await _run_write(
+        session,
+        _open_attempt,
+        user_id,
+        item_id,
+        mode,
+        origin,
+        sandbox,
+        _user_id=user_id,
+    )
 
 
 async def _open_attempt(
@@ -457,7 +496,14 @@ async def answer(
 ) -> dict[str, Any]:
     """Принимает ответ, подсказку, пропуск или показ разбора."""
     return await _run_write(
-        session, _answer, user_id, attempt_id, action, option_id, sandbox
+        session,
+        _answer,
+        user_id,
+        attempt_id,
+        action,
+        option_id,
+        sandbox,
+        _user_id=user_id,
     )
 
 
