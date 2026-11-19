@@ -41,7 +41,7 @@
     "babel-preset-expo": "~54.0.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
-    "eslint-plugin-react-hooks": "^4.6.0"
+    "eslint-plugin-react-hooks": "^7.1.1"
   },
   "private": true
 }
