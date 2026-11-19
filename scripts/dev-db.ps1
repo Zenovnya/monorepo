@@ -214,6 +214,31 @@ if (Test-Path $envFile) {
         Add-Content -Path $envFile -Value "DATABASE_URL=$dbUrl" -Encoding UTF8
         Write-Host "backend/.env: добавлен DATABASE_URL=$dbUrl"
     }
+
+    # Дописываем обязательные ключи, которых может не быть.
+    #
+    # Реальный случай: .env добавлен в .gitignore, у человека остался файл,
+    # созданный раньше (или скопированный из .env.example), без
+    # JWT_SECRET_KEY. Приложение падало на импорте с
+    # «JWT_SECRET_KEY должен быть задан», а dev-start.ps1 трактовал это как
+    # «зависимости не установлены» и переустанавливал пакеты.
+    # Проверяем по каждой строке отдельно: остальное содержимое не трогаем.
+    $envText = Get-Content $envFile -Raw -ErrorAction SilentlyContinue
+    $envLines = @(Get-Content $envFile -ErrorAction SilentlyContinue)
+
+    if ($envText -notmatch '(?m)^\s*JWT_SECRET_KEY\s*=\s*\S') {
+        $generated = -join ((1..48) | ForEach-Object { [char](Get-Random -Minimum 97 -Maximum 123) })
+        Add-Content -Path $envFile -Value "JWT_SECRET_KEY=$generated" -Encoding UTF8
+        Write-Host 'backend/.env: добавлен JWT_SECRET_KEY (сгенерирован)'
+    }
+    if ($envText -notmatch '(?m)^\s*DEBUG\s*=') {
+        Add-Content -Path $envFile -Value 'DEBUG=true' -Encoding UTF8
+        Write-Host 'backend/.env: добавлен DEBUG=true'
+    }
+    if ($envText -notmatch '(?m)^\s*ADMIN_TOKEN\s*=\s*\S') {
+        Add-Content -Path $envFile -Value 'ADMIN_TOKEN=lexbear-admin-dev-token' -Encoding UTF8
+        Write-Host 'backend/.env: добавлен ADMIN_TOKEN'
+    }
 } else {
     # JWT_SECRET_KEY >= 32 символов обязателен вне DEBUG.
     $secret = -join ((1..48) | ForEach-Object { [char](Get-Random -Minimum 97 -Maximum 123) })
