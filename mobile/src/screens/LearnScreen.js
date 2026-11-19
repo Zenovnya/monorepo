@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
@@ -8,7 +8,8 @@ import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { LessonSnake } from '../components/LessonSnake';
 import { TopicCard } from '../components/TopicCard';
-import { PressableScale } from '../components/PressableScale';
+import { TactilePressable } from '../components/TactilePressable';
+import { ScreenWrapper } from '../components/ScreenWrapper';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TopStats } from '../components/TopStats';
 import {
@@ -82,9 +83,9 @@ export default function LearnScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <PaperGrain />
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: 20 + insets.top }]}
-        showsVerticalScrollIndicator={false}
+      <ScreenWrapper
+        scroll
+        contentStyle={[styles.content, { paddingTop: 12 + insets.top }]}
       >
         <TopStats />
 
@@ -104,12 +105,14 @@ export default function LearnScreen({ navigation }) {
             {totals.done} из {totals.lessons} уроков пройдено. Каждый урок —
             короткий разбор ситуации и одна проверка.
           </Text>
-          <PressableScale
+          <TactilePressable
             style={styles.headerBtn}
             onPress={() => navigation.navigate('Adaptive')}
+            haptic
+            scale={0.95}
           >
             <Text style={styles.headerBtnText}>К рекомендованному кейсу</Text>
-          </PressableScale>
+          </TactilePressable>
         </View>
 
         {dailyGoal.data && dailyGoal.data.goal > 0 ? (
@@ -180,7 +183,7 @@ export default function LearnScreen({ navigation }) {
         {path.data?.editorial_note ? (
           <Text style={styles.editorialNote}>{path.data.editorial_note}</Text>
         ) : null}
-      </ScrollView>
+      </ScreenWrapper>
     </View>
   );
 }
@@ -218,7 +221,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: brand.gold,
     borderRadius: 14,
-    borderBottomWidth: 3,
+    borderBottomWidth: 5,
     borderBottomColor: brand.goldDark,
     paddingHorizontal: 16,
     paddingVertical: 11,
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
   },
   goalValue: { fontSize: 13.5, fontWeight: '900', color: colors.text },
   goalTrack: {
-    height: 9,
+    height: 10,
     borderRadius: 5,
     backgroundColor: colors.track,
     overflow: 'hidden',
@@ -278,8 +281,8 @@ const styles = StyleSheet.create({
   topicTitle: { fontSize: 18, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
   topicSummary: { fontSize: 13, lineHeight: 19, color: colors.subtext },
   topicTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.track,
     overflow: 'hidden',
   },

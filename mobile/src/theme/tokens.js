@@ -1,12 +1,12 @@
 /**
- * Дизайн-токены LexBear.
+ * Дизайн-токены LexBear (редизайн по техзаданию UI/UX).
  *
- * Единственный источник визуальных значений: цвета, типографика, отступы,
+ * Единый источник визуальных значений: цвета, типографика, отступы,
  * радиусы, глубина. Экраны и компоненты не задают размеры и цвета числами —
- * только через токены, иначе экраны снова начнут «расходиться» (см.
- * docs/design/visual-audit.md, где зафиксированы 15 экранов с хардкодом).
+ * только через токены.
  *
- * Палитра остаётся прежней (cream / ink / gold) — токены её систематизируют.
+ * Палитра обновлена по техзаданию: теплый кремовый, изумрудный,
+ * золотой, терракотовый. Типографика — округлый гротеск (Nunito/Rubik).
  */
 
 import { colors as palette } from './colors';
@@ -21,34 +21,55 @@ export const colors = {
 
   // --- Полутона, которые раньше хардкодились в экранах ---
   goldTint: '#FFF7DE', // выбранный вариант / акцентный фон
-  successTint: '#EAF8EE', // фон успеха
-  errorTint: '#FFF0F0', // фон ошибки
-  overlay: 'rgba(31, 42, 68, 0.35)', // затемнение модалок
+  successTint: '#E8FBD7', // фон успеха (изумрудный)
+  errorTint: '#FFE5E6', // фон ошибки (терракотовый)
+  overlay: 'rgba(44, 37, 32, 0.35)', // затемнение модалок
 
   // --- Медали таблицы лидеров ---
-  gold: '#C9A227',
+  gold: '#E5A500',
   silver: '#C0C0C0',
   bronze: '#CD7F32',
 
-  // --- Дополнительные поверхности, которые раньше хардкодились ---
-  goldSoft: '#E6C75A',
-  skyTint: '#DFF1FB', // чип с гемами
+  // --- Дополнительные поверхности ---
+  goldSoft: '#FFF3C2', // мягкий золотой фон
+  skyTint: '#E3F0F9', // чип с гемами
   streakTint: '#FFF4D1', // чип со стриком
   roomFloor: '#EFE3C8', // пол комнаты мишки
   roomWood: '#5A3620', // деревянный плинтус комнаты
 
   // --- Границы ---
   border: palette.border,
-  borderSoft: '#E4D9C8', // мягкая граница карточек и «подошва» кнопок
+  borderSoft: '#E6DFD3', // мягкая граница карточек и разделительная линия
 
   // --- Глубина ---
-  shadow: 'rgba(31, 42, 68, 0.16)',
+  shadow: 'rgba(44, 37, 32, 0.16)',
+
+  // --- Цвета вердикта (Bottom Sheet) по техзаданию ---
+  verdictOk: '#D7FFB8', // изумрудно-зеленая панель верного ответа
+  verdictOkTitle: '#58A700',
+  verdictWrong: '#FFDFE0', // кораллово-красная панель ошибки
+  verdictWrongTitle: '#EA2B2B',
 };
 
 /**
- * Типографика: 6 ролей вместо произвольных размеров от 11 до 32.
- * Каждая роль — готовый объект для StyleSheet (size/weight/lineHeight/spacing).
+ * Типографика: роли для гротеска (Nunito/Rubik).
+ *
+ * В веб-превью без expo-google-fonts используем системный гротеск.
+ * На нативных платформах шрифты загружаются через expo-font.
  */
+export const fontFamily = {
+  display: 'Nunito_800ExtraBold',
+  title: 'Nunito_800ExtraBold',
+  heading: 'Nunito_700Bold',
+  body: 'Nunito_600',
+  bodyStrong: 'Nunito_700Bold',
+  caption: 'Nunito_700Bold',
+  micro: 'Nunito_800Bold',
+  // Системный гротеск как запасной вариант (веб-превью без Google Fonts)
+  fallback: 'system',
+};
+
+/** Типографические роли: размер/вес/высота строки. */
 export const typography = {
   display: { fontSize: 32, fontWeight: '900', lineHeight: 38, letterSpacing: -0.5 },
   title: { fontSize: 24, fontWeight: '900', lineHeight: 30, letterSpacing: -0.3 },
@@ -113,4 +134,4 @@ export const sizes = {
   minTouchTarget: 44,
 };
 
-export default { colors, typography, spacing, radius, elevation, sizes };
+export default { colors, typography, fontFamily, spacing, radius, elevation, sizes };

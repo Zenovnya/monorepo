@@ -1,13 +1,29 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSpring,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
 import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
-import { PressableScale } from '../components/PressableScale';
+import { TactilePressable } from '../components/TactilePressable';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import {
   brand,
@@ -17,7 +33,126 @@ import {
   RibbonBookmark,
   WaxSeal,
 } from '../components/KhokhlomaOrnament';
-import { colors } from '../theme/colors';
+import { colors } from '../theme/tokens';
+
+/**
+ * Bottom Sheet вердикта (§5).
+ *
+ * Зелёный (#D7FFB8 / #58A700) — верный ответ, красный
+ * (#FFDFE0 / #EA2B2B) — неверный. Под объяснение даётся ссылка
+ * на статью, кнопка «ДАЛЕЕ» — в следующую практику.
+ */
+function VerdictSheet({ result, onNext }) {
+  const correct = result.correct === true;
+  React.useEffect(() => {
+    Haptics.notificationAsync(
+      correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error
+    ).catch(() => {});
+  }, [correct]);
+
+  const bg = correct ? colors.verdictOk : colors.verdictWrong;
+  const titleColor = correct ? colors.verdictOkTitle : colors.verdictWrongTitle;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onNext}>
+      <Pressable style={styles.verdictOverlay} onPress={onNext}>
+        <View style={[styles.verdictSheet, { backgroundColor: bg, borderColor: titleColor }]}>
+          <View style={styles.verdictHandle} />
+          <View style={[styles.verdictBadge, { backgroundColor: titleColor }]}>
+            <Text style={styles.verdictBadgeText}>{correct ? '✓' : '✕'}</Text>
+          </View>
+          <Text style={[styles.verdictTitle, { color: titleColor }]}>
+            {correct ? 'Верно' : 'Неверно'}
+          </Text>
+          {result.correct_option_id ? (
+            <Text style={styles.verdictAnswer}>
+              Верный вариант: {result.correct_option_id}
+            </Text>
+          ) : null}
+          {result.explanation ? (
+            <Text style={styles.verdictText}>{result.explanation}</Text>
+          ) : null}
+          {result.legal_basis_ids?.length ? (
+            <View style={styles.verdictLaw}>
+              <Text style={[styles.verdictLawText, { color: titleColor }]}>
+                Нормы: {result.legal_basis_ids.join(', ')}
+              </Text>
+            </View>
+          ) : null}
+          {!result.counted && result.reason === 'ASSISTED' ? (
+            <Text style={styles.verdictNote}>
+              Была подсказка — ответ не идёт в приоритет темы.
+            </Text>
+          ) : null}
+          <TactilePressable
+            style={styles.verdictBtn}
+            onPress={onNext}
+            haptic
+            scale={0.96}
+          >
+            <Text style={styles.verdictBtnText}>ДАЛЕЕ</Text>
+          </TactilePressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/**
+ * Прогресс-бар 12px с пружинной анимацией и бликом (§5).
+ *
+ * Заполнение растягивается через withSpring при смене значения,
+ * сверху блик добавляет «лакированную» глубину.
+ */
+function LessonProgress({ progress }) {
+  const pct = Math.max(0, Math.min(100, progress || 0));
+  const fill = useSharedValue(pct);
+  React.useEffect(() => {
+    fill.value = withSpring(pct, { damping: 14, stiffness: 180 });
+  }, [pct, fill]);
+
+  const animatedFill = useAnimatedStyle(() => ({
+    width: `${fill.value}%`,
+  }));
+
+  return (
+    <View style={styles.progressTrack}>
+      <Animated.View style={[styles.progressFill, animatedFill]} />
+      <View style={styles.progressGlow} pointerEvents="none" />
+    </View>
+  );
+}
+
+/**
+ * Счётчик жизней с пульсацией (§5): каждая жизнь — ❤️, остаток
+ * пульсирует через Reanimated, как в Duolingo.
+ */
+function LifeCounter({ lives }) {
+  const pulse = useSharedValue(1);
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.15, { duration: 350, easing: Animated.Easing.out(Animated.Easing.quad) }),
+        withTiming(1, { duration: 350, easing: Animated.Easing.in(Animated.Easing.quad) })
+      ),
+      -1,
+      true
+    );
+  }, [pulse]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
+
+  return (
+    <View style={styles.livesRow}>
+      <Animated.View style={animatedStyle}>
+        <Text style={styles.livesIcon}>❤️</Text>
+      </Animated.View>
+      <Text style={styles.livesText}>{Math.max(0, lives || 0)}</Text>
+    </View>
+  );
+}
 
 /**
  * Урок «Лапы Закона»: разбор → проверка.
@@ -48,6 +183,7 @@ export default function LessonScreen({ route, navigation }) {
   const [hint, setHint] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [openError, setOpenError] = useState(null);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const lesson = useQuery({
     queryKey: ['adaptive-lesson', lessonId],
@@ -151,17 +287,17 @@ export default function LessonScreen({ route, navigation }) {
             экрана: попасть в него пальцем было тяжело, а на iPhone с вырезом он
             ещё и оказывался под ним. Теперь это плашка 44×44 (минимальный
             размер цели по гайдлайнам Apple) с hitSlop, отодвинутая от выреза. */}
-        <PressableScale
-          onPress={() => navigation.goBack()}
+        <TactilePressable
+          onPress={() => setConfirmClose(true)}
           style={styles.backBtn}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           accessibilityRole="button"
-          accessibilityLabel="Назад в меню"
-          scale={0.92}
+          accessibilityLabel="Закрыть урок"
+          scale={0.9}
+          haptic
         >
-          <Text style={styles.backIcon}>←</Text>
-          <Text style={styles.backText}>Назад</Text>
-        </PressableScale>
+          <Text style={styles.backIcon}>✕</Text>
+        </TactilePressable>
 
         <View style={styles.categoryRow}>
           <Text style={styles.categorySign}>§</Text>
@@ -171,6 +307,12 @@ export default function LessonScreen({ route, navigation }) {
         </View>
         <Text style={styles.title}>{data.title}</Text>
         <Text style={styles.goal}>{data.goal}</Text>
+
+        {/* Прогресс-бар 12px с пружинной анимацией и счётчик жизней */}
+        <View style={styles.progressRow}>
+          <LessonProgress progress={phase === 'check' ? 50 : 0} />
+          <LifeCounter lives={data.lives ?? 5} />
+        </View>
 
         <View style={styles.theoryCard}>
           <RibbonBookmark
@@ -219,18 +361,20 @@ export default function LessonScreen({ route, navigation }) {
               ответ — подсказка снимает зачёт.
             </Text>
             {openError ? <Text style={styles.errorNote}>{openError}</Text> : null}
-            <PressableScale
+            <TactilePressable
               style={[styles.primaryBtn, openCheck.isPending && styles.btnDisabled]}
               disabled={openCheck.isPending}
               onPress={() => {
                 setOpenError(null);
                 openCheck.mutate();
               }}
+              haptic
+              scale={0.96}
             >
               <Text style={styles.primaryBtnText}>
                 {openCheck.isPending ? 'Открываем…' : 'Пройти проверку'}
               </Text>
-            </PressableScale>
+            </TactilePressable>
           </>
         ) : null}
 
@@ -265,22 +409,28 @@ export default function LessonScreen({ route, navigation }) {
               const isWrongPick =
                 Boolean(result) && isSelected && result.correct_option_id !== option.id;
               return (
-                <PressableScale
+                <TactilePressable
                   key={option.id}
                   disabled={Boolean(result) || act.isPending}
-                  onPress={() => setSelected(option.id)}
+                  onPress={() => {
+                    setSelected(option.id);
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
                   style={[
                     styles.option,
                     isSelected && !result && styles.optionSelected,
                     isRight && styles.optionRight,
                     isWrongPick && styles.optionWrong,
                   ]}
+                  haptic
+                  scale={0.97}
+                  borderDepth={4}
                 >
                   <View style={styles.optionBadge}>
                     <Text style={styles.optionBadgeText}>{option.id}</Text>
                   </View>
                   <Text style={styles.optionText}>{option.text}</Text>
-                </PressableScale>
+                </TactilePressable>
               );
             })}
 
@@ -292,54 +442,40 @@ export default function LessonScreen({ route, navigation }) {
 
             {!result ? (
               <View style={styles.rowButtons}>
-                <PressableScale
+                <TactilePressable
                   style={[styles.ghostBtn, act.isPending && styles.btnDisabled]}
                   disabled={act.isPending}
                   onPress={() => act.mutate({ action: 'help' })}
+                  haptic
+                  scale={0.96}
                 >
                   <Text style={styles.ghostBtnText}>Подсказка</Text>
-                </PressableScale>
-                <PressableScale
+                </TactilePressable>
+                <TactilePressable
                   style={[styles.primaryBtn, (!selected || act.isPending) && styles.btnDisabled]}
                   disabled={!selected || act.isPending}
                   onPress={() => act.mutate({ action: 'answer', optionId: selected })}
+                  haptic
+                  scale={0.96}
                 >
                   <Text style={styles.primaryBtnText}>Ответить</Text>
-                </PressableScale>
+                </TactilePressable>
               </View>
             ) : (
-              <PressableScale style={styles.primaryBtn} onPress={() => navigation.navigate('Adaptive')}>
+              <TactilePressable
+                style={styles.primaryBtn}
+                onPress={() => navigation.navigate('Adaptive')}
+                haptic
+                scale={0.96}
+              >
                 <Text style={styles.primaryBtnText}>Дальше к практике</Text>
-              </PressableScale>
+              </TactilePressable>
             )}
           </View>
           </CaseReaction>
         ) : null}
 
-        {result ? (
-          <View style={[styles.resultCard, !result.counted && styles.resultMuted]}>
-            <Text style={styles.cardEyebrow}>
-              {result.counted ? '§ ЗАСЧИТАНО' : '§ НЕ ЗАСЧИТАНО'}
-            </Text>
-            <Text style={styles.resultTitle}>{result.correct ? 'Верно' : 'Неверно'}</Text>
-            {result.correct_option_id ? (
-              <Text style={styles.resultAnswer}>
-                Верный вариант: {result.correct_option_id}
-              </Text>
-            ) : null}
-            {result.explanation ? (
-              <Text style={styles.paragraph}>{result.explanation}</Text>
-            ) : null}
-            {!result.counted && result.reason === 'ASSISTED' ? (
-              <Text style={styles.reasonNote}>
-                Была подсказка — ответ не идёт в приоритет темы.
-              </Text>
-            ) : null}
-            {result.legal_basis_ids?.length ? (
-              <Text style={styles.law}>Нормы: {result.legal_basis_ids.join(', ')}</Text>
-            ) : null}
-          </View>
-        ) : null}
+        {result ? <VerdictSheet result={result} onNext={() => navigation.navigate('Adaptive')} /> : null}
 
         {hint ? (
           <View style={styles.hintCard}>
@@ -348,6 +484,44 @@ export default function LessonScreen({ route, navigation }) {
           </View>
         ) : null}
       </ScrollView>
+
+      {/* X-кнопка с подтверждением (§5) */}
+      {confirmClose ? (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmClose(false)}>
+          <Pressable
+            style={styles.confirmOverlay}
+            onPress={() => setConfirmClose(false)}
+          >
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>Закрыть урок?</Text>
+              <Text style={styles.confirmText}>
+                Пройдённый прогресс сохраняется, но разбор будет закрыт.
+              </Text>
+              <View style={styles.confirmRow}>
+                <TactilePressable
+                  style={styles.confirmGhost}
+                  onPress={() => setConfirmClose(false)}
+                  haptic
+                  scale={0.96}
+                >
+                  <Text style={styles.confirmGhostText}>Остаться</Text>
+                </TactilePressable>
+                <TactilePressable
+                  style={styles.confirmBtn}
+                  onPress={() => {
+                    setConfirmClose(false);
+                    navigation.goBack();
+                  }}
+                  haptic
+                  scale={0.96}
+                >
+                  <Text style={styles.confirmBtnText}>Закрыть</Text>
+                </TactilePressable>
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -414,6 +588,151 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: brand.goldInk,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.track,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 6,
+    backgroundColor: brand.pine,
+  },
+  progressGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  livesRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  livesIcon: { fontSize: 18 },
+  livesText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: brand.red,
+    minWidth: 14,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(44, 37, 32, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 28,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderBottomWidth: 5,
+    borderColor: brand.rule,
+    padding: 24,
+    gap: 10,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  confirmText: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    color: colors.subtext,
+    textAlign: 'center',
+  },
+  confirmRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  confirmGhost: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: brand.rule,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmGhostText: { fontSize: 14, fontWeight: '800', color: colors.text },
+  confirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: brand.red,
+    borderBottomWidth: 4,
+    borderBottomColor: brand.redDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnText: { fontSize: 14, fontWeight: '900', color: brand.creamText },
+
+  /* Bottom Sheet вердикта (§5) */
+  verdictOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(44, 37, 32, 0.55)',
+  },
+  verdictSheet: {
+    width: '100%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    padding: 20,
+    paddingBottom: 36,
+    gap: 10,
+    alignItems: 'center',
+  },
+  verdictHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(44, 37, 32, 0.2)',
+    marginBottom: 4,
+  },
+  verdictBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verdictBadgeText: { fontSize: 22, fontWeight: '900', color: colors.card },
+  verdictTitle: { fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  verdictAnswer: { fontSize: 14, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  verdictText: { fontSize: 14, lineHeight: 21, color: colors.text, textAlign: 'center' },
+  verdictLaw: {
+    width: '100%',
+    borderRadius: 12,
+    backgroundColor: 'rgba(44, 37, 32, 0.06)',
+    padding: 10,
+    alignItems: 'center',
+  },
+  verdictLawText: { fontSize: 12, fontWeight: '800' },
+  verdictNote: { fontSize: 12, color: colors.subtext, textAlign: 'center' },
+  verdictBtn: {
+    marginTop: 12,
+    width: '100%',
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: brand.ink,
+    borderBottomWidth: 5,
+    borderBottomColor: brand.inkDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verdictBtnText: { fontSize: 15, fontWeight: '900', color: brand.goldLight },
   title: { fontSize: 25, fontWeight: '900', color: colors.text, fontFamily: serifFamily },
   goal: { fontSize: 14, lineHeight: 21, color: colors.subtext },
   theoryCard: {

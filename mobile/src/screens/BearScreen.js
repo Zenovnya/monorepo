@@ -3,13 +3,21 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
+import { TactilePressable } from '../components/TactilePressable';
+import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
 import {
@@ -27,6 +35,41 @@ import { colors } from '../theme/colors';
  * карнизом хохломы, живым скелетным мишкой на Reanimated и лаково-красной
  * главной кнопкой «ПОГЛАДИТЬ» (#C9362B).
  */
+
+/**
+ * Всплывающее сердечко «Поглаживания» (анимация при тапе).
+ *
+ * Поднимается, растёт и исчезает — как поощрение в Duolingo.
+ */
+function HeartBurst({ visible }) {
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.6);
+  const y = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    opacity.value = withTiming(1, { duration: 150 });
+    scale.value = withSpring(1, { damping: 12, stiffness: 220 });
+    y.value = withSequence(
+      withTiming(-24, { duration: 300, easing: Animated.Easing.out(Animated.Easing.quad) }),
+      withTiming(-58, { duration: 320, easing: Animated.Easing.in(Animated.Easing.quad) })
+    );
+  }, [visible, opacity, scale, y]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }, { translateY: y.value }],
+  }));
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View style={[styles.heart, animatedStyle]} pointerEvents="none">
+      <Text style={styles.heartText}>❤️</Text>
+    </Animated.View>
+  );
+}
+
 export default function BearScreen() {
   const user = useAuthStore((s) => s.user);
 
@@ -36,6 +79,7 @@ export default function BearScreen() {
   const [tab, setTab] = useState('pet');
   const [busy, setBusy] = useState(false);
   const [speech, setSpeech] = useState(null);
+  const [burst, setBurst] = useState(0);
 
   const { pet, petCount, react, isLoadingPet } = useMascot();
 
@@ -47,6 +91,7 @@ export default function BearScreen() {
   const handlePet = async () => {
     setBusy(true);
     setPose('cheer');
+    if (petCount > 0) setBurst((n) => n + 1);
     try {
       await pet();
       const phrase = await react('pet');
@@ -67,11 +112,7 @@ export default function BearScreen() {
   const streak = gamification?.streak ?? user?.streak ?? 0;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <ScreenWrapper scroll contentStyle={styles.content}>
       <PaperGrain />
 
       {/* Шапка кабинета с золотой наградой стрика */}
@@ -116,13 +157,23 @@ export default function BearScreen() {
           </View>
         )}
 
-        <View style={styles.bearWrap}>
+        <TactilePressable
+          style={styles.bearWrap}
+          onPress={() => {
+            setPose('wave');
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            setTimeout(() => setPose('neutral'), 600);
+          }}
+          haptic
+          hapticStyle="medium"
+          scale={0.97}
+        >
           <AnimatedMascot
             size={222}
             emotion={pose}
             wave={pose === 'neutral' || pose === 'wave'}
           />
-        </View>
+        </TactilePressable>
       </View>
 
       {/* 3 чистые карточки показателей: хвойный · золотой · приглушённый синий */}
@@ -147,20 +198,32 @@ export default function BearScreen() {
         />
       </View>
 
-      {/* Главная кнопка действия — Лаковый красный (#C9362B) */}
-      <PressableScale
+      {/* Главная кнопка действия — 3D-кнопка TactilePressable.
+          Ноль поглаживаний: серо-бежевый #E5DEC9, подсказка «Пройдите 1 урок…».
+          Более одного: терракота с золотым badge и анимация сердечек. */}
+      <TactilePressable
         style={[
           styles.petBtn,
+          petCount === 0 ? styles.petBtnIdle : null,
           (busy || isLoadingPet) && styles.btnBusy,
         ]}
-        disabled={busy || isLoadingPet}
+        disabled={busy || isLoadingPet || petCount === 0}
         onPress={handlePet}
+        haptic
+        hapticStyle="light"
+        scale={0.95}
       >
-        <Text style={styles.petBtnText}>👋 Погладить</Text>
+        <Text style={[styles.petBtnText, petCount === 0 ? styles.petBtnTextIdle : null]}>
+          {petCount === 0 ? '👋 Погладить' : '❤️ Погладить'}
+        </Text>
         <View style={styles.petBadge}>
           <Text style={styles.petBadgeText}>{petCount}</Text>
         </View>
-      </PressableScale>
+      </TactilePressable>
+      <HeartBurst key={burst} visible />
+      {petCount === 0 ? (
+        <Text style={styles.petHint}>Пройдите 1 урок, чтобы разбудить лапу дружбы.</Text>
+      ) : null}
 
       {/* Чистые вкладки кабинета */}
       <View style={styles.tabs}>
@@ -256,7 +319,7 @@ export default function BearScreen() {
           )}
         </View>
       )}
-    </ScrollView>
+    </ScreenWrapper>
   );
 }
 
@@ -502,7 +565,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   statTrack: {
-    height: 6,
+    height: 8,
     borderRadius: 999,
     backgroundColor: brand.paper,
     overflow: 'hidden',
@@ -539,6 +602,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.7,
   },
+  petBtnIdle: {
+    backgroundColor: '#E5DEC9',
+    borderBottomColor: '#C9C0A8',
+  },
+  petBtnTextIdle: { color: '#8C8278' },
+  petHint: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.subtext,
+  },
+  heart: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: -44,
+    fontSize: 30,
+  },
+  heartText: { fontSize: 26 },
   petBadge: {
     paddingHorizontal: 9,
     paddingVertical: 2.5,
@@ -568,8 +650,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabActive: {
-    backgroundColor: brand.goldSoft,
-    borderColor: brand.gold,
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   tabPressed: {
     transform: [{ translateY: 1.5 }],
@@ -580,7 +662,7 @@ const styles = StyleSheet.create({
     color: colors.subtext,
   },
   tabTextActive: {
-    color: brand.ink,
+    color: colors.card,
     fontWeight: '800',
   },
 

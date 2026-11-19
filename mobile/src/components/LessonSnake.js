@@ -1,37 +1,41 @@
 /**
- * Карта уроков темы: волнистая тропа с медальонами, как в Duolingo.
+ * Карта уроков темы: волнистая тропа с 3D-кружками, как в Duolingo.
  *
- * Решения и их причины:
+ * Редизайн (техзадание §2):
  *
- * 1. **Тропа — фон, медальоны — поверх.** Тропа рисуется точками-«шагами» и
- *    уходит под узлы. Если бы узлы были частью тропы, при добавлении урока
- *    пришлось бы пересобирать всю линию.
- * 2. **Точки, а не линия.** В проекте нет `react-native-svg`; тянуть
- *    зависимость ради декоративной линии — вес в бандле. Цепочка окружностей с
- *    шагом меньше диаметра читается как пунктирная тропа и рисуется обычными
- *    `View`.
- * 3. **Три состояния различаются формой и насыщенностью, а не только цветом.**
- *    Пройдено — галочка, следующий — номер на золоте с обводкой-«пульсом»,
- *    закрыто-впереди — номер на приглушённом фоне. Цвет сам по себе на солнце
- *    и при слабом зрении читается хуже формы.
- * 4. **Раскладка через `left/top`, а не `transform`.** Абсолютное
- *    позиционирование оставляет нажимаемую область там, где нарисован
- *    медальон: в кривую тропу иначе невозможно попасть пальцем.
- * 5. **Медальон чуть «проседает» вниз тенью** — нижняя граница толще верхней.
- *    Это игровой приём Duolingo: кнопка выглядит физической, и нажимать её
- *    приятнее.
+ * 1. **Тропа — SVG-линия, кружки — поверх.** Линия рисуется через
+ *    react-native-svg, кружки — через View с TactilePressable.
+ * 2. **3D-кружки диаметром 72px** с borderBottomWidth: 6 — каждая
+ *    кнопка выглядит физической.
+ * 3. **Пульсация активного уровня** через react-native-reanimated
+ *    (withRepeat, withSequence) и яркий золотой цвет.
+ * 4. **Поповер вместо обрезанного текста** (паттерн Duolingo): при
+ *    тапе на кружок открывается всплывающая карточка с полным
+ *    названием, наградой и кнопкой «НАЧАТЬ КЕЙС».
+ * 5. **Краткая подпись под кружком** (short_title) — видна при
+ *    внимательном взгляде, как в Duolingo.
+ *
+ * Раскладка через left/top: абсолютное позиционирование оставляет
+ * нажимаемую область там, где нарисован кружок.
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, View, Modal, Pressable } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
-import { PressableScale } from './PressableScale';
+import { TactilePressable } from './TactilePressable';
 import { brand, serifFamily } from './KhokhlomaOrnament';
+import { colors } from '../theme/colors';
 import {
-  DOT_SIZE,
   LABEL_WIDTH,
   NODE,
-  connectorDots,
   nextLessonIndex,
   pathHeight,
   snakePoints,
@@ -42,38 +46,132 @@ const TRAIL_DONE = brand.gold;
 const TRAIL_AHEAD = brand.ruleStrong;
 const TRAIL_ACTIVE = brand.goldBorder;
 
-function Connector({ from, to, state }) {
-  const dots = useMemo(() => connectorDots(from, to), [from, to]);
-  const color =
-    state === 'done' ? TRAIL_DONE : state === 'active' ? TRAIL_ACTIVE : TRAIL_AHEAD;
+/**
+ * SVG-линия тропы: соединяет центры кружков волнистой линией.
+ * Линия уходит под кружки — рисуется первой в Z-порядке.
+ *
+ * @param {Array} points   Центры кружков.
+ * @param {Array} items    Уроки (для состояния сегмента).
+ */
+function Trail({ points, items }) {
+  return (
+    <Svg
+      style={StyleSheet.absoluteFill}
+      viewBox={`0 0 ${Math.max(points[0]?.x * 2 || 1, 1)} ${pathHeight(points.length)}`}
+      preserveAspectRatio="none"
+    >
+      {points.slice(0, -1).map((_, index) => {
+        const from = points[index];
+        const to = points[index + 1];
+        // Состояние сегмента: пройдено, если уроки до этого пройдены,
+        // активно, если следующий урок, впереди — иначе.
+        const isDone = Boolean(items[index]?.practised);
+        const isActive = !isDone && index === items.findIndex((l) => !l.practised) - 1;
+        const color = isDone ? TRAIL_DONE : isActive ? TRAIL_ACTIVE : TRAIL_AHEAD;
+        const midX = (from.x + to.x) / 2;
+        const midY = (from.y + to.y) / 2;
+        // Волна: середина отрывается от прямой линии
+        const ctrlX = midX + (to.x - from.x) * 0.15;
+        const ctrlY = midY;
+        return (
+          <Path
+            key={`seg-${index}`}
+            d={`M ${from.x} ${from.y} Q ${ctrlX} ${ctrlY} ${to.x} ${to.y}`}
+            stroke={color}
+            strokeWidth={4}
+            strokeLinecap="round"
+            fill="none"
+          />
+        );
+      })}
+    </Svg>
+  );
+}
+
+/**
+ * Пульсирующее кольцо для активного уровня.
+ *
+ * Анимация на UI-потоке Reanimated: свечение растёт и убывает
+ * через withRepeat + withSequence.
+ */
+function Halo({ active }) {
+  const pulse = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (!active) {
+      pulse.value = withTiming(0, { duration: 200 });
+      return;
+    }
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800, easing: Animated.Easing.inOut(Animated.Easing.quad) }),
+        withTiming(0, { duration: 800, easing: Animated.Easing.inOut(Animated.Easing.quad) })
+      ),
+      -1,
+      true
+    );
+  }, [active, pulse]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.4 + 0.5 * pulse.value,
+    borderWidth: 2 + pulse.value * 2,
+    transform: [{ scale: 1 + 0.08 * pulse.value }],
+  }));
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {dots.map((dot, index) => (
-        <View key={index} style={[styles.dot, { backgroundColor: color }, dot]} />
-      ))}
-    </View>
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.halo,
+        {
+          borderColor: brand.goldBorder,
+        },
+        animatedStyle,
+      ]}
+    />
   );
 }
 
 /**
- * Позиция краткой подписи: под медальоном, по центру.
+ * Поповер с полным названием урока (паттерн Duolingo).
  *
- * Медальон не касается края полотна (PADDING_X), но подпись шире
- * медальона: если поставить её по центру, она выйдет за край. Сдвигаем
- * внутрь полотна, чтобы текст не обрезался.
+ * При тапе на кружок открывается модальное окно с полным названием,
+ * наградой (+10 XP) и кнопкой «НАЧАТЬ КЕЙС».
  */
-function labelPos(point, width) {
-  const left = Math.max(
-    4,
-    Math.min(width - LABEL_WIDTH - 4, point.x - LABEL_WIDTH / 2),
+function LessonPopover({ lesson, onStart, onClose }) {
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <View style={styles.popover}>
+          <Text style={styles.popoverEyebrow}>УРОК {lesson.order}</Text>
+          <Text style={styles.popoverTitle}>{lesson.title}</Text>
+          {lesson.short_title ? (
+            <Text style={styles.popoverShort}>{lesson.short_title}</Text>
+          ) : null}
+          <View style={styles.rewardRow}>
+            <View style={styles.rewardBadge}>
+              <Text style={styles.rewardText}>+10 XP</Text>
+            </View>
+          </View>
+          <TactilePressable
+            style={styles.popoverBtn}
+            onPress={() => {
+              onStart();
+              onClose();
+            }}
+            haptic
+            scale={0.95}
+          >
+            <Text style={styles.popoverBtnText}>НАЧАТЬ КЕЙС</Text>
+          </TactilePressable>
+        </View>
+      </Pressable>
+    </Modal>
   );
-  const top = point.y + NODE / 2 + 6;
-  return { left, top };
 }
 
 /**
- * @param {Array}    lessons  Уроки темы: { lesson_id, title, order, practised }.
+ * @param {Array}    lessons  Уроки темы: { lesson_id, title, order, practised, short_title }.
  * @param {number}   width    Доступная ширина.
  * @param {Function} onPick   (lesson) => void
  */
@@ -81,26 +179,14 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
   const items = useMemo(() => lessons ?? [], [lessons]);
   const points = useMemo(() => snakePoints(items.length, width), [items.length, width]);
   const nextIndex = useMemo(() => nextLessonIndex(items), [items]);
+  const [popoverLesson, setPopoverLesson] = useState(null);
 
   if (!items.length) return null;
 
   return (
     <View style={[styles.canvas, { height: pathHeight(items.length), width }]}>
-      {/* Тропа: отрезок на каждый шаг, своим цветом по состоянию. */}
-      {points.slice(0, -1).map((point, index) => (
-        <Connector
-          key={`seg-${items[index].lesson_id}`}
-          from={point}
-          to={points[index + 1]}
-          state={
-            items[index].practised
-              ? 'done'
-              : index === nextIndex - 1
-              ? 'active'
-              : 'ahead'
-          }
-        />
-      ))}
+      {/* Тропа: SVG-линия под кружками. */}
+      <Trail points={points} items={items} />
 
       {items.map((lesson, index) => {
         const point = points[index];
@@ -111,14 +197,20 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
             key={lesson.lesson_id}
             style={[styles.nodeWrap, { left: point.x - NODE / 2, top: point.y - NODE / 2 }]}
           >
-            {isNext ? <View style={styles.halo} pointerEvents="none" /> : null}
-            <PressableScale
-              onPress={onPick ? () => onPick(lesson) : undefined}
-              // hitSlop расширяет цель за пределы круга: тропа кривая, и палец
-              // часто попадает рядом с медальоном, а не в него.
+            {isNext ? <Halo active /> : null}
+            <TactilePressable
+              onPress={() => {
+                if (!onPick) return;
+                if (done) {
+                  onPick(lesson);
+                } else {
+                  setPopoverLesson(lesson);
+                }
+              }}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               scale={0.9}
               haptic
+              borderDepth={6}
               accessibilityRole="button"
               accessibilityLabel={
                 done ? `Урок ${lesson.order}, пройден` : `Урок ${lesson.order}: ${lesson.title}`
@@ -130,18 +222,12 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
               >
                 {done ? '✓' : lesson.order}
               </Text>
-            </PressableScale>
+            </TactilePressable>
           </View>
         );
       })}
 
-      {/* Краткие подписи под каждым медальоном.
-
-          Полные названия (40–60 символов) под каждым медальоном ложились на
-          тропу и не помещались. Теперь под каждым медальоном — короткое
-          название (`short_title`), написанное на фоне: фон перекрывает
-          точки тропы под текстом, поэтому подпись читается, не наезжая на
-          соседние медальоны. Следующий урок подсвечивается. */}
+      {/* Краткие подписи под каждым кружком. */}
       {items.map((lesson, index) => {
         const point = points[index];
         const isNext = index === nextIndex;
@@ -149,10 +235,7 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
           <View
             key={`label-${lesson.lesson_id}`}
             pointerEvents="none"
-            style={[
-              styles.labelWrap,
-              labelPos(point, width),
-            ]}
+            style={[styles.labelWrap, labelPos(point, width)]}
           >
             <Text
               style={[
@@ -166,13 +249,36 @@ export function LessonSnake({ lessons, width = 320, onPick }) {
           </View>
         );
       })}
+
+      {popoverLesson ? (
+        <LessonPopover
+          lesson={popoverLesson}
+          onStart={() => onPick?.(popoverLesson)}
+          onClose={() => setPopoverLesson(null)}
+        />
+      ) : null}
     </View>
   );
 }
 
+/**
+ * Позиция краткой подписи: под кружком, по центру.
+ *
+ * Кружок не касается края полотна (PADDING_X), но подпись шире
+ * кружка: если поставить её по центру, она выйдет за край.
+ * Сдвигаем внутрь полотна, чтобы текст не обрезался.
+ */
+function labelPos(point, width) {
+  const left = Math.max(
+    4,
+    Math.min(width - LABEL_WIDTH - 4, point.x - LABEL_WIDTH / 2),
+  );
+  const top = point.y + NODE / 2 + 6;
+  return { left, top };
+}
+
 const styles = StyleSheet.create({
   canvas: { position: 'relative', alignSelf: 'center' },
-  dot: { position: 'absolute', width: DOT_SIZE, height: DOT_SIZE, borderRadius: DOT_SIZE / 2 },
   nodeWrap: {
     position: 'absolute',
     width: NODE,
@@ -186,11 +292,10 @@ const styles = StyleSheet.create({
     borderRadius: NODE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    // Впереди — приглушённый «камень»: видно, что урок есть, но он не зовёт.
-    backgroundColor: brand.paperSoft,
     borderWidth: 3,
     borderBottomWidth: 6,
     borderColor: brand.ruleStrong,
+    backgroundColor: brand.paperSoft,
   },
   nodeDone: {
     backgroundColor: brand.pine,
@@ -212,8 +317,6 @@ const styles = StyleSheet.create({
     borderColor: brand.goldBorder,
     opacity: 0.9,
   },
-  // Подпись под медальоном: фон перекрывает точки тропы под текстом,
-  // поэтому подпись читается без наезда на соседние медальоны.
   labelWrap: {
     position: 'absolute',
     width: LABEL_WIDTH,
@@ -221,9 +324,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
-    // Фон — цвет бумаги карточки: совпадает с фоном карты, перекрывает
-    // точки тропы, и текст не сливается с тропой.
-    backgroundColor: '#FCF8F0',
+    backgroundColor: brand.card,
   },
   label: {
     fontSize: 11,
@@ -236,6 +337,64 @@ const styles = StyleSheet.create({
     color: brand.ink,
     fontWeight: '800',
   },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(44, 37, 32, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  popover: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: brand.card,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderBottomWidth: 5,
+    borderColor: brand.gold,
+    padding: 24,
+    gap: 12,
+    alignItems: 'center',
+  },
+  popoverEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: brand.goldInk,
+  },
+  popoverTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  popoverShort: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: brand.subtext,
+    textAlign: 'center',
+  },
+  rewardRow: { marginTop: 4 },
+  rewardBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: brand.goldSoft,
+    borderWidth: 1.5,
+    borderColor: brand.gold,
+  },
+  rewardText: { fontSize: 14, fontWeight: '900', color: brand.goldInk },
+  popoverBtn: {
+    marginTop: 8,
+    width: '100%',
+    backgroundColor: brand.red,
+    borderRadius: 16,
+    borderBottomWidth: 5,
+    borderBottomColor: brand.redDark,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  popoverBtnText: { fontSize: 15.5, fontWeight: '900', color: brand.creamText },
 });
 
 export default LessonSnake;
