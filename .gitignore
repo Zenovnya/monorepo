@@ -44,4 +44,13 @@ pgdata/
 backend/.env
 mobile/.env
 
+# --- Артефакты прогонов ---
+# t.db заведён для локальных прогонов pytest и попал в коммит: 784 КБ sqlite
+# с 45 таблицами СТАРОГО контента (branches, units, articles), удалённого
+# миграцией 0026. База в репозитории путает: выглядит как «схема проекта»,
+# хотя это мусор от теста. Схему описывают миграции, а не бинарник.
+backend/*.db
+# Пишется scripts/ci-smoke.sh (health.json, pack.log, uvicorn.log).
+backend/health.json
+
 
