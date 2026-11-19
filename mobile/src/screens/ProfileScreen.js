@@ -29,6 +29,7 @@ const ROW_SEAL = {
   bear: { label: '§', tone: 'red' },
   league: { label: 'I', tone: 'gold' },
   reviews: { label: '↻', tone: 'gold' },
+  applications: { label: '§', tone: 'red' },
   shop: { label: '✦', tone: 'gold' },
 };
 
@@ -148,6 +149,11 @@ export default function ProfileScreen({ navigation }) {
       hint: 'Кристаллы, жизни, атрибуты',
     },
     {
+      key: 'applications',
+      title: 'Заявления',
+      hint: 'Шаблоны жалоб, обращений и заявлений',
+    },
+    {
       key: 'premium',
       title: 'LexBear Plus',
       hint: 'Без лимита жизней и полный архив',
@@ -167,6 +173,7 @@ export default function ProfileScreen({ navigation }) {
       reviews: 'Adaptive',
       league: 'League',
       shop: 'Shop',
+      applications: 'Applications',
       premium: 'Premium',
     };
     navigation.navigate(map[key]);

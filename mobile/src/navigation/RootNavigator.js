@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
@@ -8,6 +8,7 @@ import { colors } from '../theme/colors';
 import { TabBarIcon } from './TabBarIcon';
 
 import LoginScreen from '../screens/LoginScreen';
+import SplashScreen from '../screens/SplashScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import LearnScreen from '../screens/LearnScreen';
@@ -15,6 +16,7 @@ import AdaptiveLearningScreen from '../screens/AdaptiveLearningScreen';
 import BearScreen from '../screens/BearScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LessonScreen from '../screens/LessonScreen';
+import ApplicationsScreen from '../screens/ApplicationsScreen';
 import LeagueScreen from '../screens/LeagueScreen';
 import ShopScreen from '../screens/ShopScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -113,6 +115,7 @@ function MainStack() {
       <Stack.Screen name="PaymentReturn" component={PaymentReturnScreen} />
       <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
       <Stack.Screen name="NoLives" component={NoLivesScreen} />
+      <Stack.Screen name="Applications" component={ApplicationsScreen} />
     </Stack.Navigator>
   );
 }
@@ -124,18 +127,15 @@ export default function RootNavigator() {
     if (!isHydrated) hydrate();
   }, [isHydrated, hydrate]);
 
-  // Спиннер держим только на гидратации токенов из хранилища — это локальное
-  // чтение, доли миллисекунды. Раньше здесь ждали ещё и загрузку профиля
-  // (/auth/me), то есть приложение не показывало ничего до ответа сети: на
-  // медленном соединении это секунды пустого экрана на каждом холодном старте.
-  // Экраны умеют жить с user == null (все обращения идут через user?.), профиль
-  // догружается в фоне и подставляется сам.
-  if (!isHydrated) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
+  // Гидратация токенов — локальное чтение из хранилища (доли миллисекунды),
+  // но первое впечатление важнее скорости: пока идет загрузка показываем
+  // запускную анимацию маскота (он выходит и дает пять), а не спиннер.
+  // Экран анимации держится минимальное время, чтобы приветствие было
+  // видно, и уходит, когда навигация уже готова.
+  const [splashDone, setSplashDone] = React.useState(false);
+
+  if (!isHydrated || !splashDone) {
+    return <SplashScreen onDone={() => setSplashDone(true)} />;
   }
 
   // Пользователь ещё не прошёл онбординг — показываем его.
