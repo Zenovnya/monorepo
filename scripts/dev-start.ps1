@@ -88,37 +88,30 @@ if (-not $SkipSeed) {
     $headers = @{ 'X-Admin-Token' = $env:ADMIN_TOKEN }
     if (-not $headers['X-Admin-Token']) { $headers['X-Admin-Token'] = 'lexbear-admin-dev-token' }
 
-    # ВАЖНО: раньше ошибка сида проглатывалась в catch, скрипт печатал
-    # «Готово. Бэкенд поднят», а база оставалась пустой — приложение
-    # показывало пустые кейсы и уроки. Теперь ошибка видна и останавливает
-    # запуск с подсказкой.
+    # ВАЖНО: раньше ошибка проверки контента проглатывалась в catch, скрипт
+    # печатал «Готово. Бэкенд поднят», а приложение показывало пустые темы.
+    # Теперь ошибка видна и останавливает запуск с подсказкой.
+    #
+    # Сида в БД больше нет: контент — файл backend/app/content_packs/themes.json,
+    # он проверяется теми же правилами, что и импорт. Ручки /lexbear/seed и
+    # /admin/content/reload-adaptive удалены вместе со старым контентом.
     $seedOk = $true
     try {
-        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lexbear/seed' -Headers $headers -TimeoutSec 180
-        Write-Host ("Сид: " + ($r | ConvertTo-Json -Compress -Depth 4))
+        $r = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/admin/content/pack/validate' -Headers $headers -TimeoutSec 180
+        Write-Host ("Пакет контента: " + ($r | ConvertTo-Json -Compress -Depth 4))
     } catch {
         $seedOk = $false
-        Write-Host "ОШИБКА сида: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host 'Проверьте: backend/.env (DATABASE_URL должен указывать на dev-кластер :5433),'
-        Write-Host 'миграции (alembic upgrade head) и лог .local\backend.err.log'
-    }
-
-    # Адаптивный банк: без этого вызова /learning/next и диагностика работают
-    # только со стартовым кейсом, а кейсы из админки не видны вообще.
-    try {
-        $a = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/admin/content/reload-adaptive' -Headers $headers -TimeoutSec 180
-        Write-Host ("Адаптивный банк: " + ($a | ConvertTo-Json -Compress -Depth 4))
-    } catch {
-        $seedOk = $false
-        Write-Host "ОШИБКА импорта в адаптивный банк: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "ОШИБКА проверки пака: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host 'Проверьте: backend/app/content_packs/themes.json, лог .local\backend.err.log.'
+        Write-Host 'Проверить локально: cd backend; python -m app.modules.adaptive.seed'
     }
 
     if (-not $seedOk) {
         Write-Host ''
-        Write-Host 'Контент загружен не полностью — кейсы в приложении могут отсутствовать.' -ForegroundColor Yellow
+        Write-Host 'Пакет контента не прошёл проверку — практика в приложении будет пустой.' -ForegroundColor Yellow
     }
 } else {
-    Write-Host '==> 5/5 Сид пропущен (-SkipSeed)'
+    Write-Host '==> 5/5 Проверка контента пропущена (-SkipSeed)'
 }
 
 # --- LAN-адреса для телефона ----------------------------------------------

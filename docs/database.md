@@ -1,12 +1,18 @@
 # База данных
 
 PostgreSQL 15+, драйвер `asyncpg`, ORM — SQLAlchemy 2.0 (async, стиль
-`Mapped[...]`), миграции — Alembic (`backend/migrations/versions`, 0001–0024).
+`Mapped[...]`), миграции — Alembic (`backend/migrations/versions`, 0001–0026).
 
-Типы: `UUID` (Postgres-диалект) для пользовательских и «современных» сущностей,
-`INTEGER` — для контента, который импортируется из JSON-паков и исторически
-адресуется по числовому id (`units`, `lexbear_lessons`, `questions`,
-`articles`). Время везде `TIMESTAMPTZ`.
+Типы: `UUID` (Postgres-диалект) для пользовательских сущностей, `INTEGER` — для
+счётчиков и порядка, `VARCHAR` — для идентификаторов карточек из пака
+(`CIV01_R1`). Время везде `TIMESTAMPTZ`.
+
+**Таблиц контента нет.** Прежние `units`, `lexbear_lessons`, `questions`,
+`theory_cards`, `articles`, `branches`, `lessons`, `cases` и 12 таблиц
+`learning_*` удалены миграцией 0026: контент поставляется файлом
+`app/content_packs/themes.json` и версионируется целиком. Прогресс по старым
+урокам (`progress`, `lexbear_progress`) и повторения (`review_states`,
+`review_logs`) удалены вместе с ними.
 
 ## Корень: `users`
 
@@ -30,84 +36,60 @@ PostgreSQL 15+, драйвер `asyncpg`, ORM — SQLAlchemy 2.0 (async, сти�
 идёт». Метка ставится только при трате из полного запаса, иначе остаток
 времени до следующей жизни сгорал бы при каждой ошибке.
 
-## Контент (legacy-путь)
+## Адаптивное обучение
 
-Питает `/lexbear/*` и экраны «Учёба» / «Кейсы».
-
-```
-units (code unique)
-  └── lexbear_lessons (slug unique, unit_id, xp_reward, is_active)
-        ├── theory_cards  (order, title, definition, practical, chips JSON, bear_line)
-        └── questions     (order, kind, prompt, case_text, options JSON, correct JSON, explanation)
-
-articles (code unique: codex + number)
-  └── learned_articles (user_id, article_id) — unique(user_id, article_id)
-
-branches → lessons → cases → case_options      (старая модель, совместимость)
-```
-
-`questions.correct` — полиморфное поле: число (одиночный выбор), список чисел
-(множественный) или булево (true/false). Приведение к списку индексов —
-единственное место, `content/lexbear_scoring.py`; ни клиент, ни другие модули
-не сравнивают ответы сами.
-
-`questions.kind`: `choice` | `multi` | `true_false` | `case`.
-
-`cases` (вкладка «Кейсы») дополнительно имеет `slug` (unique), `codex`,
-`difficulty`, `case_text`, `hint`, `featured`, `is_active` — кейсы импортируются
-из `cases.json` и имеют разбор.
-
-## Адаптивный банк
-
-Питает `/learning/*`: диагностику, «следующий кейс», компетенции.
+Состояние отбора кейсов. Контент сюда не копируется — только ссылки на него.
 
 ```
-learning_domains (slug unique)
-  └── learning_topics (slug unique в домене)
-        └── learning_competencies (slug unique в теме, importance)
-              ├── learning_competency_prerequisites (competency_id, prerequisite_id)
-              └── learning_case_competencies (case_version_id, competency_id, weight)
+adaptive_states (user_id unique)
+  seq                  — монотонный счётчик событий пользователя
+  open_attempt_id      — открытая попытка (не больше одной), строка 'a{seq}'
+  release_key          — pack_id@version, под которым шло обучение
+  weights (JSON)       — веса тем 80–120 %, версия в weights_version
 
-learning_cases (title, status)
-  └── learning_case_versions (case_id + version unique, difficulty, status,
-        review_status, reviewed_by, reviewed_at, source_slug unique)
-        ├── learning_case_steps (position, prompt)
-        │     └── learning_case_answers (text, is_correct, explanation, error_type)
-        └── learning_case_competencies
+adaptive_attempts (id 'a{seq}')
+  user_id, item_id, lesson_id, topic_id, subtopic_id, evidence_family_id,
+  content_version, mode, origin, issued_seq, terminal_seq,
+  preexposed, assisted, status, counted, reason, selected_option_id, correct
 
-learning_attempts (user_id, case_version_id, step_id, answer_id,
-                   assessment_session_id, correct, time_spent_seconds, hints_used)
-learning_assessment_sessions (user_id, completed)
-learning_user_competency_states (user_id + competency_id unique,
-                                 mastery, confidence, attempts, correct_count,
-                                 last_seen, next_review)
+adaptive_observations (attempt_id unique)
+  seq, topic_id, subtopic_id, item_id, evidence_family_id, content_version,
+  correct, voided
+
+adaptive_seen_families (user_id + family_id unique)
+adaptive_topic_priorities (user_id + topic_id unique)
+  n, errors, need, priority, state — снимок для экрана прогресса
 ```
 
-`source_slug` — ключ идемпотентного импорта: повторный `reload-adaptive`
-обновляет версию, а не создаёт дубль. `review_status` (`imported` →
-`in_review` → `approved`) — состояние юридической проверки; импорт её не
-проставляет.
+Почему именно так:
 
-`learning_user_competency_states.next_review` индексировано: по нему строится
-«что подтянуть».
+- **`seq`, а не `created_at`.** По `seq` упорядочены наблюдения и определяется
+  «какая попытка была позже». Два ответа в одну секунду сортировались бы по
+  времени произвольно, и окно «последних пяти» зависело бы от удачи.
+- **Строки вместо внешних ключей на контент.** Пак версионируется целиком:
+  после обновления карточки с тем же id может уже не быть. Вместе с id
+  хранятся `content_version` и `release_key`, поэтому старое наблюдение
+  остаётся осмысленным.
+- **`voided`, а не удаление.** Спорное наблюдение (ошибка в ключе, правка
+  редакции) нужно видеть, но не учитывать в окне. История не переписывается.
+- **`adaptive_seen_families` отдельно от попыток.** Семья заданий считается
+  показанной в момент выдачи, даже если карточку закрыли пропуском. Иначе
+  пропуск «возвращал» бы кейс в пул свежих.
 
-## Прогресс и повторения
+Правила отбора — `docs/adaptive-engine.md`. `ON DELETE CASCADE` от `users`
+есть у всех пяти таблиц: состояние обучения — персональные данные и уходит
+вместе с аккаунтом.
+
+## Прогресс и цель дня
 
 | Таблица | Уникальность | Смысл |
 |---|---|---|
-| `lexbear_progress` | `(user_id, lesson_id)` | `completed`, `best_score`, `attempts`, `crowns` |
-| `progress` | `(user_id, lesson_id)` | то же для legacy-уроков |
-| `review_states` | `(user_id, case_id)` | параметры SM-2: `repetitions`, `interval_days`, `ease_factor`, `due_at` |
-| `review_logs` | — | история каждого повторения (аудит алгоритма) |
 | `daily_xp` | `(user_id, day)` | XP за день — питает цель дня |
 
-`daily_xp.day` — дата (начало UTC-суток). Инкремент происходит внутри
-`add_xp`, поэтому любой источник XP автоматически учитывается в цели дня.
-
-SM-2 (`srs/sm2.py`) — чистая функция без БД: `quality 0..5` → новые
-`repetitions / interval_days / ease_factor` (`MIN_EASE_FACTOR = 1.3`).
-Верный ответ в приложении даёт `quality = 5`, неверный — `2`: сброс
-повторений, интервал 1 день.
+`daily_xp.day` — начало UTC-суток. Инкремент происходит внутри `add_xp`,
+поэтому любой источник XP автоматически учитывается в цели дня. Это
+единственная таблица прогресса, оставшаяся после удаления старого контента:
+она не привязана к урокам.
 
 ## Геймификация
 
@@ -179,12 +161,14 @@ subscriptions (status active|canceled|expired|trial, plan monthly|yearly,
 всех запросов), индексировано то, по чему идёт выборка:
 
 - `users.email` (unique), `users.last_active_day`;
-- `review_states.due_at`-выборка через `(user_id, case_id)`;
 - `payment_history.yookassa_payment_id` (unique), `created_at`;
 - `subscriptions.status`, `subscriptions.expires_at` (поиск истекающих);
 - `daily_xp (user_id, day)` unique;
-- `learning_case_versions.source_slug` (unique), `review_status`, `status`;
-- `learning_user_competency_states.next_review`;
+- `adaptive_attempts.item_id`, `adaptive_attempts.topic_id` — по ним идёт
+  поиск «что уже показывали» и «последняя попытка по карточке»;
+- `adaptive_observations.topic_id` — окно темы;
+- `adaptive_seen_families (user_id, family_id)` unique — проверка «свежая ли
+  семья» на каждом выборе;
 - `mascot_phrases.trigger`.
 
 ## Миграции
@@ -199,6 +183,8 @@ subscriptions (status active|canceled|expired|trial, plan monthly|yearly,
 | 0020–0022 | `daily_xp`, `password_reset_tokens`, настройки и доставки уведомлений |
 | 0023 | `users.lives_updated_at` (регенерация жизней) |
 | 0024 | `subscriptions.payment_method_id`, `auto_renew` |
+| 0025 | состояние адаптивного обучения: `adaptive_states`, `adaptive_attempts`, `adaptive_observations`, `adaptive_seen_families`, `adaptive_topic_priorities` |
+| 0026 | удаление старого контента и прогресса по нему (26 таблиц) |
 
 Правила:
 
@@ -207,10 +193,16 @@ subscriptions (status active|canceled|expired|trial, plan monthly|yearly,
   важными дефолтами имеют `__init__` (`NotificationSettings`, `Subscription`).
   На этом уже дважды ловились баги (`None + 1` в SM-2, «все напоминания
   отключены»).
-- На sqlite `alembic upgrade head` не проходит (миграция 0005 использует
-  Postgres-специфику). Миграции проверяются отдельно — через
-  `MigrationContext` + `Operations` на чистой таблице; тесты поднимают схему
-  через `Base.metadata.create_all`.
+- На sqlite `alembic upgrade head` не проходит (0005 и 0026 используют
+  Postgres-специфику). Миграции прогоняются в CI на настоящем Postgres, а
+  тесты поднимают схему через `Base.metadata.create_all`. Поэтому ошибки,
+  которые видит только Postgres, локально не воспроизводятся — их нужно
+  ловить тестом по тексту миграции.
+- `ON DELETE CASCADE` управляет удалением **строк**, а `DROP TABLE` требует,
+  чтобы на таблицу не ссылался ни один внешний ключ. Порядок в 0026
+  проверяется тестом `test_drop_order_respects_foreign_keys`: он строит граф
+  зависимостей из миграций 0001–0024. Первая версия 0026 удаляла `cases`
+  раньше ссылающихся на неё таблиц и падала именно в CI.
 - Каскады: `ON DELETE CASCADE` объявлен в Postgres, а в sqlite выключен по
   умолчанию. Поэтому `delete_account` дополнительно «подметает» строки по
   моделям — иначе тесты проходили бы, а прод-поведение отличалось.
