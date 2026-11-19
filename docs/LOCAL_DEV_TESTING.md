@@ -1,4 +1,4 @@
-﻿# Локальный запуск и тестирование LexBear
+# Локальный запуск и тестирование LexBear
 
 Пошаговое руководство: как поднять весь стек с нуля и проверить, что всё работает.
 
@@ -39,6 +39,49 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 cd ..
 ```
+
+### 1.1 Если pip не может скачать пакеты (SSL / сертификат)
+
+Симптом в выводе `dev-start.ps1`:
+
+```
+Отсутствуют пакеты (2 из 17): PyJWT, aiosqlite
+Ставлю requirements.txt (это долго, один раз)...
+  WARNING: Retrying ... SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]
+  certificate verify failed: self-signed certificate in certificate chain'))
+ERROR: Could not install packages due to an OSError
+```
+
+Это **не проблема зависимостей и не проблема проекта**. pip не может соединиться с
+`files.pythonhosted.org`: в сети стоит TLS-инспекция (корпоративный или учебный
+прокси, иногда антивирус), и подменённый сертификат pip не принимает.
+
+Список «PyJWT, aiosqlite» здесь не случаен, но и не полон: это те два пакета,
+которых у вас ещё не было. Любой другой отсутствующий пакет дал бы точно такую же
+ошибку.
+
+Варианты, по порядку предпочтения:
+
+1. **Установить корневой сертификат сети в хранилище Windows.** Сертификат
+   запрашивается у администратора сети. После этого помогает третий вариант.
+2. **Указать сертификат pip явно** (нужен файл `.pem`):
+   ```powershell
+   python -m pip config set global.cert "C:\путь\к\corp-root-ca.pem"
+   ```
+3. **Разрешить pip использовать хранилище сертификатов Windows.** pip 24.2+ делает
+   это по умолчанию; для более старых версий:
+   ```powershell
+   python -m pip install --upgrade pip
+   python -m pip config set global.use-feature truststore
+   ```
+   Это сработает, только если сертификат уже установлен в Windows (вариант 1).
+4. **Отключить проверку для PyPI — небезопасно,** только в доверенной сети:
+   ```powershell
+   python -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+   ```
+
+После любого варианта повторите `scripts\dev-start.ps1`: шаг 1 сам проверит
+зависимости и, если их всё ещё нет, скажет об этом явно, а не упадёт на миграциях.
 
 Создайте `backend\.env` из примера, если его ещё нет:
 
@@ -277,6 +320,8 @@ Get-NetTCPConnection -LocalPort 8000 -State Listen |
 | `PostgreSQL 16 не найден` | Прежний скрипт искал только 16-ю версию | **Исправлено** — версия определяется автоматически. Если всё же: `$env:PGBIN='C:\Program Files\PostgreSQL\17\bin'` |
 | Консоль «висит» после запуска API | Родитель ждал закрытия stdout дочернего процесса | **Исправлено** — API запускается полностью отделённым процессом |
 | `Не удалось импортировать uvicorn/app.main` | Нет зависимостей или не тот Python | `cd backend; python -m pip install -r requirements.txt` |
+| `Отсутствуют пакеты (N из M)` и pip падает на `SSLError` / `CERTIFICATE_VERIFY_FAILED` / `self-signed certificate in certificate chain` | pip не может скачать пакеты: TLS-инспекция, корпоративный прокси или антивирус подменяют сертификат. К зависимостям отношения не имеет | Раздел 1.1 |
+| `Установка прошла, но пакеты по-прежнему не видны этому Python` | pip поставил в другой интерпретатор (на машине их несколько) | Ставьте тем же интерпретатором: `cd backend; <тот же python> -m pip install -r requirements.txt`. Скрипт делает так сам и перепроверяет результат |
 | `/health` → `database: fail` | БД не поднята | Запустите `scripts\dev-db.ps1`, проверьте порт 5433 |
 | Регистрация → **500** | Упала миграция/таблица | `dev-start.ps1` теперь падает громко; проверьте `alembic upgrade head` |
 | Регистрация → **422** | Невалидный email | Домен не из резервированных: `you@example.com`, не `you@test.local` |

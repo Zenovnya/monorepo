@@ -71,14 +71,21 @@ if (-not $python) {
 $checker = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\check_deps.py'
 $requirements = Join-Path $backend 'requirements.txt'
 # Вывод читаем ДО проверки кода возврата (см. dev-start.ps1).
-$missingOutput = & $python $checker $requirements 2>$null
-$depsMissing = ($LASTEXITCODE -ne 0)
-$missing = @($missingOutput | Where-Object { $_ -and $_.Trim() })
-if ($depsMissing) {
-    if ($missing.Count -gt 0) {
-        Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+$depsJson = & $python $checker $requirements 2>$null
+$depsExit = $LASTEXITCODE
+if ($depsExit -ne 0) {
+    $missing = @()
+    try {
+        # Один JSON с массивом missing: текст чекера нельзя печатать как имена.
+        $report = ($depsJson -join "`n") | ConvertFrom-Json
+        $missing = @($report.missing | Where-Object { $_ })
+    } catch {
+        Write-Host 'Проверка зависимостей не вернула разбираемый отчёт.'
     }
-    Write-Host "Установите зависимости: cd backend; $python -m pip install -r requirements.txt"
+    if ($missing.Count -gt 0) {
+        Write-Host ('Отсутствуют пакеты: ' + ($missing -join ', '))
+    }
+    Write-Host "Установите зависимости: cd `"$backend`"; `"$python`" -m pip install -r requirements.txt"
     exit 1
 }
 
