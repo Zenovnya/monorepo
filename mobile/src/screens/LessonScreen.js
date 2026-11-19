@@ -47,6 +47,7 @@ export default function LessonScreen({ route, navigation }) {
   const [result, setResult] = useState(null);
   const [hint, setHint] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [openError, setOpenError] = useState(null);
 
   const lesson = useQuery({
     queryKey: ['adaptive-lesson', lessonId],
@@ -56,7 +57,14 @@ export default function LessonScreen({ route, navigation }) {
 
   const openCheck = useMutation({
     mutationFn: () => adaptiveApi.openAttempt({ itemId: lesson.data.control_item_id, origin: 'lesson', mode: 'check' }),
+    // Без этого сбой открытия проверки был невидим: сервер мог ответить 400
+    // (например OPEN_ATTEMPT — попытка уже открыта из кейса), а кнопка
+    // «Пройти проверку» просто молчала. Экран менялся не мог: phase оставался
+    // 'theory', loader не показывался, и выглядело это как «кнопка не
+    // работает», а не как ошибка.
+    onError: (error) => setOpenError(describeOpenError(error)),
     onSuccess: (data) => {
+      setOpenError(null);
       // Карточка приходит вместе с попыткой: отдельного запроса «дай вопрос»
       // нет, иначе клиент мог бы получить его, не открывая попытку.
       setCard(data.item);
@@ -126,10 +134,6 @@ export default function LessonScreen({ route, navigation }) {
   // Проверка возможна, только когда попытка действительно открыта: ручка
   // /adaptive требует attempt_id, «просто посмотреть ключ» нельзя.
   const checking = phase === 'check' && Boolean(attemptId);
-  const error =
-    openCheck.error?.response?.data?.detail === 'CONTENT_UNAVAILABLE'
-      ? 'Эта карточка отозвана редакцией — проверку пройти нельзя.'
-      : null;
 
   return (
     <View style={styles.container}>
@@ -214,11 +218,14 @@ export default function LessonScreen({ route, navigation }) {
               Одна карточка по этому уроку. Засчитывается первый самостоятельный
               ответ — подсказка снимает зачёт.
             </Text>
-            {error ? <Text style={styles.errorNote}>{error}</Text> : null}
+            {openError ? <Text style={styles.errorNote}>{openError}</Text> : null}
             <PressableScale
               style={[styles.primaryBtn, openCheck.isPending && styles.btnDisabled]}
               disabled={openCheck.isPending}
-              onPress={() => openCheck.mutate()}
+              onPress={() => {
+                setOpenError(null);
+                openCheck.mutate();
+              }}
             >
               <Text style={styles.primaryBtnText}>
                 {openCheck.isPending ? 'Открываем…' : 'Пройти проверку'}
@@ -343,6 +350,32 @@ export default function LessonScreen({ route, navigation }) {
       </ScrollView>
     </View>
   );
+}
+
+/**
+ * Причины, по которым не удалось открыть проверку.
+
+ * OPEN_ATTEMPT — самая частая: у пользователя уже открыта попытка из
+ * «Адаптивной практики» (кес, который он открыл, но не ответил). В прошлой
+ * версии этот код уходил в пустоту: кнопка молчала, и казалось, что кнопка
+ * не работает.
+ */
+function describeOpenError(error) {
+  const detail = error?.response?.data?.detail;
+  const map = {
+    OPEN_ATTEMPT:
+      'У вас уже открыт кейс на другой карточке. Закройте его — ответьте, пропустите или нажмите «Следующий кейс» — и пройдите проверку.',
+    CONTENT_UNAVAILABLE:
+      'Эта карточка отозвана редакцией — проверку пройти нельзя.',
+    UNKNOWN_ITEM: 'Карточка проверки не найдена. Возможно, урок обновлён.',
+    FAMILY_SEEN: 'Схожая задача уже встречалась — проверка открыта в режиме практики.',
+    WRONG_MODE: 'Неверный тип карточки для проверки.',
+    BAD_ORIGIN: 'Неверный источник проверки.',
+  };
+  if (map[detail]) {
+    return map[detail];
+  }
+  return describeLoadError(error, 'проверку');
 }
 
 const styles = StyleSheet.create({
