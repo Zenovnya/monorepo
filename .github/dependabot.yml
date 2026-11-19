@@ -67,9 +67,23 @@ updates:
       - dependency-name: react-native-svg
       - dependency-name: '@react-native-async-storage/async-storage'
       - dependency-name: '@react-native-community/*'
-      # ВНИМАНИЕ: @react-navigation/* SDK НЕ пинит — эти пакеты обновляются
-      # свободно, поэтому их здесь нет. Их обновления приходят обычным PR и
-      # проверяются по changelog: ломаются редко, но ломаются именно в мажоре.
+      # @babel/core: восьмёрку поддерживает только worklets 0.13.x (SDK 58),
+      # а worklets 0.5.1 из SDK 54 требует peer `@babel/core ^7`. Поэтому
+      # bump @babel/core → 8 тянет за собой весь SDK и валит `npm ci`.
+      # `@babel/*` целиком: та же история у preset/plugin-пакетов.
+      - dependency-name: '@babel/*'
+      # --- @react-navigation/* ---
+      # Намеренно НЕ заглушены: SDK их не пинит, они живут своей версионной
+      # веткой. НО dependabot поднимает их по одному, а они связаны жёстко:
+      # `bottom-tabs@7` и `native-stack@7` требуют `native ^7.5.2`, поэтому
+      # любой одиночный PR падает на `npm ci` с ERESOLVE (см. закрытые #34,
+      # #40). Переход 6 → 7 проверен и возможен — все три пакета сразу,
+      # с прогоном сборки. Пока это делается вручную, отдельной задачей.
+      - dependency-name: '@react-navigation/bottom-tabs'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@react-navigation/native-stack'
+        update-types: ['version-update:semver-major']
+      # `native` намеренно оставлен: его мажор приходит один и его видно.
 
   - package-ecosystem: github-actions
     directory: /

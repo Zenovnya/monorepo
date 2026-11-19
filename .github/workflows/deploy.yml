@@ -60,6 +60,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Несовместимость плагина с pytest должна падать здесь, а не трейсбеком
+      # внутри тестов. Реальный случай: `pytest-asyncio <1.0` с pytest 9 падал
+      # на сборе с `AttributeError: 'FixtureManager' object has no attribute
+      # '_arg2fixturedefs'` — 14 ошибок вместо 150 тестов, и по логу не видно,
+      # что причина в версиях.
+      #
+      # `pip check` здесь НЕ помогает: у pytest-asyncio нет метаданных,
+      # объявляющих несовместимость с pytest 9 (проверено — пишет «No broken
+      # requirements found» на заведомо сломанной паре). Ловится только
+      # загрузкой плагина, поэтому проверяем импорт и сбор тестов.
+      - name: Verify test plugin compatibility
+        run: python -m pytest --collect-only -q > /dev/null
+
       - name: Run migrations
         run: alembic upgrade head
 
