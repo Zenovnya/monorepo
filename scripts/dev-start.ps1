@@ -51,18 +51,24 @@ Write-Host "Python: $python"
 # и человек видел только Traceback из PowerShell.
 Write-Host '==> 1/5 Проверка зависимостей бэкенда'
 
-# Список — то, без чего приложение не стартует. Версии не сверяем: это работа
-# pip; здесь важно лишь отличить «пакетов нет» от «пакеты есть, но настройки
-# ещё не созданы».
-$requiredModules = @('uvicorn', 'fastapi', 'sqlalchemy', 'alembic', 'pydantic_settings', 'redis', 'asyncpg')
-$missing = @()
-foreach ($module in $requiredModules) {
-    & $python -c "import $module" *> $null
-    if ($LASTEXITCODE -ne 0) { $missing += $module }
-}
+# Список пакетов НЕ дублируется здесь: его читает scripts/check_deps.py прямо
+# из requirements.txt. Жёсткий список в скрипте уже подвёл — в нём не было
+# PyJWT, шаг отвечал «всё есть», установка не запускалась, и падало на
+# миграциях с `ModuleNotFoundError: No module named 'jwt'`.
+$checker = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\check_deps.py'
+$requirements = Join-Path $backend 'requirements.txt'
+# Вывод читаем ДО проверки кода возврата: так $LASTEXITCODE гарантированно
+# относится к check_deps.py, а не к чему-то внутри подвыражения.
+$missingOutput = & $python $checker $requirements 2>$null
+$depsMissing = ($LASTEXITCODE -ne 0)
+$missing = @($missingOutput | Where-Object { $_ -and $_.Trim() })
 
-if ($missing.Count -gt 0) {
-    Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+if ($depsMissing) {
+    if ($missing.Count -gt 0) {
+        Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+    } else {
+        Write-Host 'Проверка зависимостей не прошла (см. вывод выше).'
+    }
     Write-Host 'Ставлю requirements.txt (это долго, один раз)...'
     & $python -m pip install --disable-pip-version-check -r (Join-Path $backend 'requirements.txt')
     if ($LASTEXITCODE -ne 0) {

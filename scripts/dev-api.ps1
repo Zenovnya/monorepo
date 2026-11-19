@@ -65,14 +65,19 @@ if (-not $python) {
 # импортировать uvicorn/app.main» на исправных зависимостях, и человек шёл
 # переустанавливать пакеты. Если настройки битые, это увидит уже сам uvicorn —
 # в .local\backend.err.log, с настоящей причиной.
-$requiredModules = @('uvicorn', 'fastapi', 'sqlalchemy', 'alembic', 'pydantic_settings', 'redis', 'asyncpg')
-$missing = @()
-foreach ($module in $requiredModules) {
-    & $python -c "import $module" *> $null
-    if ($LASTEXITCODE -ne 0) { $missing += $module }
-}
-if ($missing.Count -gt 0) {
-    Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+# Список пакетов читает scripts/check_deps.py из requirements.txt: жёсткий
+# список в скрипте расходился с файлом (в нём не было PyJWT, и падало уже на
+# миграциях, а не здесь).
+$checker = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\check_deps.py'
+$requirements = Join-Path $backend 'requirements.txt'
+# Вывод читаем ДО проверки кода возврата (см. dev-start.ps1).
+$missingOutput = & $python $checker $requirements 2>$null
+$depsMissing = ($LASTEXITCODE -ne 0)
+$missing = @($missingOutput | Where-Object { $_ -and $_.Trim() })
+if ($depsMissing) {
+    if ($missing.Count -gt 0) {
+        Write-Host ("Не установлены пакеты: " + ($missing -join ', '))
+    }
     Write-Host "Установите зависимости: cd backend; $python -m pip install -r requirements.txt"
     exit 1
 }
