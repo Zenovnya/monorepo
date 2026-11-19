@@ -69,6 +69,7 @@ async def pack_structure() -> dict:
                         "lesson_id": lesson["id"],
                         "order": lesson["order"],
                         "title": lesson["title"],
+                        "short_title": lesson.get("short_title") or lesson["title"],
                         "goal": lesson["goal"],
                         "legal_review_status": lesson["legal_review_status"],
                         "control_item_id": lesson["control_id"],

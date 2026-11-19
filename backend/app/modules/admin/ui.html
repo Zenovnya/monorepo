@@ -239,7 +239,8 @@ async function loadTopics() {
           ${t.lessons.map(l => `
             <tr>
               <td><span class="lesson-link" onclick="openLesson('${esc(l.lesson_id)}')">${esc(l.lesson_id)}</span><br>
-                  <span class="muted">${esc(l.title)}</span></td>
+                  <span class="muted">${esc(l.title)}</span><br>
+                  <span class="muted" style="font-size:11px">Короткое: <code>${esc(l.short_title || '')}</code></span></td>
               <td class="muted">${esc(l.goal)}</td>
               <td><code>${esc(l.control_item_id)}</code></td>
               <td><span class="pill ${l.legal_review_status === 'approved' ? 'on' : 'off'}">${esc(l.legal_review_status)}</span></td>
@@ -270,6 +271,7 @@ async function loadLesson() {
     box.innerHTML = `
       <div class="field"><label>${esc(l.topic_title)} · урок ${esc(l.order)}</label>
         <strong style="font-size:16px">${esc(l.title)}</strong></div>
+      <div class="field"><label>Короткое название</label><code>${esc(l.short_title || '')}</code> <span class="muted" style="font-size:11px">(показывается рядом с чекпоинтом на карте уроков)</span></div>
       <div class="field"><label>Цель</label>${esc(l.goal)}</div>
       <div class="grid2">
         <div class="field"><label>Тема / подтема</label>

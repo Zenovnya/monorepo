@@ -652,6 +652,7 @@ def lesson_payload(pack: Pack, lesson_id: str) -> dict[str, Any]:
     return {
         "lesson_id": lesson["id"],
         "title": lesson["title"],
+        "short_title": lesson.get("short_title") or lesson["title"],
         "order": lesson["order"],
         "goal": lesson["goal"],
         "theory": lesson["theory"],

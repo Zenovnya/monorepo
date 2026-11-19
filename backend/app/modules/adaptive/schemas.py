@@ -119,6 +119,10 @@ class ActionResultRead(BaseModel):
 class LessonProgressRead(BaseModel):
     lesson_id: str
     title: str
+    # Короткое название — то, что показывает рядом с чекпоинтом на карте
+    # уроков. Отдельно от полного заголовка: длинное название под каждым
+    # медальоном не помещалось и перекрывало тропу.
+    short_title: str = ""
     order: int
     goal: str
     practised: bool

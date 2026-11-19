@@ -6,13 +6,14 @@ import {
 } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { MascotToastProvider } from './src/components';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { RootNavigator } from './src/navigation';
+import { useAuthStore } from './src/store';
 
 /**
  * Общий клиент react-query.
@@ -74,6 +75,27 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Сброс кэша при смене пользователя.
+
+ * react-query хранит ответы по ключам без пользователя (``adaptive-overview``,
+ * ``gamification-me`` …), а staleTime — 5 минут. Если войти под другим
+ * аккаунтом, запросы не перезапрашиваются: на экране остаётся прогресс и
+ * счётчики прошлого пользователя. При смене пользователя (вход, регистрация,
+ * выход, смена токена) кэш очищается целиком — тогда данные принадлежат
+ * именно тому, кто сейчас в системе.
+ */
+function AuthCacheSync() {
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  useEffect(() => {
+    queryClient.clear();
+    // queryClient — константный объект из верхнего уровня файла: он не
+    // рендерит и не меняется, поэтому не в списке зависимостей.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+  return null;
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -81,6 +103,7 @@ export default function App() {
         <QueryClientProvider client={queryClient}>
           <NavigationContainer linking={linking}>
             <MascotToastProvider>
+              <AuthCacheSync />
               <RootNavigator />
               <OfflineBanner />
               <StatusBar style="auto" />

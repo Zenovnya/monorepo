@@ -19,6 +19,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.adaptive import constants as c
@@ -106,7 +107,20 @@ async def _load(
             user_id=user_id, release_key=pack.release_key, weights={}, seq=0
         )
         session.add(root)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError:
+            # Гонка: два парных запроса (нажатие кнопки + повторный рендер,
+            # StrictMode) оба видят «статьи нет» и оба пытаются создать строку
+            # состояния. Без этого IntegrityError уходил в 500, и клиент
+            # показывал «Сервер не смог отдать проверку. Мы уже разбираемся»,
+            # хотя всё было в порядке — просто второй запрос проиграл гонку.
+            # Откатываем только создание строки и перечитываем: другая
+            # транзакция уже сделала то, что нужно.
+            await session.rollback()
+            root = await session.scalar(statement)
+            if root is None:
+                raise
 
     if root.release_key != pack.release_key:
         # Пак обновился. История остаётся, но открытая попытка могла ссылаться
@@ -500,6 +514,7 @@ async def overview(
                     {
                         "lesson_id": item["id"],
                         "title": item["title"],
+                        "short_title": item.get("short_title") or item["title"],
                         "order": item["order"],
                         "goal": item["goal"],
                         "practised": item["id"] in done,
