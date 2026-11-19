@@ -79,6 +79,9 @@ export default function LessonScreen({ route, navigation }) {
       }
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
+      if (data.xp_gained) {
+        queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+      }
     },
     // Сбой ответа раньше был невидим: нажатие «Ответить» не давало ничего, и
     // это читалось как «кнопка не работает». Теперь причина на экране.

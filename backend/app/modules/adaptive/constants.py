@@ -8,6 +8,9 @@ SCHEMA_VERSION = "1.0.0"
 ALGORITHM_VERSION = "theme-mvp-1"
 
 # Параметры окна и сглаживания холодного старта.
+# XP за зачтённый самостоятельный правильный ответ (за уроки и кейсы).
+XP_PER_COUNTED_ANSWER = 20
+
 WINDOW_SIZE = 5
 PRIOR_ERRORS = 2
 PRIOR_ANSWERS = 4

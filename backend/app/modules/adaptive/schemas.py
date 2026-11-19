@@ -113,6 +113,7 @@ class ActionResultRead(BaseModel):
     options: list[dict] | None = None
     legal_basis_ids: list[str] | None = None
     assistance: str | None = None
+    xp_gained: int = 0
 
 
 class LessonProgressRead(BaseModel):
@@ -137,6 +138,7 @@ class TopicProgressRead(BaseModel):
     errors: int
     correct_count: int
     practice_priority: float
+    progress_pct: float
     priority: float
     state: str
     lessons_total: int

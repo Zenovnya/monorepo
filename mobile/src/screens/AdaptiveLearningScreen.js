@@ -47,6 +47,13 @@ export default function AdaptiveLearningScreen() {
   const [topicId, setTopicId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
+  // Подсказка — не результат: сервер отвечает status 'open' и оставляет
+  // попытку жить. Если положить это в `result`, варианты ответа отключаются
+  // («Ответить» и «Пропустить» прячутся), а «Следующий кейс» не появляется —
+  // потому что карточку с кнопкой рендерят только когда status !== 'open'.
+  // Пользователь остаётся с подсказкой и никак не может ответить или уйти.
+  // Урок этот случай учитывает, кейс — нет.
+  const [hint, setHint] = useState(null);
   const [showTopics, setShowTopics] = useState(false);
   const [actionError, setActionError] = useState(null);
 
@@ -67,9 +74,20 @@ export default function AdaptiveLearningScreen() {
     mutationFn: ({ action, optionId }) =>
       adaptiveApi.act(nextQuery.data.attempt_id, { action, optionId }),
     onSuccess: (data) => {
+      if (data.status === 'open') {
+        setHint(data.assistance ?? null);
+        return;
+      }
       setResult(data);
+      setHint(null);
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
+      }
+      if (data.xp_gained) {
+        // XP начислился на сервере: кэш геймификации обновить, иначе на
+        // экране счётчик стоит на старом значении и выглядит «XP не
+        // начисляется».
+        queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
     // Без этого сбой ответа был невидим: нажатие не давало ничего, и выглядело
@@ -94,6 +112,7 @@ export default function AdaptiveLearningScreen() {
   const reset = () => {
     setSelected(null);
     setResult(null);
+    setHint(null);
     setActionError(null);
     nextQuery.refetch();
   };
@@ -203,6 +222,7 @@ export default function AdaptiveLearningScreen() {
                     setTopicId(topic.topic_id);
                     setSelected(null);
                     setResult(null);
+                    setHint(null);
                     setShowTopics(false);
                   }}
                 >
@@ -210,14 +230,16 @@ export default function AdaptiveLearningScreen() {
                     <Text style={styles.topicRowTitle} numberOfLines={2}>
                       {topic.title}
                     </Text>
-                    <Text style={styles.topicRowPct}>{topic.practice_priority}%</Text>
+                    <Text style={styles.topicRowPct}>
+                      {Math.round(topic.progress_pct ?? 0)}%
+                    </Text>
                   </View>
                   <View style={styles.topicTrack}>
                     <View
                       style={[
                         styles.topicFill,
                         {
-                          width: `${Math.min(100, Math.max(6, topic.practice_priority))}%`,
+                          width: `${Math.min(100, Math.max(6, topic.progress_pct ?? 0))}%`,
                           backgroundColor:
                             topic.state === 'NOT_ASSESSED' ? brand.ruleStrong : brand.gold,
                         },
@@ -227,7 +249,7 @@ export default function AdaptiveLearningScreen() {
                   <Text style={styles.topicRowMeta}>
                     {topic.state === 'NOT_ASSESSED'
                       ? 'ещё не проверялись'
-                      : `практика · ${topic.n} ответ(ов), ошибок ${topic.errors}`}
+                      : `приоритет · ${topic.practice_priority}%`}
                     {' · '}
                     {topic.lessons_practised}/{topic.lessons_total} уроков
                   </Text>
@@ -235,9 +257,10 @@ export default function AdaptiveLearningScreen() {
               );
             })}
             <Text style={styles.topicFoot}>
-              Процент — приоритет практики, а не «уровень знаний»: чем выше, тем
-              полезнее сейчас потренировать тему. Непройденные темы начинают с
-              середины, потому что о них пока ничего не известно.
+              Полоса — сколько уроков темы пройдено; процент справа — приоритет
+              практики, не «уровень знаний»: чем выше, тем полезнее сейчас
+              потренировать тему. Непройденные темы начинают с середины,
+              потому что о них пока ничего не известно.
             </Text>
           </View>
         ) : null}
@@ -313,7 +336,7 @@ export default function AdaptiveLearningScreen() {
                 : 'Как поступите?'
             }
             result={result}
-            assisted={Boolean(result?.assistance)}
+            assisted={Boolean(hint)}
           />
         ) : null}
 
@@ -385,10 +408,10 @@ export default function AdaptiveLearningScreen() {
         ) : null}
 
         {/* Подсказка не закрывает попытку, но снимает зачёт — говорим прямо. */}
-        {result?.assistance ? (
+        {hint ? (
           <View style={styles.helpCard}>
             <Text style={styles.helpKicker}>ПОДСКАЗКА</Text>
-            <Text style={styles.helpText}>{result.assistance}</Text>
+            <Text style={styles.helpText}>{hint}</Text>
             <Text style={styles.helpNote}>
               После подсказки ответ не засчитывается: приоритет темы должен
               отражать самостоятельные ответы.

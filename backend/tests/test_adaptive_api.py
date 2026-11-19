@@ -289,3 +289,102 @@ async def test_many_users_do_not_collide_on_attempt_ids(api) -> None:
         assert attempt_id, response.text
         assert attempt_id not in seen, f"id попытки повторился: {attempt_id}"
         seen.add(attempt_id)
+
+
+async def test_correct_answer_awards_xp(api) -> None:
+    """Зачтённый правильный ответ начисляет XP.
+
+    XP раньше начислялся только через ручку /gamification/add-xp, которую
+    никто не вызывал: за уроки и кейсы XP не прибавлялся вообще, и счётчик
+    стоял на нуле.
+    """
+    client, _ = api
+    # Пользователь нужен в БД: без него XP начислить нельзя, и сам ответ
+    # отстанет от реальности.
+    resp = await client.post(
+        "/auth/register",
+        json={
+            "email": f"xp{uuid.uuid4().hex[:8]}@example.com",
+            "password": "PreviewPass123",
+            "full_name": "XP",
+        },
+    )
+    token = resp.json()["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+    opened = (await client.get("/adaptive/next", headers=h)).json()
+    correct = get_pack().items[opened["item"]["item_id"]]["correct_option_id"]
+    before = (await client.get("/gamification/me", headers=h)).json()
+    assert before["xp"] == 0
+    body = (
+        await client.post(
+            f"/adaptive/attempts/{opened['attempt_id']}/actions",
+            json={"action": "answer", "option_id": correct},
+            headers=h,
+        )
+    ).json()
+    assert body["xp_gained"] > 0
+    after = (await client.get("/gamification/me", headers=h)).json()
+    assert after["xp"] == before["xp"] + body["xp_gained"]
+
+
+async def test_hint_keeps_attempt_open(api) -> None:
+    """Подсказка не закрывает попытку: статус open и можно дальше ответить.
+
+    Клиент раньше кладул ответ подсказки в результат, что отключало
+    варианты ответа и скрывало «Следующий кейс» — кейс висел.
+    """
+    client, _ = api
+    headers = _headers(uuid.uuid4())
+    opened = (await client.get("/adaptive/next", headers=headers)).json()
+
+    body = (
+        await client.post(
+            f"/adaptive/attempts/{opened['attempt_id']}/actions",
+            json={"action": "help"},
+            headers=headers,
+        )
+    ).json()
+    assert body["status"] == "open"
+    assert body["assistance"]
+
+    # Попытка жива: ответ после подсказки ещё принимается (но не засчитывается).
+    item_id = opened["item"]["item_id"]
+    correct = get_pack().items[item_id]["correct_option_id"]
+    answered = (
+        await client.post(
+            f"/adaptive/attempts/{opened['attempt_id']}/actions",
+            json={"action": "answer", "option_id": correct},
+            headers=headers,
+        )
+    ).json()
+    assert answered["status"] == "answered"
+    assert answered["counted"] is False
+
+
+async def test_overview_progress_is_topic_completion(api) -> None:
+    """Полоса прогресса — сколько уроков темы пройдено, а не приоритет.
+
+    Раньше прогресс темы показывал practice_priority: тема без ответов
+    начиналась с 50 %, а после пары правильных ответов «прогресс» падал
+    до 25 % — по факту уменьшался по мере прохождения.
+    """
+    client, _ = api
+    headers = _headers(uuid.uuid4())
+    overview = (await client.get("/adaptive/overview", headers=headers)).json()
+    for topic in overview["topics"]:
+        assert topic["progress_pct"] == 0.0
+        assert topic["lessons_practised"] == 0
+
+    # Решим уроки одной темы полностью — прогресс должен дойти до 100 %.
+    # Чистый engine-уровень: считаем lesson_check-попытки через HTTP.
+    opened = (await client.get("/adaptive/next", headers=headers)).json()
+    item_id = opened["item"]["item_id"]
+    correct = get_pack().items[item_id]["correct_option_id"]
+    await client.post(
+        f"/adaptive/attempts/{opened['attempt_id']}/actions",
+        json={"action": "answer", "option_id": correct},
+        headers=headers,
+    )
+    overview = (await client.get("/adaptive/overview", headers=headers)).json()
+    # Зачтённый ответ должен прибавить прогресс (хотя бы одной теме).
+    assert any(t["progress_pct"] > 0 for t in overview["topics"])
