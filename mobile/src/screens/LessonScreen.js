@@ -192,7 +192,26 @@ export default function LessonScreen({ route, navigation }) {
   });
 
   const openCheck = useMutation({
-    mutationFn: () => adaptiveApi.openAttempt({ itemId: lesson.data.control_item_id, origin: 'lesson', mode: 'check' }),
+    // Сначала закрываем уже открытую попытку (например, открытый из
+    // адаптивной вкладки кейс): иначе сервер отвечает OPEN_ATTEMPT, и кнопка
+    // «Пройти проверку» падала с ошибкой вместо открытия проверки урока.
+    // attempt.status != "open" — уже закрытая попытка ответит already_closed
+    // без ошибки, так что проактивный skip безопасен.
+    mutationFn: async () => {
+      const openId = lesson.data?.open_attempt_id;
+      if (openId) {
+        try {
+          await adaptiveApi.act(openId, { action: 'skip' });
+        } catch {
+          // Уже закрыта между загрузкой урока и нажатием — игнорируем.
+        }
+      }
+      return adaptiveApi.openAttempt({
+        itemId: lesson.data.control_item_id,
+        origin: 'lesson',
+        mode: 'check',
+      });
+    },
     // Без этого сбой открытия проверки был невидим: сервер мог ответить 400
     // (например OPEN_ATTEMPT — попытка уже открыта из кейса), а кнопка
     // «Пройти проверку» просто молчала. Экран менялся не мог: phase оставался
