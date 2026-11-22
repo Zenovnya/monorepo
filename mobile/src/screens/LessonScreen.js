@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -184,6 +184,9 @@ export default function LessonScreen({ route, navigation }) {
   const [actionError, setActionError] = useState(null);
   const [openError, setOpenError] = useState(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  // Флаг повтора открытия после OPEN_ATTEMPT: чтобы не уйти в бесконечный
+  // цикл, если попытка всё ещё открыта после повторного запроса.
+  const openCheckRetried = useRef(false);
 
   const lesson = useQuery({
     queryKey: ['adaptive-lesson', lessonId],
@@ -217,8 +220,30 @@ export default function LessonScreen({ route, navigation }) {
     // «Пройти проверку» просто молчала. Экран менялся не мог: phase оставался
     // 'theory', loader не показывался, и выглядело это как «кнопка не
     // работает», а не как ошибка.
-    onError: (error) => setOpenError(describeOpenError(error)),
+    onError: async (error) => {
+      const detail = error?.response?.data?.detail;
+      // open_attempt_id из lesson-payload может быть устаревшим (закэширован
+      // до открытия кейса в адаптивной вкладке). Тогда проактивный skip
+      // не сработал и сервер ответил OPEN_ATTEMPT: запрашиваем актуальное
+      // состояние, закрываем чужую попытку и повторяем открытие один раз.
+      if (detail === 'OPEN_ATTEMPT' && !openCheckRetried.current) {
+        openCheckRetried.current = true;
+        try {
+          const next = await adaptiveApi.next({ openAttempt: false });
+          const openId = next?.attempt_id;
+          if (openId) {
+            await adaptiveApi.act(openId, { action: 'skip' });
+          }
+          openCheck.mutate();
+          return;
+        } catch {
+          openCheckRetried.current = false;
+        }
+      }
+      setOpenError(describeOpenError(error));
+    },
     onSuccess: (data) => {
+      openCheckRetried.current = false;
       setOpenError(null);
       // Карточка приходит вместе с попыткой: отдельного запроса «дай вопрос»
       // нет, иначе клиент мог бы получить его, не открывая попытку.
