@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -37,17 +36,19 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.text,
+        tabBarActiveTintColor: colors.error,
         tabBarInactiveTintColor: colors.subtext,
         tabBarStyle: {
           backgroundColor: colors.card,
-          borderTopWidth: 3,
-          borderTopColor: colors.border,
-          height: 64 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 10),
-          paddingTop: 6,
+          borderTopWidth: 0,
+          height: 68 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 4,
+          shadowColor: 'transparent',
+          elevation: 0,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '800' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '900' },
+        tabBarItemStyle: { paddingVertical: 4 },
       }}
     >
       <Tab.Screen
@@ -63,7 +64,7 @@ function MainTabs() {
       <Tab.Screen
         name="Bear"
         component={BearScreen}
-        options={{ tabBarLabel: 'Мишка', tabBarIcon: () => <Text style={{ fontSize: 22 }}>🐻</Text> }}
+        options={{ tabBarLabel: 'Мишка', tabBarIcon: ({ focused }) => <TabBarIcon glyph="🐻" focused={focused} /> }}
       />
       <Tab.Screen
         name="Profile"

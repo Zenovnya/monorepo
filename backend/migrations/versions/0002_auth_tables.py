@@ -31,7 +31,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index('ix_users_email', 'users', ['email'], unique=True)
@@ -46,7 +46,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     )

@@ -78,8 +78,9 @@ function Trail({ points, items }) {
             key={`seg-${index}`}
             d={`M ${from.x} ${from.y} Q ${ctrlX} ${ctrlY} ${to.x} ${to.y}`}
             stroke={color}
-            strokeWidth={4}
+            strokeWidth={5}
             strokeLinecap="round"
+            strokeDasharray={[2, 10]}
             fill="none"
           />
         );

@@ -99,8 +99,17 @@ export default function LearnScreen({ navigation }) {
             width={22}
             cutoutColor={brand.red}
           />
-          <Text style={styles.headerEyebrow}>ЛАПЫ ЗАКОНА · ПРОГРАММА</Text>
-          <Text style={styles.headerTitle}>Шесть тем, тридцать уроков</Text>
+          <View style={styles.headerTop}>
+            <View style={styles.headerText}>
+              <Text style={styles.headerEyebrow}>ЛАПЫ ЗАКОНА · ПРОГРАММА</Text>
+              <Text style={styles.headerTitle}>Шесть тем, тридцать уроков</Text>
+            </View>
+            <View style={styles.headerProgress}>
+              <Text style={styles.headerProgressNum}>
+                {Math.round((totals.done / Math.max(totals.lessons, 1)) * 100)}%
+              </Text>
+            </View>
+          </View>
           <Text style={styles.headerNote}>
             {totals.done} из {totals.lessons} уроков пройдено. Каждый урок —
             короткий разбор ситуации и одна проверка.
@@ -198,11 +207,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 5,
     borderBottomColor: brand.redDark,
     padding: 20,
-    paddingRight: 34,
+    paddingRight: 20,
     gap: 10,
     overflow: 'hidden',
   },
   headerGarland: { position: 'absolute', top: 6, left: 0, right: 0, opacity: 0.5 },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerText: { flex: 1, gap: 2 },
   headerEyebrow: {
     fontSize: 9.5,
     fontWeight: '800',
@@ -213,6 +229,22 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: '900',
     color: brand.creamText,
+    fontFamily: serifFamily,
+  },
+  headerProgress: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2.5,
+    borderColor: brand.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 200, 0, 0.15)',
+  },
+  headerProgressNum: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: brand.goldLight,
     fontFamily: serifFamily,
   },
   headerNote: { fontSize: 13, lineHeight: 19, color: brand.creamText, opacity: 0.92 },

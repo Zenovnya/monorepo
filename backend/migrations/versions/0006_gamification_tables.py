@@ -58,7 +58,7 @@ def upgrade() -> None:
             "awarded_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index("ix_user_achievements_user_id", "user_achievements", ["user_id"])

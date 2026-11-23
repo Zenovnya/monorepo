@@ -76,12 +76,12 @@ class AdaptiveState(Base):
         String(32), default=c.INITIAL_CONFIG_VERSION, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
         nullable=False,
     )
 
@@ -116,7 +116,7 @@ class AdaptiveAttempt(Base):
     selected_option_id: Mapped[str | None] = mapped_column(String(8), nullable=True)
     correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
     )
 
 
@@ -148,7 +148,7 @@ class AdaptiveObservation(Base):
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
     )
 
 
@@ -207,8 +207,8 @@ class AdaptiveTopicPriority(Base):
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
         nullable=False,
     )
 

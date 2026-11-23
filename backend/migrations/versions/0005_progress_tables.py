@@ -25,12 +25,12 @@ def upgrade() -> None:
         sa.Column("best_score", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("crowns", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.UniqueConstraint("user_id", "lesson_id", name="uq_progress_user_lesson"),
     )
     op.create_index("ix_progress_user_id", "progress", ["user_id"])
     op.create_index("ix_progress_lesson_id", "progress", ["lesson_id"])
-    op.create_unique_constraint("uq_progress_user_lesson", "progress", ["user_id", "lesson_id"])
 
     op.create_table(
         "review_states",
@@ -41,12 +41,12 @@ def upgrade() -> None:
         sa.Column("interval_days", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("ease_factor", sa.Float(), nullable=False, server_default=sa.text("2.5")),
         sa.Column("due_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.UniqueConstraint("user_id", "case_id", name="uq_review_state_user_case"),
     )
     op.create_index("ix_review_states_user_id", "review_states", ["user_id"])
     op.create_index("ix_review_states_case_id", "review_states", ["case_id"])
-    op.create_unique_constraint("uq_review_state_user_case", "review_states", ["user_id", "case_id"])
 
     op.create_table(
         "review_logs",
@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column("repetitions", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("interval_days", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("ease_factor", sa.Float(), nullable=False, server_default=sa.text("2.5")),
-        sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
     )
     op.create_index("ix_review_logs_user_id", "review_logs", ["user_id"])
     op.create_index("ix_review_logs_case_id", "review_logs", ["case_id"])

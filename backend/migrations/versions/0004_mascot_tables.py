@@ -35,7 +35,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index('ix_mascot_phrases_trigger', 'mascot_phrases', ['trigger'])
@@ -50,13 +50,13 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.Column(
             'updated_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.ForeignKeyConstraint(['last_phrase_id'], ['mascot_phrases.id'], ondelete='SET NULL'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -72,7 +72,7 @@ def upgrade() -> None:
             'shown_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.ForeignKeyConstraint(['phrase_id'], ['mascot_phrases.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),

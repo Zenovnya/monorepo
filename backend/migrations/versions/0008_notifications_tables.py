@@ -35,7 +35,7 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index("ix_push_tokens_user_id", "push_tokens", ["user_id"])
@@ -57,7 +57,7 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index("ix_notifications_user_id", "notifications", ["user_id"])

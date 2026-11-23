@@ -61,7 +61,7 @@ def upgrade() -> None:
             "bear_outfit",
             sa.JSON(),
             nullable=False,
-            server_default=sa.text("'{}'::json"),
+            server_default=sa.text("'{}'"),
         ),
     )
 

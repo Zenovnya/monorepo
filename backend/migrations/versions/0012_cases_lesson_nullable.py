@@ -19,8 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Кейсы вкладки «Кейсы» не привязаны к уроку — ослабляем ограничение.
-    op.alter_column("cases", "lesson_id", existing_type=sa.dialects.postgresql.UUID(as_uuid=True), nullable=True)
+    with op.batch_alter_table("cases") as batch_op:
+        batch_op.alter_column(
+            "lesson_id",
+            existing_type=sa.dialects.postgresql.UUID(as_uuid=True),
+            nullable=True,
+        )
 
 
 def downgrade() -> None:
-    op.alter_column("cases", "lesson_id", existing_type=sa.dialects.postgresql.UUID(as_uuid=True), nullable=False)
+    with op.batch_alter_table("cases") as batch_op:
+        batch_op.alter_column(
+            "lesson_id",
+            existing_type=sa.dialects.postgresql.UUID(as_uuid=True),
+            nullable=False,
+        )
