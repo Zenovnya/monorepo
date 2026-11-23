@@ -553,6 +553,28 @@ async def _answer(
         if user is not None:
             lives_spent = gamification_service.spend_lives(user, 1)
 
+    # Достижения за вехи: пройденный урок, XP-милистоны, стрик, цель дня.
+    # Выдаём в той же транзакции, чтобы достижение не «пропадало» между
+    # ответом и следующей загрузкой профиля.
+    awarded_achievements: list[dict] = []
+    if result.get("counted"):
+        from app.modules.gamification import service as gamification_service
+
+        user = await session.get(User, user_id)
+        if user is not None:
+            counted_total = sum(1 for a in state.attempts.values() if a.counted)
+            progress = await gamification_service.get_daily_progress(
+                session, user_id
+            )
+            awarded_achievements = await gamification_service.award_milestone_achievements(
+                session,
+                user,
+                counted_attempts=counted_total,
+                streak=user.streak,
+                daily_done=progress["done"],
+                daily_goal=progress["goal"],
+            )
+
     await session.commit()
 
     result["attempt_id"] = attempt_id
@@ -565,6 +587,10 @@ async def _answer(
         # Жизнь списалась — клиент должен обновить счётчик ❤️ в шапке
         # без перезагрузки состояния.
         result["lives_spent"] = lives_spent
+    if awarded_achievements:
+        # Клиент показывает тост «Достижение получено» сразу по ответу —
+        # без ожидания перезагрузки профиля.
+        result["achievements"] = awarded_achievements
     if result.get("status") == "answered":
         # Разбор показывается после ответа — здесь и только здесь.
         item = pack.items[state.attempts[attempt_id].item_id]

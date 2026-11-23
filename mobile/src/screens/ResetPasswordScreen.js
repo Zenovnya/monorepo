@@ -8,6 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { PressableScale } from '../components/PressableScale';
@@ -30,6 +31,7 @@ import { describeLoadError } from '../api/client';
  * достаточно вернуть пользователя на экран входа.
  */
 export default function ResetPasswordScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const token = route?.params?.token ?? '';
 
   const [password, setPassword] = useState('');
@@ -99,7 +101,10 @@ export default function ResetPasswordScreen({ route, navigation }) {
     >
       <PaperGrain />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 16 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

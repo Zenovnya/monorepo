@@ -7,6 +7,7 @@ import {
 
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
@@ -41,6 +42,7 @@ const AVATAR_COLORS = [brand.red, brand.gold, brand.pine, brand.ink, '#9A5B32'];
  * и чистая таблица участников на сливочной бумаге (#F7EFDF).
  */
 export default function LeagueScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
 
   // Реальная ведомость лиги с бэкенда. Раньше здесь был захардкоженный
@@ -65,7 +67,10 @@ export default function LeagueScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 16 },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <PaperGrain />

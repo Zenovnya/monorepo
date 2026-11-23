@@ -20,12 +20,14 @@ import Animated, {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { gamificationApi } from '../api/gamification';
+import { applyActResult } from '../api/optimistic';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
 import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
 import { TactilePressable } from '../components/TactilePressable';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { useMascotToast } from '../components/MascotToast';
 import {
   brand,
   serifFamily,
@@ -172,6 +174,7 @@ function LifeCounter({ lives }) {
 export default function LessonScreen({ route, navigation }) {
   const { lessonId } = route.params ?? {};
   const queryClient = useQueryClient();
+  const toast = useMascotToast();
   // Отступ от выреза считаем сами: у стека headerShown: false, и кнопка
   // «Назад» упиралась в верхнюю кромку экрана.
   const insets = useSafeAreaInsets();
@@ -200,6 +203,7 @@ export default function LessonScreen({ route, navigation }) {
   const gamification = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
 
   // Жизней нет — открытие проверки блокируется: вместо безнадёжной ошибки
@@ -279,12 +283,24 @@ export default function LessonScreen({ route, navigation }) {
         return;
       }
       setResult(data);
+      // Оптимистичное обновление: применяем изменения из ответа сразу,
+      // без ожидания полного refetch. Без этого счётчики XP/❤️ и прогресс
+      // урока «подвисали» на прежних значениях, пока запрос не успевал
+      // вернуться (и при сбое refetch — навсегда).
+      applyActResult(queryClient, data, lessonId);
+      // Достижения по ответу: тост «Достижение получено» сразу, без
+      // ожидания перезагрузки профиля.
+      data.achievements?.forEach((a) => {
+        toast.show({
+          kind: 'achievement',
+          title: a.title,
+          text: a.description,
+        });
+      });
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
-      if (data.xp_gained || data.lives_spent) {
-        // Обновляем счётчики XP и жизней: без этого при списании жизни за
-        // ошибку чип ❤️ оставался на прежнем значении до перезапуска.
-        queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+      queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
+      queryClient.invalidateQueries({ queryKey: ['gamification-achievements'] });
     },
     // Сбой ответа раньше был невидим: нажатие «Ответить» не давало ничего, и
     // это читалось как «кнопка не работает». Теперь причина на экране.

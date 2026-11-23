@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { AnimatedInput } from '../components/AnimatedInput';
 import { SocialButton } from '../components/SocialButton';
@@ -31,6 +32,7 @@ import { useNavigation } from '@react-navigation/native';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const login = useLogin();
 
@@ -96,7 +98,10 @@ export default function LoginScreen() {
       <Confetti active={loginSuccess} />
 
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 18 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

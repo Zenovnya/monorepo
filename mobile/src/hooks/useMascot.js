@@ -54,7 +54,7 @@ export function useMascot() {
     } catch {
       // фраза необязательна
     }
-    return { count: data.pet_count, phrase };
+    return { count: data.pet_count, phrase, achievement: data.achievement };
   };
 
   // Получение реакции маскота по триггеру (case_correct / case_wrong и т.д.)

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import cache_delete, cache_get, cache_set
 from app.modules.auth.models import User, UserAchievement
+from app.modules.gamification.achievements import ACHIEVEMENT_DEFS
 
 # Порог XP на один уровень.
 XP_PER_LEVEL = 100
@@ -376,6 +377,57 @@ async def list_achievements(
         .order_by(UserAchievement.awarded_at)
     )
     return list(result.all())
+
+
+def achievement_payload(a: UserAchievement) -> dict:
+    """Сериализует достижение в форму, которую отдаёт API."""
+    return {
+        "code": a.code,
+        "title": a.title,
+        "description": a.description,
+        # awarded_at ставится сервером по умолчанию: в реальной сессии оно
+        # приходит после flush, в тестовом окружении — может быть None.
+        "awarded_at": (a.awarded_at or datetime.now(timezone.utc)).isoformat(),
+    }
+
+
+async def award_milestone_achievements(
+    session: AsyncSession,
+    user: User,
+    *,
+    counted_attempts: int,
+    streak: int,
+    daily_done: int,
+    daily_goal: int,
+) -> list[dict]:
+    """Выдаёт достижения за вехи и возвращает только новые (для тостов).
+
+    Проверяет каждый пункт каталога independently: если пользователь قفز
+    с 0 до 600 XP, выдаются сразу xp_100 и xp_500. Повторные вызовы
+    бездеятельны — уже выданные коды отбрасываются как дубликаты.
+    """
+    milestones = [
+        ("first_step", counted_attempts >= 1),
+        ("xp_100", user.xp >= 100),
+        ("xp_500", user.xp >= 500),
+        ("xp_1000", user.xp >= 1000),
+        ("streak_3", streak >= 3),
+        ("day_warrior", daily_goal > 0 and daily_done >= daily_goal),
+    ]
+    awarded: list[dict] = []
+    for code, ok in milestones:
+        if not ok:
+            continue
+        title = ACHIEVEMENT_DEFS[code]["title"]
+        description = ACHIEVEMENT_DEFS[code]["description"]
+        try:
+            achievement = await award_achievement(
+                session, user, code, title, description
+            )
+        except AchievementAlreadyAwardedError:
+            continue
+        awarded.append(achievement_payload(achievement))
+    return awarded
 
 
 async def get_gamification_state(

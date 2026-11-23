@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
 import { notificationsApi } from '../api/notifications';
@@ -34,6 +35,7 @@ import { colors } from '../theme/colors';
 const PACE_OPTIONS = [5, 10, 20, 30];
 
 export default function SettingsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, logout, user } = useAuthStore();
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
@@ -152,7 +154,10 @@ export default function SettingsScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 16 },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <PaperGrain />

@@ -82,7 +82,7 @@ async def pet(
 ) -> PetCountRead:
     """Погладить маскота: увеличивает счётчик поглаживаний."""
     user_id = _get_current_user_id(authorization)
-    pet_count = await service.increment_pet_count(session, user_id)
+    pet_count, achievement = await service.increment_pet_count(session, user_id)
     await session.commit()
 
     # Отправляем событие аналитики в фоне (не блокирует ответ:
@@ -91,4 +91,4 @@ async def pet(
 
     analytics_service.fire_and_forget(analytics_service.track_mascot_petted(user_id))
 
-    return PetCountRead(pet_count=pet_count)
+    return PetCountRead(pet_count=pet_count, achievement=achievement)

@@ -12,12 +12,14 @@ import Animated, {
   withSequence,
   withSpring,
 } from 'react-native-reanimated';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
+import { useMascotToast } from '../components/MascotToast';
 import { PressableScale } from '../components/PressableScale';
 import { TactilePressable } from '../components/TactilePressable';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useTabBarContentBottom } from '../navigation/tabBar';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
 import {
@@ -72,6 +74,9 @@ function HeartBurst({ visible }) {
 
 export default function BearScreen() {
   const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const toast = useMascotToast();
+  const tabBarBottom = useTabBarContentBottom();
 
   const [pose, setPose] = useState(
     user?.streak >= 3 ? 'neutral' : 'thinking'
@@ -86,6 +91,7 @@ export default function BearScreen() {
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
 
   const handlePet = async () => {
@@ -93,7 +99,18 @@ export default function BearScreen() {
     setPose('cheer');
     if (petCount > 0) setBurst((n) => n + 1);
     try {
-      await pet();
+      const petted = await pet();
+      if (petted.achievement) {
+        // Достижение «Друг Lex»: тост сразу по ответу, без перезагрузки
+        // профиля.
+        toast.show({
+          kind: 'achievement',
+          title: petted.achievement.title,
+          text: petted.achievement.description,
+        });
+        queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+        queryClient.invalidateQueries({ queryKey: ['gamification-achievements'] });
+      }
       const phrase = await react('pet');
       if (phrase?.phrase) setSpeech(phrase.phrase);
     } catch {
@@ -112,7 +129,7 @@ export default function BearScreen() {
   const streak = gamification?.streak ?? user?.streak ?? 0;
 
   return (
-    <ScreenWrapper scroll contentStyle={styles.content}>
+    <ScreenWrapper scroll contentStyle={[styles.content, { paddingBottom: tabBarBottom }]}>
       <PaperGrain />
 
       {/* Шапка кабинета с золотой наградой стрика */}

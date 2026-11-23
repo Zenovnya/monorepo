@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import BinaryExpression, select
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.modules.auth.models import User
 from app.modules.mascot import service
 from app.modules.mascot.models import MascotPhrase, UserMascotState, UserShownPhrase
 
@@ -74,10 +75,15 @@ class FakeSession:
         result = await self.scalars(statement)
         return result.all()[0] if result.all() else None
 
+    async def get(self, model: type, pk: Any) -> Any:
+        """Эмуляция session.get(): первый объект модели (тестовая база одна)."""
+        items = self._all_of(model)
+        return items[0] if items else None
+
     def add(self, obj: Any) -> None:
         self.added.append(obj)
 
-    def flush(self) -> None:
+    async def flush(self) -> None:
         pass
 
 
@@ -225,9 +231,10 @@ async def test_pet_increments_count(session: FakeSession) -> None:
     user_id = uuid.uuid4()
     session.add_model(UserMascotState(user_id=user_id, pet_count=10))
 
-    new_count = await service.increment_pet_count(session, user_id)
+    new_count, achievement = await service.increment_pet_count(session, user_id)
 
     assert new_count == 11
+    assert achievement is None
     state = await session.scalar(
         select(UserMascotState).where(UserMascotState.user_id == user_id)
     )
@@ -239,9 +246,35 @@ async def test_pet_increments_from_zero_for_new_user(
 ) -> None:
     user_id = uuid.uuid4()
 
-    new_count = await service.increment_pet_count(session, user_id)
+    new_count, achievement = await service.increment_pet_count(session, user_id)
 
     assert new_count == 1
+    assert achievement is None
+
+
+async def test_pet_at_threshold_awards_friend_lex(session: FakeSession) -> None:
+    """На 10-м поглаживании выдаётся достижение и возвращается в ответе."""
+    user_id = uuid.uuid4()
+    session.add_model(UserMascotState(user_id=user_id, pet_count=9))
+    session.add_model(
+        User(
+            id=user_id,
+            email="pet@example.com",
+            username="Pet",
+            hashed_password="hash",
+            xp=0,
+            level=1,
+            streak=0,
+            gems=0,
+        )
+    )
+
+    new_count, achievement = await service.increment_pet_count(session, user_id)
+
+    assert new_count == 10
+    assert achievement is not None
+    assert achievement["code"] == "friend_lex"
+    assert achievement["title"] == "Друг Lex"
 
 
 async def test_pet_count_returns_zero_for_new_user(

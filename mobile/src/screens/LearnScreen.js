@@ -10,6 +10,7 @@ import { LessonSnake } from '../components/LessonSnake';
 import { TopicCard } from '../components/TopicCard';
 import { TactilePressable } from '../components/TactilePressable';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useTabBarContentBottom } from '../navigation/tabBar';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { TopStats } from '../components/TopStats';
 import {
@@ -40,6 +41,7 @@ export default function LearnScreen({ navigation }) {
   // Верхний отступ: табы без шапки (headerShown: false), иначе панель XP
   // уезжала под вырез.
   const insets = useSafeAreaInsets();
+  const tabBarBottom = useTabBarContentBottom();
   // 20 — padding контента, 16 — padding карточки темы с каждой стороны.
   const snakeWidth = width - 20 * 2 - 16 * 2;
 
@@ -48,8 +50,19 @@ export default function LearnScreen({ navigation }) {
   // открываем сами: чаще всего человек хочет продолжить, а не выбирать.
   const [openTopic, setOpenTopic] = useState(null);
 
-  const path = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
-  const dailyGoal = useQuery({ queryKey: ['gamification-daily-goal'], queryFn: gamificationApi.dailyGoal });
+  // staleTime: 0 — прогресс уроков оптимистично обновляется сразу после
+  // act(), и при возвращении на вкладку нужно видеть свежие данные, а не
+  // кэш прошлого посещения.
+  const path = useQuery({
+    queryKey: ['adaptive-overview'],
+    queryFn: adaptiveApi.overview,
+    staleTime: 0,
+  });
+  const dailyGoal = useQuery({
+    queryKey: ['gamification-daily-goal'],
+    queryFn: gamificationApi.dailyGoal,
+    staleTime: 0,
+  });
 
   const topics = useMemo(() => path.data?.topics ?? [], [path.data]);
   const totals = useMemo(() => {
@@ -85,7 +98,13 @@ export default function LearnScreen({ navigation }) {
       <PaperGrain />
       <ScreenWrapper
         scroll
-        contentStyle={[styles.content, { paddingTop: 12 + insets.top }]}
+        contentStyle={[
+          styles.content,
+          {
+            paddingTop: 12 + insets.top,
+            paddingBottom: tabBarBottom,
+          },
+        ]}
       >
         <TopStats />
 
