@@ -1,27 +1,20 @@
+/**
+ * Шапка статистики (гемы, опыт, жизни, стрик) в стиле Duolingo.
+ *
+ * Вариант «челки» с рамками выглядел как дешевый макет: маленькие
+ * обведённые в кружок значки. Теперь — большие жирные значки на
+ * мягких пастельных пилюлях без рамок, с едва заметной тенью вместо
+ * обводки. Акцент — на числах, как в Duolingo: эмоционально и
+ * уверенно, без лишних линий.
+ */
+
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-
-import { gamificationApi } from '../api/gamification';
 import { useAuthStore } from '../store';
-import { colors } from '../theme/tokens';
+import { gamificationApi } from '../api/gamification';
+import { colors } from '../theme/colors';
 
-/**
- * Верхняя панель статистики в духе Duolingo.
- *
- * Четыре крупные чипы-пилюли: стрик, XP, гемы, жизни. Как в Duolingo —
- * каждая цифра стоит на своей иконке, чип круглый, цвет слегка
- * приглушён, а жизни (❤️) выделены красным — это главный ресурс,
- * который тратится и восстанавливается.
- *
- * Жизни берутся из /gamification/me, а не из auth-store: стор заполняется
- * один раз при гидратации и после первого неправильного ответа показывал
- * устаревшее значение. Тот же ключ запроса используют урок, магазин и
- * экран «жизни закончились», поэтому любая инвалидация обновляет и шапку.
- *
- * Обновление живыми: при жизни < max automatically refetch раз в минуту,
- * чтобы счётчик восстанавливался, пока приложение открыто.
- */
 export function TopStats() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -53,7 +46,13 @@ export function TopStats() {
 
   const stats = [
     { icon: '🔥', value: streak, tint: colors.streakTint, fg: '#9A5B00' },
-    { icon: '⭐', value: `${xp}`, suffix: ' XP', tint: colors.successTint, fg: colors.successDark },
+    {
+      icon: '⭐',
+      value: `${xp}`,
+      suffix: ' XP',
+      tint: colors.successTint,
+      fg: colors.successDark,
+    },
     { icon: '💎', value: gems, tint: colors.skyTint, fg: '#3A6E99' },
     { icon: '❤️', value: lives, tint: colors.errorTint, fg: '#B3261E' },
   ];
@@ -81,25 +80,32 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
     gap: 8,
   },
+  // Пилюля без рамок: мягкий фон + лёгкая тень вместо обводки.
   chip: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    borderRadius: 16,
-    paddingVertical: 9,
+    gap: 7,
+    borderRadius: 18,
+    paddingVertical: 12,
     paddingHorizontal: 6,
+    // Тень вместо рамки — глубина, а не линия.
+    elevation: 4,
+    shadowColor: 'rgba(60, 40, 20, 0.18)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
   },
-  chipIcon: { fontSize: 18 },
+  chipIcon: { fontSize: 23 },
   chipTextWrap: { flexDirection: 'row', alignItems: 'baseline' },
-  chipText: { fontSize: 16, fontWeight: '900' },
-  chipSuffix: { fontSize: 10, fontWeight: '800' },
+  chipText: { fontSize: 19, fontWeight: '900' },
+  chipSuffix: { fontSize: 11, fontWeight: '800' },
 });
 
 export default TopStats;

@@ -63,6 +63,18 @@ def _gamification_cache_key(user_id: uuid.UUID) -> str:
     return f"gamification:{user_id}"
 
 
+async def invalidate_state_cache(user_id: uuid.UUID) -> None:
+    """Очищает кэш сводного состояния геймификации.
+
+    Кэш (TTL 120 с) хранит xp/lives/streak/achievements. Любое изменение
+    со счётчиков должно его очищать: иначе gamification-me отдаёт старые
+    значения и перезаписывает оптимистичное обновление клиента — например,
+    списание жизней за ошибку не отразится на экране, потому что в кэше
+    остаётся полный запас.
+    """
+    await cache_delete(_gamification_cache_key(user_id))
+
+
 def level_from_xp(xp: int) -> int:
     """Вычисляет уровень по количеству XP."""
     return max(1, xp // XP_PER_LEVEL + 1)
@@ -180,19 +192,28 @@ def lives_state(user: User, now: datetime | None = None) -> dict:
 def spend_lives(user: User, amount: int) -> int:
     """Списывает жизни за ошибки, не уходя ниже нуля.
 
+    Возвращает **сколько жизней реально списано** — именно это число
+    клиент должен вычесть из счётчика (раньше возвращался остаток, и
+    ответ act() с lives_spent=4 при списании одной жизни считал на
+    экране lives = 5 − 4 = 1).
+
     Метка времени ставится при первой трате из полного запаса: от неё
     считается восстановление. Если трата идёт при уже неполном счёте,
     метку не сдвигаем — иначе каждая ошибка отодвигала бы следующую жизнь.
     """
     amount = max(0, amount)
     if not amount:
-        return user.lives or 0
+        return 0
+    prev = user.lives or 0
+    if prev <= 0:
+        return 0
 
-    had_full = (user.lives or 0) >= MAX_LIVES
-    user.lives = max(0, (user.lives or 0) - amount)
+    had_full = prev >= MAX_LIVES
+    spent = min(amount, prev)
+    user.lives = prev - spent
     if had_full or user.lives_updated_at is None:
         user.lives_updated_at = datetime.now(timezone.utc)
-    return user.lives
+    return spent
 
 
 def _streak_freezes(user: User) -> int:
@@ -323,7 +344,7 @@ async def add_xp(
     await session.flush()
 
     # Инвалидируем кэш состояния геймификации.
-    await cache_delete(_gamification_cache_key(user.id))
+    await invalidate_state_cache(user.id)
 
     return {
         "xp": user.xp,
@@ -363,7 +384,7 @@ async def award_achievement(
     session.add(achievement)
     await session.flush()
 
-    await cache_delete(_gamification_cache_key(user.id))
+    await invalidate_state_cache(user.id)
     return achievement
 
 
@@ -563,7 +584,7 @@ async def purchase_shop_item(
     user.gems -= price
     effect = _apply_shop_effect(session, user, item)
     await session.flush()
-    await cache_delete(_gamification_cache_key(user.id))
+    await invalidate_state_cache(user.id)
 
     return {
         "item": item,

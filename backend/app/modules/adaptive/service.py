@@ -552,6 +552,10 @@ async def _answer(
         user = await session.get(User, user_id)
         if user is not None:
             lives_spent = gamification_service.spend_lives(user, 1)
+            # Кэш gamification-me должен быть очищен: иначе следующий запрос
+            # отдаст старые значения с полным запасом жизней, и списание
+            # на экране просто перезапишет оптимистичное обновление.
+            await gamification_service.invalidate_state_cache(user_id)
 
     # Достижения за вехи: пройденный урок, XP-милистоны, стрик, цель дня.
     # Выдаём в той же транзакции, чтобы достижение не «пропадало» между
