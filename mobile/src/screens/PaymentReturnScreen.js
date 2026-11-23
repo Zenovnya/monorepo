@@ -87,7 +87,7 @@ export default function PaymentReturnScreen({ navigation }) {
       <View
         style={[
           styles.body,
-          { paddingTop: insets.top + 16 },
+          { paddingTop: insets.top + 30 },
         ]}
       >
         <KhokhlomaMedallion size={168} style={styles.medallion}>

@@ -108,7 +108,7 @@ export default function DeleteAccountScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 16 },
+          { paddingTop: insets.top + 30 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

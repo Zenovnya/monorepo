@@ -31,8 +31,9 @@ import { colors } from '../theme/colors';
  * намеренно: про неё нет наблюдений, и показывать 0% или 100% было бы
  * выдумкой. Подпись под полоской говорит об этом словами, а не только цветом.
  *
- * Карта не блокирует уроки «по порядку»: программа короткая, и запрет открыть
- * пятый урок раньше первого ничего не защищает — он только мешает.
+ * Программа идёт по порядку: пройденные уроки отмечены, текущий — активен,
+ * остальные заблокированы. Это не ограничивает свободу — блокировка нужна,
+ * чтобы визуально выделить путь и не давать пропустить предыдущий шаг.
  */
 export default function LearnScreen({ navigation }) {
   // Ширина нужна тропе: она считает узлы от фактической ширины окна, а не от
@@ -65,6 +66,7 @@ export default function LearnScreen({ navigation }) {
   });
 
   const topics = useMemo(() => path.data?.topics ?? [], [path.data]);
+
   const totals = useMemo(() => {
     const lessons = topics.flatMap((topic) => topic.lessons ?? []);
     const done = lessons.filter((lesson) => lesson.practised).length;

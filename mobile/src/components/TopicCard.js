@@ -5,20 +5,28 @@
  *
  * 1. **Картинка у каждой темы своя.** Шесть тем — шесть рисунков в одном стиле
  *    (хохлома + современный плоский значок). Один и тот же значок на всех темах
- *    выглядел бы как заглушка: тема «Долги и суд» с домиком не запоминается.
- * 2. **Текст ужат до одного акцента.** Раньше карточка несла название,
- *    summary, полоску процента и три строки метрик — «слишком много текста»,
- *    как вы и сказали. Осталось: название, `focus` (2–4 слова) и одна строка
- *    прогресса.
+ *    выглядел бы как заглушку: тема «Долги и суд» с домиком не запоминается.
+ * 2. **Текст ужат до одного акцента.** Карточка несёт название, `focus`
+ *    (2–4 слова) и одну строку прогресса — больше текста просто никто не читает.
  * 3. **Прогресс — кружки, а не проценты.** «3/5 уроков» рядом с точками
  *    читается быстрее числа, а процент приоритета практики спрятан в подпись:
  *    это внутренняя метрика, в карточке темы она только путает.
- * 4. **Иллюстрация — в медальоне с толстой нижней границей.** Тот же приём, что
- *    у медальонов уроков: карточка выглядит как предмет, а не как блок текста.
+ * 4. **Иллюстрация — в медальоне с толстой нижней границей.** Тот же приём,
+ *    что у медальонов уроков: карточка выглядит как предмет, а не как блок текста.
+ * 5. **Раскрытие плавное.** Тело карточки появляется/исчезает через Reanimated
+ *    (FadeInDown / FadeOut), а шеврон поворачивается на 180° — без скачков.
  */
 
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import { ChevronDown } from 'lucide-react-native';
+import Animated, {
+  FadeInDown,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { TactilePressable } from './TactilePressable';
 import { brand, serifFamily } from './KhokhlomaOrnament';
@@ -47,6 +55,18 @@ export function TopicCard({ topic, index, onPress, expanded, children }) {
   const total = topic.lessons_total ?? (topic.lessons?.length || 0);
   const done = topic.lessons_practised ?? 0;
   const art = TOPIC_ART[topic.topic_id] ?? FALLBACK_ART;
+
+  // Поворот шеврона: 0° — свернуто, 180° — раскрыто.
+  const chevronRotate = useSharedValue(expanded ? 180 : 0);
+
+  React.useEffect(() => {
+    chevronRotate.value = withTiming(expanded ? 180 : 0, { duration: 260 });
+  }, [expanded, chevronRotate]);
+
+  const chevronStyle = useAnimatedStyle(
+    () => ({ transform: [{ rotate: `${chevronRotate.value}deg` }] }),
+    [chevronRotate],
+  );
 
   return (
     <View style={styles.card}>
@@ -91,10 +111,20 @@ export function TopicCard({ topic, index, onPress, expanded, children }) {
           </View>
         </View>
 
-        <Text style={styles.chevron}>{expanded ? '⌃' : '⌄'}</Text>
+        <Animated.View style={chevronStyle}>
+          <ChevronDown size={20} color={brand.muted} />
+        </Animated.View>
       </TactilePressable>
 
-      {expanded ? <View style={styles.body}>{children}</View> : null}
+      {expanded ? (
+        <Animated.View
+          entering={FadeInDown.duration(300)}
+          exiting={FadeOut.duration(200)}
+          style={styles.body}
+        >
+          {children}
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -147,7 +177,6 @@ const styles = StyleSheet.create({
   },
   fill: { height: '100%', borderRadius: 5, backgroundColor: brand.pine },
   count: { fontSize: 10.5, fontWeight: '900', color: brand.subtext },
-  chevron: { fontSize: 16, color: brand.muted, fontWeight: '900', paddingLeft: 2 },
   body: {
     paddingHorizontal: 12,
     paddingBottom: 14,

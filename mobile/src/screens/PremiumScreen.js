@@ -70,7 +70,7 @@ export default function PremiumScreen({ navigation }) {
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + 16 },
+        { paddingTop: insets.top + 30 },
       ]}
       showsVerticalScrollIndicator={false}
     >

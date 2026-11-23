@@ -114,6 +114,54 @@ async def test_answer_reveals_explanation_and_counts(api) -> None:
     assert topic["lessons_practised"] >= 0
 
 
+async def test_wrong_answer_spends_life_and_cache_updates(api) -> None:
+    """Неправильный зачтённый ответ списывает жизнь, и она видна сразу.
+
+    Без очистки кэша gamification-me (TTL 120 с) следующий запрос отдал бы
+    старые значения с полным запасом, и списание на экране не отразилось.
+    """
+    client, maker = api
+    user_id = uuid.uuid4()
+    async with maker() as session:
+        session.add(
+            User(
+                id=user_id,
+                email="lives@example.com",
+                username="Lives",
+                hashed_password="hash",
+                xp=0,
+                level=1,
+                streak=0,
+                gems=0,
+                lives=5,
+            )
+        )
+        await session.commit()
+    headers = _headers(user_id)
+
+    opened = (await client.get("/adaptive/next", headers=headers)).json()
+    item_id = opened["item"]["item_id"]
+    options = get_pack().items[item_id]["options"]
+    correct = next(o["id"] for o in options if o["id"] == get_pack().items[item_id]["correct_option_id"])
+    wrong = next(o["id"] for o in options if o["id"] != correct)
+
+    response = await client.post(
+        f"/adaptive/attempts/{opened['attempt_id']}/actions",
+        json={"action": "answer", "option_id": wrong},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["counted"] is True
+    assert body["correct"] is False
+    assert body["lives_spent"] == 1
+
+    # gamification-me должен отдать обновлённое значение, а не кэш с 5 жизнями.
+    me = (await client.get("/gamification/me", headers=headers)).json()
+    assert me["lives"] == 4
+    assert me["max_lives"] == 5
+
+
 async def test_answer_awards_achievements(api) -> None:
     """Первый зачтённый ответ выдаёт достижение и возвращает его в ответе.
 

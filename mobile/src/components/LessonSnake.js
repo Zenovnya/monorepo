@@ -1,117 +1,172 @@
 /**
- * Карта уроков темы: волнистая тропа с 3D-кружками, как в Duolingo.
+ * Карта уроков темы: S-образная тропа с тактическими кружками.
  *
- * Редизайн (техзадание §2):
+ * Техзадание §2 (редизайн змейки):
  *
- * 1. **Тропа — SVG-линия, кружки — поверх.** Линия рисуется через
- *    react-native-svg, кружки — через View с TactilePressable.
- * 2. **3D-кружки диаметром 72px** с borderBottomWidth: 6 — каждая
- *    кнопка выглядит физической.
- * 3. **Пульсация активного уровня** через react-native-reanimated
- *    (withRepeat, withSequence) и яркий золотой цвет.
- * 4. **Поповер вместо обрезанного текста** (паттерн Duolingo): при
- *    тапе на кружок открывается всплывающая карточка с полным
- *    названием, наградой и кнопкой «НАЧАТЬ КЕЙС».
- * 5. **Краткая подпись под кружком** (short_title) — видна при
- *    внимательном взгляде, как в Duolingo.
- *
- * Раскладка через left/top: абсолютное позиционирование оставляет
- * нажимаемую область там, где нарисован кружок.
+ * 1. **Траектория — S-образная кривая** «центр → вправо → центр →
+ *    влево → центр». Координаты считаются в `snakeLayout` — без
+ *    жестко заданных позиций.
+ * 2. **Тропа — react-native-svg `<Path>` кубической Безье.** Два слоя:
+ *    фоновый участок пунктирный (`strokeDasharray="6, 6"`, `#D6CCB8`),
+ *    пройденный — сплошная золотая линия (`#C99A3E`, `strokeWidth={3}`),
+ *    которая анимированно вырастает до активного узла.
+ * 3. **Узлы — только номера** (1–4), без подписей с многоточиями.
+ *    Финальный 5-й узел — золотая иконка весов (финальный кейс темы).
+ *    Нижняя 3D-граница `borderBottomWidth: 4`: темно-золотая `#9A7225`
+ *    для активного, серо-бежевая `#C7BFA9` для закрытых — анимированно
+ *    вдавливается при нажатии через Reanimated (TactilePressable).
+ * 4. **Пульсирующее кольцо** у активного узла (`withRepeat`).
+ * 5. **Tooltip-бабл** над выбранным/активным узлом: карточка-облачко
+ *    с полным названием урока и кнопкой «Изучить». При нажатии на другой
+ *    узел бабл плавно перемещается через `withSpring`; для закрытых уроков
+ *    — замок и «Откроется после урока X».
  */
 
-import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, Modal, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Scale, Lock } from 'lucide-react-native';
 import Animated, {
-  useSharedValue,
+  Easing,
+  createAnimatedComponent,
+  useAnimatedProps,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
+// Reanimated 4 не exports Animated.Path — react-native-svg оборачиваем
+// через createAnimatedComponent (обёртка создана вне компонента, чтобы
+// Reanimated не пересоздавал её на каждый рендер).
+const AnimatedPath = createAnimatedComponent(Path);
+
 import { TactilePressable } from './TactilePressable';
 import { brand, serifFamily } from './KhokhlomaOrnament';
-import { colors } from '../theme/colors';
 import {
-  LABEL_WIDTH,
   NODE,
   nextLessonIndex,
   pathHeight,
   snakePoints,
 } from './snakeLayout';
 
-/** Цвет тропы в трёх состояниях: пройдено / идём / впереди. */
-const TRAIL_DONE = brand.gold;
-const TRAIL_AHEAD = brand.ruleStrong;
-const TRAIL_ACTIVE = brand.goldBorder;
+/** Палитра тропы по техзаданию §2. */
+const TRAIL_DASH = '#D6CCB8'; // пунктир — участок впереди
+const TRAIL_GOLD = '#C99A3E'; // сплошная золотая — пройденный участок
+const BORDER_ACTIVE = '#9A7225'; // темно-золотая нижняя грань (активный)
+const BORDER_CLOSED = '#C7BFA9'; // серо-бежевая нижняя грань (закрытый)
+const CARD = '#FCF9F2'; // цвет карточки-облачка
+const CARD_BORDER = '#E4DCCB'; // тонкая рамка облачка
 
 /**
- * SVG-линия тропы: соединяет центры кружков волнистой линией.
- * Линия уходит под кружки — рисуется первой в Z-порядке.
+ * Построить кубическую Безье через все точки тропы.
  *
- * @param {Array} points   Центры кружков.
- * @param {Array} items    Уроки (для состояния сегмента).
+ * Из каждой точки — прямой вылет, в следующую — плавный вход.
+ * Для одной точки — просто маркер, для двух — прямая.
  */
-function Trail({ points, items }) {
+function buildTrailPath(points) {
+  if (!points.length) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const span = Math.max(Math.abs(dx), Math.abs(dy)) * 0.55;
+    const c1x = start.x + dx * 0.45;
+    const c1y = start.y;
+    const c2x = end.x - dx * 0.45;
+    const c2y = end.y - dy * 0.1;
+    // Горизонтальный разворот учитывает изгиб S-кривой.
+    const spread = Math.abs(dx) > 0 ? Math.sign(dx) * span * 0.35 : 0;
+    d += ` C ${c1x + spread} ${c1y}, ${c2x + spread} ${c2y}, ${end.x} ${end.y}`;
+  }
+  return d;
+}
+
+/** Оценка длины тропы для strokeDasharray (кубические контроллы чуть длиннее прямой). */
+function estimateLength(points) {
+  let len = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    len += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+  }
+  return Math.max(len * 1.4, 1);
+}
+
+/**
+ * Тропа: фоновый пунктир + анимированная золотая линия прогресса.
+ *
+ * Золотой слой ведёт себя как лента: strokeDashoffset уменьшается от
+ * полной длины к нулю по числу пройденных сегментов.
+ */
+function Trail({ points, progressIndex }) {
+  const pathData = buildTrailPath(points);
+  const totalLength = useMemo(() => estimateLength(points), [points]);
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    const segments = Math.max(points.length - 1, 1);
+    const ratio = Math.min(Math.max(progressIndex / segments, 0), 1);
+    progress.value = withTiming(ratio, {
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [points.length, progressIndex, progress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDasharray: totalLength,
+    strokeDashoffset: totalLength * (1 - progress.value),
+  }));
+
   return (
     <Svg
       style={StyleSheet.absoluteFill}
       viewBox={`0 0 ${Math.max(points[0]?.x * 2 || 1, 1)} ${pathHeight(points.length)}`}
       preserveAspectRatio="none"
     >
-      {points.slice(0, -1).map((_, index) => {
-        const from = points[index];
-        const to = points[index + 1];
-        // Состояние сегмента: пройдено, если уроки до этого пройдены,
-        // активно, если следующий урок, впереди — иначе.
-        const isDone = Boolean(items[index]?.practised);
-        const isActive = !isDone && index === items.findIndex((l) => !l.practised) - 1;
-        const color = isDone ? TRAIL_DONE : isActive ? TRAIL_ACTIVE : TRAIL_AHEAD;
-        const midX = (from.x + to.x) / 2;
-        const midY = (from.y + to.y) / 2;
-        // Волна: середина отрывается от прямой линии
-        const ctrlX = midX + (to.x - from.x) * 0.15;
-        const ctrlY = midY;
-        return (
-          <Path
-            key={`seg-${index}`}
-            d={`M ${from.x} ${from.y} Q ${ctrlX} ${ctrlY} ${to.x} ${to.y}`}
-            stroke={color}
-            strokeWidth={5}
-            strokeLinecap="round"
-            strokeDasharray={[2, 10]}
-            fill="none"
-          />
-        );
-      })}
+      {/* Фон: пунктир — участок, который ещё не пройдён. */}
+      <Path
+        d={pathData}
+        stroke={TRAIL_DASH}
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeDasharray="6, 6"
+        fill="none"
+      />
+      {/* Пройденный участок: сплошная золотая линия, вырастает до активного узла. */}
+      <AnimatedPath
+        d={pathData}
+        animatedProps={animatedProps}
+        stroke={TRAIL_GOLD}
+        strokeWidth={3}
+        strokeLinecap="round"
+        fill="none"
+      />
     </Svg>
   );
 }
 
 /**
- * Пульсирующее кольцо для активного уровня.
+ * Пульсирующее кольцо активного узла.
  *
- * Анимация на UI-потоке Reanimated: свечение растёт и убывает
- * через withRepeat + withSequence.
+ * Анимация на UI-потоке: свечение растёт и убывает через withRepeat.
  */
-function Halo({ active }) {
+function Halo() {
   const pulse = useSharedValue(0);
 
-  React.useEffect(() => {
-    if (!active) {
-      pulse.value = withTiming(0, { duration: 200 });
-      return;
-    }
+  useEffect(() => {
     pulse.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 800, easing: Animated.Easing.inOut(Animated.Easing.quad) }),
-        withTiming(0, { duration: 800, easing: Animated.Easing.inOut(Animated.Easing.quad) })
+        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 800, easing: Easing.inOut(Easing.quad) }),
       ),
       -1,
-      true
+      true,
     );
-  }, [active, pulse]);
+  }, [pulse]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: 0.4 + 0.5 * pulse.value,
@@ -122,160 +177,176 @@ function Halo({ active }) {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[
-        styles.halo,
-        {
-          borderColor: brand.goldBorder,
-        },
-        animatedStyle,
-      ]}
+      style={[styles.halo, { borderColor: TRAIL_GOLD }, animatedStyle]}
     />
   );
 }
 
 /**
- * Поповер с полным названием урока (паттерн Duolingo).
+ * Tooltip-бабл: карточка-облачко с названием урока.
  *
- * При тапе на кружок открывается модальное окно с полным названием,
- * наградой (+10 XP) и кнопкой «НАЧАТЬ КЕЙС».
+ * Позиция — абсолютная, перемещение на UI-потоке через withSpring.
+ * Для открытых уроков — кнопка «Изучить»; для закрытых — замок и
+ * надпись «Откроется после урока X».
  */
-function LessonPopover({ lesson, onStart, onClose }) {
+function TooltipBubble({ lesson, prevLesson, x, y, onStudy }) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const bubbleX = useSharedValue(0);
+  const bubbleY = useSharedValue(0);
+
+  useEffect(() => {
+    if (!size.w || !size.h) return;
+    // Перемещение к узлу: спринг, а не скачок.
+    bubbleX.value = withSpring(x - size.w / 2, {
+      damping: 16,
+      stiffness: 200,
+    });
+    bubbleY.value = withSpring(y, { damping: 16, stiffness: 200 });
+  }, [x, y, size.w, size.h, bubbleX, bubbleY]);
+
+  const locked = lesson && !lesson.practised && prevLesson;
+
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <View style={styles.popover}>
-          <Text style={styles.popoverEyebrow}>УРОК {lesson.order}</Text>
-          <Text style={styles.popoverTitle}>{lesson.title}</Text>
-          {lesson.short_title ? (
-            <Text style={styles.popoverShort}>{lesson.short_title}</Text>
-          ) : null}
-          <View style={styles.rewardRow}>
-            <View style={styles.rewardBadge}>
-              <Text style={styles.rewardText}>+10 XP</Text>
-            </View>
+    <Animated.View
+      pointerEvents="box-none"
+      style={[
+        styles.bubbleWrap,
+        {
+          transform: [{ translateX: bubbleX }, { translateY: bubbleY }],
+        },
+      ]}
+    >
+      <View
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setSize({ w: width, h: height });
+        }}
+        style={[styles.bubble, { borderColor: CARD_BORDER, backgroundColor: CARD }]}
+      >
+        {locked ? (
+          <View style={styles.lockedRow}>
+            <Lock size={16} color={brand.muted} />
+            <Text style={styles.lockedText}>
+              Откроется после урока {prevLesson.order}
+            </Text>
           </View>
-          <TactilePressable
-            style={styles.popoverBtn}
-            onPress={() => {
-              onStart();
-              onClose();
-            }}
-            haptic
-            scale={0.95}
-          >
-            <Text style={styles.popoverBtnText}>НАЧАТЬ КЕЙС</Text>
-          </TactilePressable>
-        </View>
-      </Pressable>
-    </Modal>
+        ) : (
+          <>
+            <Text style={styles.bubbleTitle}>{lesson?.title}</Text>
+            {onStudy && lesson ? (
+              <TactilePressable
+                style={styles.studyBtn}
+                onPress={() => onStudy(lesson)}
+                haptic
+                scale={0.94}
+                hapticStyle="medium"
+              >
+                <Text style={styles.studyText}>Изучить</Text>
+              </TactilePressable>
+            ) : null}
+          </>
+        )}
+      </View>
+      {/* Острие облачка вниз — к узлу. */}
+      <View style={[styles.tail, { borderColor: CARD_BORDER, backgroundColor: CARD }]} />
+    </Animated.View>
   );
 }
 
 /**
- * @param {Array}    lessons  Уроки темы: { lesson_id, title, order, practised, short_title }.
- * @param {number}   width    Доступная ширина.
- * @param {Function} onPick   (lesson) => void
+ * @param {Array}    lessons  Уроки темы: { lesson_id, title, order, practised }.
+ * @param {number}   width    Доступная ширина полотна.
+ * @param {Function} onPick   (lesson) => void — открыть урок.
  */
 export function LessonSnake({ lessons, width = 320, onPick }) {
   const items = useMemo(() => lessons ?? [], [lessons]);
   const points = useMemo(() => snakePoints(items.length, width), [items.length, width]);
   const nextIndex = useMemo(() => nextLessonIndex(items), [items]);
-  const [popoverLesson, setPopoverLesson] = useState(null);
+  // Выбранный узел: по умолчанию — активный (первый непройденный).
+  const [selectedIndex, setSelectedIndex] = useState(
+    nextIndex >= 0 ? nextIndex : items.length - 1,
+  );
 
   if (!items.length) return null;
+
+  const selected = items[selectedIndex];
+  const prevLesson = selectedIndex > 0 ? items[selectedIndex - 1] : null;
+  const isLockedSelected =
+    selectedIndex > nextIndex && nextIndex >= 0 && !selected.practised;
+
+  // Позиция бабла: над выбранным узлом, по центру, с кропом по краям.
+  const point = points[selectedIndex];
+  const bubbleY = point.y - NODE / 2 - 96; // высота облачка + отступ
+  const bubbleX = Math.max(
+    40,
+    Math.min(width - 40, point.x),
+  );
 
   return (
     <View style={[styles.canvas, { height: pathHeight(items.length), width }]}>
       {/* Тропа: SVG-линия под кружками. */}
-      <Trail points={points} items={items} />
+      <Trail points={points} progressIndex={Math.max(nextIndex, 0)} />
 
       {items.map((lesson, index) => {
-        const point = points[index];
+        const pt = points[index];
         const done = Boolean(lesson.practised);
         const isNext = index === nextIndex;
+        const isLast = index === items.length - 1;
+
         return (
           <View
             key={lesson.lesson_id}
-            style={[styles.nodeWrap, { left: point.x - NODE / 2, top: point.y - NODE / 2 }]}
+            style={[styles.nodeWrap, { left: pt.x - NODE / 2, top: pt.y - NODE / 2 }]}
           >
-            {isNext ? <Halo active /> : null}
+            {isNext ? <Halo /> : null}
             <TactilePressable
-              onPress={() => {
-                if (!onPick) return;
-                if (done) {
-                  onPick(lesson);
-                } else {
-                  setPopoverLesson(lesson);
-                }
-              }}
+              onPress={() => setSelectedIndex(index)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               scale={0.9}
               haptic
-              borderDepth={6}
+              borderDepth={4}
               accessibilityRole="button"
-              accessibilityLabel={
-                done ? `Урок ${lesson.order}, пройден` : `Урок ${lesson.order}: ${lesson.title}`
-              }
-              style={[styles.node, done && styles.nodeDone, isNext && styles.nodeNext]}
+              accessibilityLabel={`Урок ${lesson.order}: ${lesson.title}`}
+              style={[
+                styles.node,
+                done && styles.nodeDone,
+                isNext && styles.nodeNext,
+                {
+                  borderColor: isNext ? TRAIL_GOLD : BORDER_CLOSED,
+                  borderBottomColor: isNext ? BORDER_ACTIVE : BORDER_CLOSED,
+                },
+              ]}
             >
-              <Text
-                style={[styles.nodeText, done && styles.nodeTextDone, isNext && styles.nodeTextNext]}
-              >
-                {done ? '✓' : lesson.order}
-              </Text>
+              {isLast ? (
+                <Scale size={30} color={done ? '#FFFDF9' : TRAIL_GOLD} />
+              ) : (
+                <Text
+                  style={[
+                    styles.nodeText,
+                    done && styles.nodeTextDone,
+                    isNext && styles.nodeTextNext,
+                  ]}
+                >
+                  {lesson.order}
+                </Text>
+              )}
             </TactilePressable>
           </View>
         );
       })}
 
-      {/* Краткие подписи под каждым кружком. */}
-      {items.map((lesson, index) => {
-        const point = points[index];
-        const isNext = index === nextIndex;
-        return (
-          <View
-            key={`label-${lesson.lesson_id}`}
-            pointerEvents="none"
-            style={[styles.labelWrap, labelPos(point, width)]}
-          >
-            <Text
-              style={[
-                styles.label,
-                isNext && styles.labelNext,
-              ]}
-              numberOfLines={2}
-            >
-              {lesson.short_title ?? lesson.title}
-            </Text>
-          </View>
-        );
-      })}
-
-      {popoverLesson ? (
-        <LessonPopover
-          lesson={popoverLesson}
-          onStart={() => onPick?.(popoverLesson)}
-          onClose={() => setPopoverLesson(null)}
-        />
-      ) : null}
+      {/* Tooltip-бабл над выбранным узлом. */}
+      <TooltipBubble
+        lesson={isLockedSelected ? null : selected}
+        prevLesson={isLockedSelected ? prevLesson : null}
+        x={bubbleX}
+        y={bubbleY}
+        onStudy={(lesson) => {
+          onPick?.(lesson);
+        }}
+      />
     </View>
   );
-}
-
-/**
- * Позиция краткой подписи: под кружком, по центру.
- *
- * Кружок не касается края полотна (PADDING_X), но подпись шире
- * кружка: если поставить её по центру, она выйдет за край.
- * Сдвигаем внутрь полотна, чтобы текст не обрезался.
- */
-function labelPos(point, width) {
-  const left = Math.max(
-    4,
-    Math.min(width - LABEL_WIDTH - 4, point.x - LABEL_WIDTH / 2),
-  );
-  const top = point.y + NODE / 2 + 6;
-  return { left, top };
 }
 
 const styles = StyleSheet.create({
@@ -294,20 +365,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderBottomWidth: 6,
-    borderColor: brand.ruleStrong,
     backgroundColor: brand.paperSoft,
   },
   nodeDone: {
-    backgroundColor: brand.pine,
-    borderColor: brand.pineDark,
+    backgroundColor: TRAIL_GOLD,
+    borderColor: TRAIL_GOLD,
+    borderBottomColor: BORDER_ACTIVE,
   },
   nodeNext: {
-    backgroundColor: brand.gold,
-    borderColor: brand.goldDark,
+    backgroundColor: brand.card,
   },
-  nodeText: { fontSize: 26, fontWeight: '900', color: brand.muted, fontFamily: serifFamily },
-  nodeTextDone: { color: brand.goldLight },
+  nodeText: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: brand.muted,
+    fontFamily: serifFamily,
+  },
+  nodeTextDone: { color: '#FFFDF9' },
   nodeTextNext: { color: brand.ink },
   halo: {
     position: 'absolute',
@@ -315,87 +389,73 @@ const styles = StyleSheet.create({
     height: NODE + 18,
     borderRadius: (NODE + 18) / 2,
     borderWidth: 2,
-    borderColor: brand.goldBorder,
     opacity: 0.9,
   },
-  labelWrap: {
+  bubbleWrap: {
     position: 'absolute',
-    width: LABEL_WIDTH,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: brand.card,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
   },
-  label: {
-    fontSize: 11,
-    lineHeight: 14,
+  bubble: {
+    width: 240,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  bubbleTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: brand.ink,
+    lineHeight: 17,
+  },
+  studyBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: TRAIL_GOLD,
+    borderWidth: 1.5,
+    borderBottomWidth: 3,
+    borderBottomColor: BORDER_ACTIVE,
+  },
+  studyText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFFDF9',
+    letterSpacing: 0.5,
+  },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  lockedText: {
+    flex: 1,
+    fontSize: 12.5,
     fontWeight: '700',
     color: brand.muted,
-    textAlign: 'center',
+    lineHeight: 16,
   },
-  labelNext: {
-    color: brand.ink,
-    fontWeight: '800',
+  tail: {
+    position: 'absolute',
+    left: '50%',
+    bottom: -7,
+    width: 12,
+    height: 12,
+    marginLeft: -6,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
   },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(44, 37, 32, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  popover: {
-    width: '100%',
-    maxWidth: 340,
-    backgroundColor: brand.card,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderBottomWidth: 5,
-    borderColor: brand.gold,
-    padding: 24,
-    gap: 12,
-    alignItems: 'center',
-  },
-  popoverEyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    color: brand.goldInk,
-  },
-  popoverTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  popoverShort: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: brand.subtext,
-    textAlign: 'center',
-  },
-  rewardRow: { marginTop: 4 },
-  rewardBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: brand.goldSoft,
-    borderWidth: 1.5,
-    borderColor: brand.gold,
-  },
-  rewardText: { fontSize: 14, fontWeight: '900', color: brand.goldInk },
-  popoverBtn: {
-    marginTop: 8,
-    width: '100%',
-    backgroundColor: brand.red,
-    borderRadius: 16,
-    borderBottomWidth: 5,
-    borderBottomColor: brand.redDark,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  popoverBtnText: { fontSize: 15.5, fontWeight: '900', color: brand.creamText },
 });
 
 export default LessonSnake;

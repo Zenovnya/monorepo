@@ -363,7 +363,8 @@ class TestLives:
             id=uuid.uuid4(), email="lives@example.com", hashed_password="x", lives=2
         )
 
-        assert spend_lives(user, 5) == 0
+        # Списывается только то, что есть: 2 жизни из запрошенных 5.
+        assert spend_lives(user, 5) == 2
         assert user.lives == 0
 
     def test_life_refill_restores_to_max(self) -> None:
