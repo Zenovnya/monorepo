@@ -202,6 +202,11 @@ export default function LessonScreen({ route, navigation }) {
     queryFn: gamificationApi.me,
   });
 
+  // Жизней нет — открытие проверки блокируется: вместо безнадёжной ошибки
+  // ведём на экран восстановления (NoLives), где есть обратный отсчёт и
+  // кнопка «Вернуться» после восстановления.
+  const livesLeft = gamification.data?.lives ?? 5;
+
   const openCheck = useMutation({
     // Сначала закрываем уже открытую попытку (например, открытый из
     // адаптивной вкладки кейс): иначе сервер отвечает OPEN_ATTEMPT, и кнопка
@@ -415,10 +420,26 @@ export default function LessonScreen({ route, navigation }) {
               ответ — подсказка снимает зачёт.
             </Text>
             {openError ? <Text style={styles.errorNote}>{openError}</Text> : null}
+            {livesLeft <= 0 ? (
+              <Text style={styles.errorNote}>
+                Жизни закончились — дождитесь восстановления или купите
+                «Пополнение жизней» в лавке.
+              </Text>
+            ) : null}
             <TactilePressable
-              style={[styles.primaryBtn, openCheck.isPending && styles.btnDisabled]}
-              disabled={openCheck.isPending}
+              style={[styles.primaryBtn, (openCheck.isPending || livesLeft <= 0) && styles.btnDisabled]}
+              disabled={openCheck.isPending || livesLeft <= 0}
               onPress={() => {
+                if (livesLeft <= 0) {
+                  // Жизней нет — ведём на экран восстановления вместо безнадёжной
+                  // попытки открыть проверку.
+                  navigation.navigate('NoLives', {
+                    lives: gamification.data?.lives ?? 0,
+                    next_life_in_seconds:
+                      gamification.data?.next_life_in_seconds ?? 0,
+                  });
+                  return;
+                }
                 setOpenError(null);
                 openCheck.mutate();
               }}
