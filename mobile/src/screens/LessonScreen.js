@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
+import { gamificationApi } from '../api/gamification';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
@@ -194,6 +195,13 @@ export default function LessonScreen({ route, navigation }) {
     enabled: Boolean(lessonId),
   });
 
+  // Жизни тянем из gamification-me, а не из lesson-payload: lesson не содержит
+  // lives, и счётчик ❤️ показывал дефолт 5 даже после списания за ошибку.
+  const gamification = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+  });
+
   const openCheck = useMutation({
     // Сначала закрываем уже открытую попытку (например, открытый из
     // адаптивной вкладки кейс): иначе сервер отвечает OPEN_ATTEMPT, и кнопка
@@ -267,7 +275,9 @@ export default function LessonScreen({ route, navigation }) {
       }
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
-      if (data.xp_gained) {
+      if (data.xp_gained || data.lives_spent) {
+        // Обновляем счётчики XP и жизней: без этого при списании жизни за
+        // ошибку чип ❤️ оставался на прежнем значении до перезапуска.
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
@@ -355,7 +365,7 @@ export default function LessonScreen({ route, navigation }) {
         {/* Прогресс-бар 12px с пружинной анимацией и счётчик жизней */}
         <View style={styles.progressRow}>
           <LessonProgress progress={phase === 'check' ? 50 : 0} />
-          <LifeCounter lives={data.lives ?? 5} />
+          <LifeCounter lives={gamification.data?.lives ?? 5} />
         </View>
 
         <View style={styles.theoryCard}>

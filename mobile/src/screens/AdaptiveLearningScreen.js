@@ -83,10 +83,10 @@ export default function AdaptiveLearningScreen() {
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
-      if (data.xp_gained) {
-        // XP начислился на сервере: кэш геймификации обновить, иначе на
-        // экране счётчик стоит на старом значении и выглядит «XP не
-        // начисляется».
+      if (data.xp_gained || data.lives_spent) {
+        // XP начислился или жизнь списалась: кэш геймификации обновить, иначе
+        // на экране счётчик стоит на старом значении и выглядит «XP не
+        // начисляется» / «жизнь не тратится».
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
