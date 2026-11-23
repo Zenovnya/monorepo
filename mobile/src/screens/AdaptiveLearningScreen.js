@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from '../components/StateViews';
 import { describeLoadError } from '../api/client';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTabBarContentBottom } from '../navigation/tabBar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { gamificationApi } from '../api/gamification';
@@ -45,6 +46,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
   // (headerShown: false), поэтому content начинался от самого верха окна и на
   // iPhone уезжал под вырез.
   const insets = useSafeAreaInsets();
+  const tabBarBottom = useTabBarContentBottom();
   const [topicId, setTopicId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(null);
@@ -65,6 +67,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
   const gamification = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
   const livesLeft = gamification.data?.lives ?? 5;
 
@@ -92,9 +95,15 @@ export default function AdaptiveLearningScreen({ navigation }) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
       if (data.xp_gained || data.lives_spent) {
-        // XP начислился или жизнь списалась: кэш геймификации обновить, иначе
-        // на экране счётчик стоит на старом значении и выглядит «XP не
-        // начисляется» / «жизнь не тратится».
+        // Оптимистичное обновление: применяем изменения сразу, без ожидания
+        // refetch gamification-me — иначе счётчики «подвисают» на прежних
+        // значениях до следующего запроса.
+        queryClient.setQueryData(['gamification-me'], (prev) => {
+          if (!prev) return prev;
+          const nextXp = prev.xp + (data.xp_gained || 0);
+          const nextLives = Math.max(0, (prev.lives ?? 0) - (data.lives_spent || 0));
+          return { ...prev, xp: nextXp, lives: nextLives };
+        });
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
@@ -180,8 +189,8 @@ export default function AdaptiveLearningScreen({ navigation }) {
           styles.content,
           // Дыра под вырез и статус-бар: без неё заголовок и кнопка «Тема»
           // начинались от верхней кромки окна.
-          { paddingTop: 20 + insets.top },
-          result && { paddingBottom: 40 },
+          { paddingTop: 20 + insets.top, paddingBottom: tabBarBottom },
+          result && { paddingBottom: Math.max(tabBarBottom, 40) + 20 },
         ]}
         showsVerticalScrollIndicator={false}
       >

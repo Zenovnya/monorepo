@@ -13,6 +13,7 @@ import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { TactilePressable } from '../components/TactilePressable';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useTabBarContentBottom } from '../navigation/tabBar';
 import { gamificationApi } from '../api/gamification';
 import { adaptiveApi } from '../api/adaptive';
 import { userApi } from '../api/user';
@@ -46,6 +47,7 @@ export default function ProfileScreen({ navigation }) {
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
+  const tabBarBottom = useTabBarContentBottom();
 
   // Редактирование имени: до этого сменить имя было нельзя вообще —
   // в профиле навсегда оставался дефолт «Юрист».
@@ -176,7 +178,7 @@ export default function ProfileScreen({ navigation }) {
   const premiumRow = rows.find((r) => r.gold);
 
   return (
-    <ScreenWrapper scroll contentStyle={styles.content}>
+    <ScreenWrapper scroll contentStyle={[styles.content, { paddingBottom: tabBarBottom }]}>
       <PaperGrain />
 
       {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}

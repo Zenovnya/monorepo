@@ -7,6 +7,7 @@ import {
 
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
 import { AnimatedButton } from '../components/AnimatedButton';
@@ -47,6 +48,7 @@ const perks = [
  * хвойные галочки преимуществ (#315B46) и лаково-красная главная кнопка (#C9362B).
  */
 export default function PremiumScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [plan, setPlan] = useState('yearly');
   const {
     isPremium,
@@ -66,7 +68,10 @@ export default function PremiumScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 16 },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <PaperGrain />

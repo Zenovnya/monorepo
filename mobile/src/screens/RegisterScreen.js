@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { PressableScale } from '../components/PressableScale';
 import { AnimatedInput } from '../components/AnimatedInput';
@@ -22,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const register = useRegister();
 
@@ -89,7 +91,10 @@ export default function RegisterScreen() {
       <Confetti active={success} />
 
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 12 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

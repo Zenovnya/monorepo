@@ -18,6 +18,7 @@ import { AnimatedMascot } from '../components/AnimatedMascot';
 import { PressableScale } from '../components/PressableScale';
 import { TactilePressable } from '../components/TactilePressable';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { useTabBarContentBottom } from '../navigation/tabBar';
 import { useMascot } from '../hooks/useMascot';
 import { gamificationApi } from '../api/gamification';
 import {
@@ -72,6 +73,7 @@ function HeartBurst({ visible }) {
 
 export default function BearScreen() {
   const user = useAuthStore((s) => s.user);
+  const tabBarBottom = useTabBarContentBottom();
 
   const [pose, setPose] = useState(
     user?.streak >= 3 ? 'neutral' : 'thinking'
@@ -112,7 +114,7 @@ export default function BearScreen() {
   const streak = gamification?.streak ?? user?.streak ?? 0;
 
   return (
-    <ScreenWrapper scroll contentStyle={styles.content}>
+    <ScreenWrapper scroll contentStyle={[styles.content, { paddingBottom: tabBarBottom }]}>
       <PaperGrain />
 
       {/* Шапка кабинета с золотой наградой стрика */}

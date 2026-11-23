@@ -200,6 +200,7 @@ export default function LessonScreen({ route, navigation }) {
   const gamification = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
 
   // Жизней нет — открытие проверки блокируется: вместо безнадёжной ошибки
@@ -281,8 +282,16 @@ export default function LessonScreen({ route, navigation }) {
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       if (data.xp_gained || data.lives_spent) {
-        // Обновляем счётчики XP и жизней: без этого при списании жизни за
-        // ошибку чип ❤️ оставался на прежнем значении до перезапуска.
+        // Оптимистичное обновление: применяем изменения из ответа сразу,
+        // без ожидания полного refetch gamification-me. Без этого счётчики
+        // XP/❤️ «подвисали» на прежних значениях, пока запрос не успевал
+        // вернуться (и при сбое refetch — навсегда).
+        queryClient.setQueryData(['gamification-me'], (prev) => {
+          if (!prev) return prev;
+          const nextXp = prev.xp + (data.xp_gained || 0);
+          const nextLives = Math.max(0, (prev.lives ?? 0) - (data.lives_spent || 0));
+          return { ...prev, xp: nextXp, lives: nextLives };
+        });
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, AppState } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
@@ -36,6 +37,7 @@ function formatCountdown(seconds) {
 }
 
 export default function NoLivesScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const lease = route?.params?.lives ?? {};
 
@@ -89,7 +91,7 @@ export default function NoLivesScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <PaperGrain />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <PressableScale
           onPress={() => navigation.goBack()}
           hitSlop={8}
@@ -175,9 +177,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingTop: 52,
-    paddingBottom: 4,
+        paddingHorizontal: 18,
+        paddingBottom: 4,
   },
   closeBtn: {
     width: 38,

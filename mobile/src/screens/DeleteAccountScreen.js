@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { useAuthStore } from '../store';
@@ -50,6 +51,7 @@ const REMOVED = [
 ];
 
 export default function DeleteAccountScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -104,7 +106,10 @@ export default function DeleteAccountScreen({ navigation }) {
     >
       <PaperGrain />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 16 },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >

@@ -7,6 +7,7 @@ import {
 
   TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { userApi } from '../api/user';
 import { useAuthStore } from '../store';
 import { AnimatedMascot } from '../components/AnimatedMascot';
@@ -40,6 +41,7 @@ const MINUTE_LABELS = {
  * и лаково-красная главная кнопка действия (#C9362B).
  */
 export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -94,7 +96,10 @@ export default function OnboardingScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 12 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* ШАГ 0: Приветствие мишки в медальоне хохломы */}

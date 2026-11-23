@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { AnimatedButton } from '../components/AnimatedButton';
 import {
@@ -24,6 +25,7 @@ import { paymentsApi } from '../api/payments';
  * «обрабатываем» с возможностью проверить ещё раз.
  */
 export default function PaymentReturnScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState('checking'); // checking | pending | active | error
   const attemptsRef = useRef(0);
@@ -82,7 +84,12 @@ export default function PaymentReturnScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <PaperGrain />
-      <View style={styles.body}>
+      <View
+        style={[
+          styles.body,
+          { paddingTop: insets.top + 16 },
+        ]}
+      >
         <KhokhlomaMedallion size={168} style={styles.medallion}>
           <AnimatedMascot
             size={142}

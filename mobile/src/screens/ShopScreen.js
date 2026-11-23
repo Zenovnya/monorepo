@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../store';
 import { paymentsApi } from '../api/payments';
@@ -49,6 +50,7 @@ const bundles = [
  * и точечная рамка хохломы на главном сундуке наград.
  */
 export default function ShopScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
@@ -135,7 +137,10 @@ export default function ShopScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 16 },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <PaperGrain />
