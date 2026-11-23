@@ -32,7 +32,7 @@ export default function ApplicationsScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: 20 + insets.top }]}
+      contentContainerStyle={[styles.content, { paddingTop: 34 + insets.top }]}
       showsVerticalScrollIndicator={false}
     >
       <PaperGrain />

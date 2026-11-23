@@ -132,10 +132,12 @@ export default function BearScreen() {
     <ScreenWrapper scroll contentStyle={[styles.content, { paddingBottom: tabBarBottom }]}>
       <PaperGrain />
 
-      {/* Шапка кабинета с золотой наградой стрика */}
+      {/* Шапка кабинета с золотой наградой стрика.
+          Заголовок «кабинет мишки» убран — остался только уровень, а сам
+          блок опущен ниже status-бара, чтобы стрик не сливался с временем
+          и батареей телефона. */}
       <View style={styles.header}>
         <View style={styles.headerBody}>
-          <Text style={styles.headerMeta}>§ КАБИНЕТ МИШКИ</Text>
           <Text style={styles.headerTitle}>Уровень {bearLevel}</Text>
         </View>
         <View style={styles.streakChip}>
@@ -365,7 +367,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 18,
-    paddingTop: 14,
+    // Заголовок (уровень и стрик) опущен ниже status-бара: на iPhone
+    // стрик-чип сливался с временем и батареей в верхнем углу.
+    paddingTop: 34,
     paddingBottom: 112,
     gap: 13,
   },
@@ -377,12 +381,6 @@ const styles = StyleSheet.create({
   },
   headerBody: {
     gap: 2,
-  },
-  headerMeta: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: brand.muted,
   },
   headerTitle: {
     fontSize: 26,

@@ -74,7 +74,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 16 },
+          { paddingTop: insets.top + 30 },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}

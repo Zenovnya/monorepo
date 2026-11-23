@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuthStore } from '../store';
 import { colors } from '../theme/colors';
 import { TabBarIcon } from './TabBarIcon';
+import { TAB_BAR_BASE_HEIGHT } from './tabBar';
 
 import LoginScreen from '../screens/LoginScreen';
 import SplashScreen from '../screens/SplashScreen';
@@ -41,7 +42,7 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopWidth: 0,
-          height: 68 + insets.bottom,
+          height: TAB_BAR_BASE_HEIGHT + insets.bottom,
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 4,
           shadowColor: 'transparent',

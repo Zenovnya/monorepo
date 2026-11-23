@@ -183,7 +183,10 @@ export default function ProfileScreen({ navigation }) {
     <ScreenWrapper scroll contentStyle={[styles.content, { paddingBottom: tabBarBottom }]}>
       <PaperGrain />
 
-      {/* Парадная шапка на тёплой бумаге с медальоном хохломы */}
+      {/* Парадная шапка на тёплой бумаге с медальоном хохломы.
+          Значок настроек и медведь с кругом опущены ниже: раньше они
+          лежали в верхней части и на iPhone близко к статус-бару (время,
+          wifi, заряд). */}
       <View style={styles.coverBanner}>
         <TactilePressable
           hitSlop={8}
@@ -191,7 +194,7 @@ export default function ProfileScreen({ navigation }) {
           accessibilityLabel="Настройки"
           style={[
             styles.settingsBtn,
-            { marginTop: insets.top + 4 },
+            { marginTop: insets.top + 26 },
           ]}
           onPress={() => navigation.navigate('Settings')}
           haptic
@@ -200,14 +203,16 @@ export default function ProfileScreen({ navigation }) {
           <Edit2 size={18} color={colors.text} />
         </TactilePressable>
 
-        <KhokhlomaMedallion size={146}>
-          <AnimatedMascot
-            size={120}
-            levelUp={levelUpPulse}
-            mood={levelUpPulse ? undefined : 'neutral'}
-            wave={!levelUpPulse}
-          />
-        </KhokhlomaMedallion>
+        <View style={{ marginTop: 20 }}>
+          <KhokhlomaMedallion size={146}>
+            <AnimatedMascot
+              size={120}
+              levelUp={levelUpPulse}
+              mood={levelUpPulse ? undefined : 'neutral'}
+              wave={!levelUpPulse}
+            />
+          </KhokhlomaMedallion>
+        </View>
 
         <KhokhlomaGarland
           variant="light"
