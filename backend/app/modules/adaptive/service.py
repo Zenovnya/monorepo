@@ -531,6 +531,7 @@ async def _answer(
     await _refresh_priorities(session, root, state, pack)
 
     xp_awarded = 0
+    lives_spent = 0
     if result.get("counted") and result.get("correct") is True:
         # XP за зачтённый самостоятельный правильный ответ. Подсказка,
         # пропуск, разбор и повтор засчитываются — за них XP не даём: то есть
@@ -541,6 +542,16 @@ async def _answer(
         user = await session.get(User, user_id)
         if user is not None:
             await gamification_service.add_xp(session, user, xp_awarded)
+    elif result.get("counted") and result.get("correct") is False:
+        # Жизнь тратится только за зачтённый неправильный ответ: подсказка,
+        # пропуск и повтор не тянут на ошибку. Без этого lives-механика была
+        # мёртвой: spend_lives существовал, но нигде не вызывался — счётчик
+        # жизней не уменьшался, и блокировка урока никогда не срабатывала.
+        from app.modules.gamification import service as gamification_service
+
+        user = await session.get(User, user_id)
+        if user is not None:
+            lives_spent = gamification_service.spend_lives(user, 1)
 
     await session.commit()
 
@@ -550,6 +561,10 @@ async def _answer(
         # на экране всё оставалось нулём, и выглядело это как «XP не
         # начисляется».
         result["xp_gained"] = xp_awarded
+    if lives_spent:
+        # Жизнь списалась — клиент должен обновить счётчик ❤️ в шапке
+        # без перезагрузки состояния.
+        result["lives_spent"] = lives_spent
     if result.get("status") == "answered":
         # Разбор показывается после ответа — здесь и только здесь.
         item = pack.items[state.attempts[attempt_id].item_id]
