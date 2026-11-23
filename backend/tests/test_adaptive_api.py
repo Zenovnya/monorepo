@@ -18,6 +18,7 @@ from app.main import app
 from app.modules.adaptive import engine
 from app.modules.adaptive.pack import get_pack
 from app.modules.auth import service as auth_service
+from app.modules.auth.models import User
 
 pytestmark = pytest.mark.asyncio
 
@@ -111,6 +112,51 @@ async def test_answer_reveals_explanation_and_counts(api) -> None:
     assert topic["n"] == 1
     assert topic["correct_count"] == 1
     assert topic["lessons_practised"] >= 0
+
+
+async def test_answer_awards_achievements(api) -> None:
+    """Первый зачтённый ответ выдаёт достижение и возвращает его в ответе.
+
+    Без этого в ответе act() не было achievements: клиент не мог показать
+    тост «Достижение получено» сразу по ответу.
+    """
+    client, maker = api
+    user_id = uuid.uuid4()
+    async with maker() as session:
+        session.add(
+            User(
+                id=user_id,
+                email="ach@example.com",
+                username="Ach",
+                hashed_password="hash",
+                xp=0,
+                level=1,
+                streak=0,
+                gems=0,
+            )
+        )
+        await session.commit()
+    headers = _headers(user_id)
+
+    opened = (await client.get("/adaptive/next", headers=headers)).json()
+    item_id = opened["item"]["item_id"]
+    correct = get_pack().items[item_id]["correct_option_id"]
+
+    response = await client.post(
+        f"/adaptive/attempts/{opened['attempt_id']}/actions",
+        json={"action": "answer", "option_id": correct},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["counted"] is True
+
+    codes = {a["code"] for a in body.get("achievements", [])}
+    assert "first_step" in codes
+
+    # Достижение сохраняется и видно в состоянии геймификации.
+    me = (await client.get("/gamification/me", headers=headers)).json()
+    assert any(a["code"] == "first_step" for a in me["achievements"])
 
 
 async def test_help_blocks_counting(api) -> None:

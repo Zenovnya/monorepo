@@ -93,6 +93,24 @@ export function applyLivesSpent(queryClient, livesSpent) {
 }
 
 /**
+ * Добавить новые достижения в кэш `gamification-achievements`.
+ *
+ * Сервер включает freshly-awarded achievements в ответ act()/pet() —
+ * сливаем их в кэш сразу, чтобы сетка достижений в профиле обновилась
+ * без перезагрузки (серверный ответ позже подтвердит полный список).
+ */
+export function mergeAchievements(queryClient, achievements) {
+  if (!achievements?.length) return;
+  queryClient.setQueryData(['gamification-achievements'], (prev) => {
+    const existing = prev?.achievements ?? [];
+    const codes = new Set(existing.map((a) => a.code));
+    const added = achievements.filter((a) => !codes.has(a.code));
+    if (!added.length) return prev;
+    return { ...prev, achievements: [...existing, ...added] };
+  });
+}
+
+/**
  * Полный оптимистичный апгрейд после act().
  *
  * `lessonId` — урок, который был засчитан (из route-params на LessonScreen
@@ -107,4 +125,5 @@ export function applyActResult(queryClient, data, lessonId) {
   }
   applyXpGained(queryClient, data.xp_gained);
   applyLivesSpent(queryClient, data.lives_spent);
+  mergeAchievements(queryClient, data.achievements);
 }

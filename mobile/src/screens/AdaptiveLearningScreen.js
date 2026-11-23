@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PressableScale } from '../components/PressableScale';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { useMascotToast } from '../components/MascotToast';
 import { describeLoadError } from '../api/client';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,6 +44,7 @@ import { colors } from '../theme/colors';
  */
 export default function AdaptiveLearningScreen({ navigation }) {
   const queryClient = useQueryClient();
+  const toast = useMascotToast();
   // Верхний отступ считаем сами: экран лежит в навигаторе без шапки
   // (headerShown: false), поэтому content начинался от самого верха окна и на
   // iPhone уезжал под вырез.
@@ -104,6 +106,15 @@ export default function AdaptiveLearningScreen({ navigation }) {
         choice?.lesson_id ??
         (choice?.item_id ? choice.item_id.split('_', 1)[0] : null);
       applyActResult(queryClient, data, lessonId);
+      // Достижения по ответу: тост «Достижение получено» сразу, без
+      // ожидания перезагрузки профиля.
+      data.achievements?.forEach((a) => {
+        toast.show({
+          kind: 'achievement',
+          title: a.title,
+          text: a.description,
+        });
+      });
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
@@ -111,6 +122,7 @@ export default function AdaptiveLearningScreen({ navigation }) {
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
         queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
       }
+      queryClient.invalidateQueries({ queryKey: ['gamification-achievements'] });
     },
     // Без этого сбой ответа был невидим: нажатие не давало ничего, и выглядело
     // это как «кнопка не работает», а не как ошибка. Показываем причину.

@@ -102,33 +102,36 @@ async def get_phrase_for_trigger(
 
 async def increment_pet_count(
     session: AsyncSession, user_id: uuid.UUID
-) -> int:
-    """Увеличивает счётчик поглаживаний на 1 и возвращает новое значение.
+) -> tuple[int, dict | None]:
+    """Увеличивает счётчик поглаживаний на 1 и возвращает (счётчик, достижение).
 
-    При достижении порога в 10 поглаживаний выдаёт достижение «Друг Lex».
+    При достижении порога в 10 поглаживаний выдаёт достижение «Друг Lex»
+    и возвращает его в ответе — клиент показывает тост сразу.
     """
     state = await _get_or_create_state(session, user_id)
     state.pet_count += 1
 
     # Достижение «Друг Lex» при 10 поглаживаниях.
+    achievement = None
     if state.pet_count == PET_ACHIEVEMENT_THRESHOLD:
         user = await session.get(User, user_id)
         if user is not None:
             from app.modules.gamification import service as gamification_service
 
             try:
-                await gamification_service.award_achievement(
+                earned = await gamification_service.award_achievement(
                     session,
                     user,
                     code=PET_ACHIEVEMENT_CODE,
                     title="Друг Lex",
                     description="Погладь Lex 10 раз — теперь вы настоящие друзья!",
                 )
-            except Exception:
+                achievement = gamification_service.achievement_payload(earned)
+            except gamification_service.AchievementAlreadyAwardedError:
                 # Если достижение уже выдано — игнорируем дубликат.
                 pass
 
-    return state.pet_count
+    return state.pet_count, achievement
 
 
 async def get_pet_count(

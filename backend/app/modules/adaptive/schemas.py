@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.modules.gamification.schemas import AchievementRead
+
 
 class TopicRead(BaseModel):
     topic_id: str
@@ -117,6 +119,9 @@ class ActionResultRead(BaseModel):
     # Жизнь списалась за неправильный зачтённый ответ: клиент обновляет
     # счётчик ❤️ в шапке без перезагрузки состояния. 0 — жизней не тратилось.
     lives_spent: int = 0
+    # Достижения, выданные этим ответом: клиент показывает тост сразу,
+    # а не ждать перезагрузки профиля. Пусто, когда веха не достигнута.
+    achievements: list[AchievementRead] = []
 
 
 class LessonProgressRead(BaseModel):

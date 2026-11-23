@@ -117,6 +117,107 @@ def test_award_achievement_idempotent() -> None:
 
     asyncio.run(run())
 
+
+class _FakeMilestoneSession:
+    """Фейковая сессия для вех: помнит выданные достижения по user_id/code."""
+
+    def __init__(self) -> None:
+        self.awarded: list = []
+
+    def _matches(self, obj, stmt) -> bool:
+        for crit in getattr(stmt, "_where_criteria", []):
+            left = crit.left
+            key = getattr(left, "key", None)
+            right = getattr(crit.right, "value", crit.right)
+            if key == "user_id" and obj.user_id != right:
+                return False
+            if key == "code" and obj.code != right:
+                return False
+        return True
+
+    async def scalar(self, stmt):
+        for obj in self.awarded:
+            if self._matches(obj, stmt):
+                return obj
+        return None
+
+    def add(self, obj) -> None:
+        self.awarded.append(obj)
+
+    async def flush(self) -> None:
+        pass
+
+
+def _run_milestones(user, session=None, **kwargs):
+    import asyncio
+
+    async def run():
+        sess = session if session is not None else _FakeMilestoneSession()
+        return await service.award_milestone_achievements(sess, user, **kwargs)
+
+    return asyncio.run(run())
+
+
+def test_award_milestone_achievements_all_reached() -> None:
+    user = _make_user()
+    user.xp = 600
+    awarded = _run_milestones(
+        user,
+        counted_attempts=1,
+        streak=3,
+        daily_done=100,
+        daily_goal=100,
+    )
+    codes = {a["code"] for a in awarded}
+    assert codes == {
+        "first_step",
+        "xp_100",
+        "xp_500",
+        "streak_3",
+        "day_warrior",
+    }
+    # 1000 XP не набрано — достижение не выдаётся.
+    assert "xp_1000" not in codes
+
+
+def test_award_milestone_achievements_none_reached() -> None:
+    user = _make_user()
+    awarded = _run_milestones(
+        user,
+        counted_attempts=0,
+        streak=1,
+        daily_done=10,
+        daily_goal=100,
+    )
+    assert awarded == []
+
+
+def test_award_milestone_achievements_idempotent() -> None:
+    user = _make_user()
+    user.xp = 150
+    sess = _FakeMilestoneSession()
+    first = _run_milestones(
+        user,
+        session=sess,
+        counted_attempts=1,
+        streak=1,
+        daily_done=10,
+        daily_goal=100,
+    )
+    codes = {a["code"] for a in first}
+    assert codes == {"first_step", "xp_100"}
+
+    # Повторный вызов по той же сессии не выдаёт дубликатов.
+    second = _run_milestones(
+        user,
+        session=sess,
+        counted_attempts=1,
+        streak=1,
+        daily_done=10,
+        daily_goal=100,
+    )
+    assert second == []
+
 class TestShopAffordability:
     """Магазин достижим без платежей.
 

@@ -147,7 +147,7 @@ async def pet_bear(
     # Получаем счётчик поглаживаний из модуля маскота.
     from app.modules.mascot import service as mascot_service
 
-    pet_count = await mascot_service.increment_pet_count(session, user_id)
+    pet_count, _ = await mascot_service.increment_pet_count(session, user_id)
 
     from app.modules.user import service
 

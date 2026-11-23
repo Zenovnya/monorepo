@@ -4,6 +4,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict
 
+from app.modules.gamification.schemas import AchievementRead
+
 
 class MascotPhraseRead(BaseModel):
     """Фраза маскота для списка (GET /mascot/phrases)."""
@@ -31,3 +33,6 @@ class PetCountRead(BaseModel):
     """Счётчик поглаживаний маскота (POST /pet, GET /pet-count)."""
 
     pet_count: int
+    # Достижение, выданное этим поглаживанием (Друг Lex): клиент показывает
+    # тост сразу. GET /pet-count всегда возвращает None.
+    achievement: AchievementRead | None = None
