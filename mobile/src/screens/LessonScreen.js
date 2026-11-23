@@ -20,6 +20,7 @@ import Animated, {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { gamificationApi } from '../api/gamification';
+import { applyActResult } from '../api/optimistic';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
@@ -280,20 +281,14 @@ export default function LessonScreen({ route, navigation }) {
         return;
       }
       setResult(data);
+      // Оптимистичное обновление: применяем изменения из ответа сразу,
+      // без ожидания полного refetch. Без этого счётчики XP/❤️ и прогресс
+      // урока «подвисали» на прежних значениях, пока запрос не успевал
+      // вернуться (и при сбое refetch — навсегда).
+      applyActResult(queryClient, data, lessonId);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
-      if (data.xp_gained || data.lives_spent) {
-        // Оптимистичное обновление: применяем изменения из ответа сразу,
-        // без ожидания полного refetch gamification-me. Без этого счётчики
-        // XP/❤️ «подвисали» на прежних значениях, пока запрос не успевал
-        // вернуться (и при сбое refetch — навсегда).
-        queryClient.setQueryData(['gamification-me'], (prev) => {
-          if (!prev) return prev;
-          const nextXp = prev.xp + (data.xp_gained || 0);
-          const nextLives = Math.max(0, (prev.lives ?? 0) - (data.lives_spent || 0));
-          return { ...prev, xp: nextXp, lives: nextLives };
-        });
-        queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+      queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
     },
     // Сбой ответа раньше был невидим: нажатие «Ответить» не давало ничего, и
     // это читалось как «кнопка не работает». Теперь причина на экране.

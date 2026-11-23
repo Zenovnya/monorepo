@@ -88,6 +88,7 @@ export default function BearScreen() {
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
 
   const handlePet = async () => {

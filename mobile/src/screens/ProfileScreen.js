@@ -69,6 +69,7 @@ export default function ProfileScreen({ navigation }) {
   const { data: gamification } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    staleTime: 0,
   });
 
   // Прогресс по темам: единственный источник правды о том, что пройдено.
@@ -76,6 +77,7 @@ export default function ProfileScreen({ navigation }) {
   const { data: overview } = useQuery({
     queryKey: ['adaptive-overview'],
     queryFn: adaptiveApi.overview,
+    staleTime: 0,
   });
   const topics = overview?.topics ?? [];
 

@@ -8,6 +8,7 @@ import { useTabBarContentBottom } from '../navigation/tabBar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { gamificationApi } from '../api/gamification';
+import { applyActResult } from '../api/optimistic';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
 import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
@@ -61,7 +62,11 @@ export default function AdaptiveLearningScreen({ navigation }) {
   const [actionError, setActionError] = useState(null);
 
   const meta = useQuery({ queryKey: ['adaptive-meta'], queryFn: adaptiveApi.meta });
-  const overview = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
+  const overview = useQuery({
+    queryKey: ['adaptive-overview'],
+    queryFn: adaptiveApi.overview,
+    staleTime: 0,
+  });
   // Жизни — чтобы при нуле вести на экран восстановления, а не оставлять
   // пользователя отвечать безнадёжно (жизни больше не спишутся).
   const gamification = useQuery({
@@ -91,20 +96,20 @@ export default function AdaptiveLearningScreen({ navigation }) {
       }
       setResult(data);
       setHint(null);
+      // Оптимистичное обновление: применяем изменения из ответа сразу,
+      // без ожидания полного refetch. Прогресс урока, счётчики XP/❤️ и
+      // цель дня меняются мгновенно — refetch лишь подтверждает числа.
+      const choice = nextQuery.data?.choice;
+      const lessonId =
+        choice?.lesson_id ??
+        (choice?.item_id ? choice.item_id.split('_', 1)[0] : null);
+      applyActResult(queryClient, data, lessonId);
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
       if (data.xp_gained || data.lives_spent) {
-        // Оптимистичное обновление: применяем изменения сразу, без ожидания
-        // refetch gamification-me — иначе счётчики «подвисают» на прежних
-        // значениях до следующего запроса.
-        queryClient.setQueryData(['gamification-me'], (prev) => {
-          if (!prev) return prev;
-          const nextXp = prev.xp + (data.xp_gained || 0);
-          const nextLives = Math.max(0, (prev.lives ?? 0) - (data.lives_spent || 0));
-          return { ...prev, xp: nextXp, lives: nextLives };
-        });
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
+        queryClient.invalidateQueries({ queryKey: ['gamification-daily-goal'] });
       }
     },
     // Без этого сбой ответа был невидим: нажатие не давало ничего, и выглядело

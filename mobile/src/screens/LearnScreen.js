@@ -50,8 +50,19 @@ export default function LearnScreen({ navigation }) {
   // открываем сами: чаще всего человек хочет продолжить, а не выбирать.
   const [openTopic, setOpenTopic] = useState(null);
 
-  const path = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
-  const dailyGoal = useQuery({ queryKey: ['gamification-daily-goal'], queryFn: gamificationApi.dailyGoal });
+  // staleTime: 0 — прогресс уроков оптимистично обновляется сразу после
+  // act(), и при возвращении на вкладку нужно видеть свежие данные, а не
+  // кэш прошлого посещения.
+  const path = useQuery({
+    queryKey: ['adaptive-overview'],
+    queryFn: adaptiveApi.overview,
+    staleTime: 0,
+  });
+  const dailyGoal = useQuery({
+    queryKey: ['gamification-daily-goal'],
+    queryFn: gamificationApi.dailyGoal,
+    staleTime: 0,
+  });
 
   const topics = useMemo(() => path.data?.topics ?? [], [path.data]);
   const totals = useMemo(() => {

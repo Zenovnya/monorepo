@@ -29,6 +29,10 @@ export function TopStats() {
   const { data } = useQuery({
     queryKey: ['gamification-me'],
     queryFn: gamificationApi.me,
+    // staleTime: 0 — после прохождения урока счётчики уже оптимистично
+    // обновлены в кэше; при возвращении на вкладку нужно читать свежий
+    // ответ, а не кэш прошлого посещения.
+    staleTime: 0,
     refetchInterval: (query) => {
       const lives = query.state.data?.lives;
       const max = query.state.data?.max_lives ?? 5;
