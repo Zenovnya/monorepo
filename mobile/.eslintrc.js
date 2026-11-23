@@ -27,36 +27,5 @@ module.exports = {
     'no-undef': 'error',
     'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
   },
-  overrides: [
-    {
-      // TypeScript-файлы: парсер от typescript-eslint.
-      files: ['**/*.ts', '**/*.tsx'],
-      parser: '@typescript-eslint/parser',
-      plugins: ['@typescript-eslint'],
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        ecmaFeatures: {
-          jsx: true,
-        },
-      },
-      rules: {
-        // TS-типизация подменяет проверку undefined переменных.
-        'no-undef': 'off',
-        'no-unused-vars': 'off',
-        '@typescript-eslint/no-unused-vars': [
-          'warn',
-          { argsIgnorePattern: '^_' },
-        ],
-      },
-    },
-  ],
-  ignorePatterns: [
-    'node_modules/',
-    'dist/',
-    'build/',
-    '.expo/',
-    '.babelrc',
-    'package-lock.json',
-  ],
+  ignorePatterns: ['node_modules/', 'dist/', 'build/', '.expo/', '.babelrc', 'package-lock.json'],
 };

@@ -1,12 +1,13 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
 import { describeLoadError } from '../api/client';
 import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
-import { LearningPath } from '../components/learning/LearningPath';
+import { LessonSnake } from '../components/LessonSnake';
+import { TopicCard } from '../components/TopicCard';
 import { TactilePressable } from '../components/TactilePressable';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useTabBarContentBottom } from '../navigation/tabBar';
@@ -35,10 +36,20 @@ import { colors } from '../theme/colors';
  * чтобы визуально выделить путь и не давать пропустить предыдущий шаг.
  */
 export default function LearnScreen({ navigation }) {
+  // Ширина нужна тропе: она считает узлы от фактической ширины окна, а не от
+  // магической константы, и одинаково выглядит на телефоне и на планшете.
+  const { width } = useWindowDimensions();
   // Верхний отступ: табы без шапки (headerShown: false), иначе панель XP
   // уезжала под вырез.
   const insets = useSafeAreaInsets();
   const tabBarBottom = useTabBarContentBottom();
+  // 20 — padding контента, 16 — padding карточки темы с каждой стороны.
+  const snakeWidth = width - 20 * 2 - 16 * 2;
+
+  // Раскрыта одна тема за раз: список из шести раскрытых троп — это экран,
+  // который невозможно пролистать. Первую тему с непройденными уроками
+  // открываем сами: чаще всего человек хочет продолжить, а не выбирать.
+  const [openTopic, setOpenTopic] = useState(null);
 
   // staleTime: 0 — прогресс уроков оптимистично обновляется сразу после
   // act(), и при возвращении на вкладку нужно видеть свежие данные, а не
@@ -55,15 +66,6 @@ export default function LearnScreen({ navigation }) {
   });
 
   const topics = useMemo(() => path.data?.topics ?? [], [path.data]);
-
-  // Активный узел — первый непройденный урок по всей программе;
-  // остальные непройденные — заблокированные.
-  const activeLessonId = useMemo(() => {
-    const next = topics
-      .flatMap((topic) => topic.lessons ?? [])
-      .find((lesson) => !lesson.practised);
-    return next ? String(next.lesson_id) : null;
-  }, [topics]);
 
   const totals = useMemo(() => {
     const lessons = topics.flatMap((topic) => topic.lessons ?? []);
@@ -179,38 +181,33 @@ export default function LearnScreen({ navigation }) {
             message="Разборы появятся здесь, как только их опубликуют. Адаптивная практика доступна уже сейчас."
           />
         ) : (
-          <LearningPath
-            sections={topics.map((topic) => ({
-              id: String(topic.topic_id),
-              title: topic.title,
-              subtitle: `${topic.lessons_practised ?? 0}/${
-                topic.lessons_total ?? topic.lessons?.length ?? 0
-              } уроков`,
-              steps: (topic.lessons ?? []).map((lesson) => ({
-                id: String(lesson.lesson_id),
-                title: lesson.title,
-                description: lesson.summary || lesson.title,
-                state: lesson.practised
-                  ? 'completed'
-                  : String(lesson.lesson_id) === activeLessonId
-                    ? 'active'
-                    : 'locked',
-                reward: `+${lesson.xp ?? 10} XP`,
-              })),
-            }))}
-            onStepPress={(stepId) => {
-              // Активный узел открывает соответствующий урок.
-              const lesson = topics
-                .flatMap((topic) => topic.lessons ?? [])
-                .find((l) => String(l.lesson_id) === stepId);
-              if (lesson) {
-                navigation.navigate('Lesson', {
-                  lessonId: lesson.lesson_id,
-                  title: lesson.title,
-                });
-              }
-            }}
-          />
+          topics.map((topic, index) => {
+            // По умолчанию раскрыта первая тема, где есть что проходить.
+            const fallback = topics.findIndex((t) => t.lessons_practised < t.lessons_total);
+            const isOpen = openTopic === null ? index === Math.max(fallback, 0) : openTopic === index;
+            return (
+              <TopicCard
+                key={topic.topic_id}
+                topic={topic}
+                index={index}
+                expanded={isOpen}
+                onPress={() => setOpenTopic(isOpen ? -1 : index)}
+              >
+                {topic.lessons?.length ? (
+                  <LessonSnake
+                    lessons={topic.lessons}
+                    width={snakeWidth}
+                    onPick={(lesson) =>
+                      navigation.navigate('Lesson', {
+                        lessonId: lesson.lesson_id,
+                        title: lesson.title,
+                      })
+                    }
+                  />
+                ) : null}
+              </TopicCard>
+            );
+          })
         )}
 
         {path.data?.editorial_note ? (
