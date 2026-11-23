@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.modules.auth.models import User
 from app.modules.payments.models import PaymentHistory, Subscription
+from app.utils import is_expired
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ async def is_premium(session: AsyncSession, user_id: uuid.UUID) -> bool:
         return False
     if sub.status != "active":
         return False
-    if sub.expires_at is not None and sub.expires_at < datetime.now(timezone.utc):
+    if is_expired(sub.expires_at):
         return False
     return True
 

@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
+import { gamificationApi } from '../api/gamification';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
 import { CaseReaction, OutcomeBadge } from '../components/CaseReaction';
@@ -38,7 +39,7 @@ import { colors } from '../theme/colors';
  * - Контент опубликован решением владельца, без юридической проверки. Пометка
  *   внизу экрана — не формальность: её отсутствие было бы враньём об источнике.
  */
-export default function AdaptiveLearningScreen() {
+export default function AdaptiveLearningScreen({ navigation }) {
   const queryClient = useQueryClient();
   // Верхний отступ считаем сами: экран лежит в навигаторе без шапки
   // (headerShown: false), поэтому content начинался от самого верха окна и на
@@ -59,6 +60,13 @@ export default function AdaptiveLearningScreen() {
 
   const meta = useQuery({ queryKey: ['adaptive-meta'], queryFn: adaptiveApi.meta });
   const overview = useQuery({ queryKey: ['adaptive-overview'], queryFn: adaptiveApi.overview });
+  // Жизни — чтобы при нуле вести на экран восстановления, а не оставлять
+  // пользователя отвечать безнадёжно (жизни больше не спишутся).
+  const gamification = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+  });
+  const livesLeft = gamification.data?.lives ?? 5;
 
   const nextQuery = useQuery({
     // Тема в ключе: смена темы должна перезапрашивать кейс, а не показывать
@@ -83,10 +91,10 @@ export default function AdaptiveLearningScreen() {
       if (data.counted) {
         queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
       }
-      if (data.xp_gained) {
-        // XP начислился на сервере: кэш геймификации обновить, иначе на
-        // экране счётчик стоит на старом значении и выглядит «XP не
-        // начисляется».
+      if (data.xp_gained || data.lives_spent) {
+        // XP начислился или жизнь списалась: кэш геймификации обновить, иначе
+        // на экране счётчик стоит на старом значении и выглядит «XP не
+        // начисляется» / «жизнь не тратится».
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
@@ -374,9 +382,22 @@ export default function AdaptiveLearningScreen() {
 
         {item && canAnswer && !result ? (
           <PressableScale
-            style={[styles.primaryBtn, (!selected || act.isPending) && styles.btnDisabled]}
-            disabled={!selected || act.isPending}
-            onPress={() => act.mutate({ action: 'answer', optionId: selected })}
+            style={[
+              styles.primaryBtn,
+              (!selected || act.isPending || livesLeft <= 0) && styles.btnDisabled,
+            ]}
+            disabled={!selected || act.isPending || livesLeft <= 0}
+            onPress={() => {
+              if (livesLeft <= 0) {
+                navigation.navigate('NoLives', {
+                  lives: gamification.data?.lives ?? 0,
+                  next_life_in_seconds:
+                    gamification.data?.next_life_in_seconds ?? 0,
+                });
+                return;
+              }
+              act.mutate({ action: 'answer', optionId: selected });
+            }}
           >
             <Text style={styles.primaryBtnText}>Ответить</Text>
           </PressableScale>

@@ -114,6 +114,9 @@ class ActionResultRead(BaseModel):
     legal_basis_ids: list[str] | None = None
     assistance: str | None = None
     xp_gained: int = 0
+    # Жизнь списалась за неправильный зачтённый ответ: клиент обновляет
+    # счётчик ❤️ в шапке без перезагрузки состояния. 0 — жизней не тратилось.
+    lives_spent: int = 0
 
 
 class LessonProgressRead(BaseModel):

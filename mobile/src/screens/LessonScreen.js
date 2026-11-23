@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adaptiveApi } from '../api/adaptive';
+import { gamificationApi } from '../api/gamification';
 import { describeLoadError } from '../api/client';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { MascotPrompt } from '../components/MascotPrompt';
@@ -184,6 +185,9 @@ export default function LessonScreen({ route, navigation }) {
   const [actionError, setActionError] = useState(null);
   const [openError, setOpenError] = useState(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  // Флаг повтора открытия после OPEN_ATTEMPT: чтобы не уйти в бесконечный
+  // цикл, если попытка всё ещё открыта после повторного запроса.
+  const openCheckRetried = useRef(false);
 
   const lesson = useQuery({
     queryKey: ['adaptive-lesson', lessonId],
@@ -191,15 +195,68 @@ export default function LessonScreen({ route, navigation }) {
     enabled: Boolean(lessonId),
   });
 
+  // Жизни тянем из gamification-me, а не из lesson-payload: lesson не содержит
+  // lives, и счётчик ❤️ показывал дефолт 5 даже после списания за ошибку.
+  const gamification = useQuery({
+    queryKey: ['gamification-me'],
+    queryFn: gamificationApi.me,
+  });
+
+  // Жизней нет — открытие проверки блокируется: вместо безнадёжной ошибки
+  // ведём на экран восстановления (NoLives), где есть обратный отсчёт и
+  // кнопка «Вернуться» после восстановления.
+  const livesLeft = gamification.data?.lives ?? 5;
+
   const openCheck = useMutation({
-    mutationFn: () => adaptiveApi.openAttempt({ itemId: lesson.data.control_item_id, origin: 'lesson', mode: 'check' }),
+    // Сначала закрываем уже открытую попытку (например, открытый из
+    // адаптивной вкладки кейс): иначе сервер отвечает OPEN_ATTEMPT, и кнопка
+    // «Пройти проверку» падала с ошибкой вместо открытия проверки урока.
+    // attempt.status != "open" — уже закрытая попытка ответит already_closed
+    // без ошибки, так что проактивный skip безопасен.
+    mutationFn: async () => {
+      const openId = lesson.data?.open_attempt_id;
+      if (openId) {
+        try {
+          await adaptiveApi.act(openId, { action: 'skip' });
+        } catch {
+          // Уже закрыта между загрузкой урока и нажатием — игнорируем.
+        }
+      }
+      return adaptiveApi.openAttempt({
+        itemId: lesson.data.control_item_id,
+        origin: 'lesson',
+        mode: 'check',
+      });
+    },
     // Без этого сбой открытия проверки был невидим: сервер мог ответить 400
     // (например OPEN_ATTEMPT — попытка уже открыта из кейса), а кнопка
     // «Пройти проверку» просто молчала. Экран менялся не мог: phase оставался
     // 'theory', loader не показывался, и выглядело это как «кнопка не
     // работает», а не как ошибка.
-    onError: (error) => setOpenError(describeOpenError(error)),
+    onError: async (error) => {
+      const detail = error?.response?.data?.detail;
+      // open_attempt_id из lesson-payload может быть устаревшим (закэширован
+      // до открытия кейса в адаптивной вкладке). Тогда проактивный skip
+      // не сработал и сервер ответил OPEN_ATTEMPT: запрашиваем актуальное
+      // состояние, закрываем чужую попытку и повторяем открытие один раз.
+      if (detail === 'OPEN_ATTEMPT' && !openCheckRetried.current) {
+        openCheckRetried.current = true;
+        try {
+          const next = await adaptiveApi.next({ openAttempt: false });
+          const openId = next?.attempt_id;
+          if (openId) {
+            await adaptiveApi.act(openId, { action: 'skip' });
+          }
+          openCheck.mutate();
+          return;
+        } catch {
+          openCheckRetried.current = false;
+        }
+      }
+      setOpenError(describeOpenError(error));
+    },
     onSuccess: (data) => {
+      openCheckRetried.current = false;
       setOpenError(null);
       // Карточка приходит вместе с попыткой: отдельного запроса «дай вопрос»
       // нет, иначе клиент мог бы получить его, не открывая попытку.
@@ -223,7 +280,9 @@ export default function LessonScreen({ route, navigation }) {
       }
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ['adaptive-overview'] });
-      if (data.xp_gained) {
+      if (data.xp_gained || data.lives_spent) {
+        // Обновляем счётчики XP и жизней: без этого при списании жизни за
+        // ошибку чип ❤️ оставался на прежнем значении до перезапуска.
         queryClient.invalidateQueries({ queryKey: ['gamification-me'] });
       }
     },
@@ -311,7 +370,7 @@ export default function LessonScreen({ route, navigation }) {
         {/* Прогресс-бар 12px с пружинной анимацией и счётчик жизней */}
         <View style={styles.progressRow}>
           <LessonProgress progress={phase === 'check' ? 50 : 0} />
-          <LifeCounter lives={data.lives ?? 5} />
+          <LifeCounter lives={gamification.data?.lives ?? 5} />
         </View>
 
         <View style={styles.theoryCard}>
@@ -361,10 +420,26 @@ export default function LessonScreen({ route, navigation }) {
               ответ — подсказка снимает зачёт.
             </Text>
             {openError ? <Text style={styles.errorNote}>{openError}</Text> : null}
+            {livesLeft <= 0 ? (
+              <Text style={styles.errorNote}>
+                Жизни закончились — дождитесь восстановления или купите
+                «Пополнение жизней» в лавке.
+              </Text>
+            ) : null}
             <TactilePressable
-              style={[styles.primaryBtn, openCheck.isPending && styles.btnDisabled]}
-              disabled={openCheck.isPending}
+              style={[styles.primaryBtn, (openCheck.isPending || livesLeft <= 0) && styles.btnDisabled]}
+              disabled={openCheck.isPending || livesLeft <= 0}
               onPress={() => {
+                if (livesLeft <= 0) {
+                  // Жизней нет — ведём на экран восстановления вместо безнадёжной
+                  // попытки открыть проверку.
+                  navigation.navigate('NoLives', {
+                    lives: gamification.data?.lives ?? 0,
+                    next_life_in_seconds:
+                      gamification.data?.next_life_in_seconds ?? 0,
+                  });
+                  return;
+                }
                 setOpenError(null);
                 openCheck.mutate();
               }}
