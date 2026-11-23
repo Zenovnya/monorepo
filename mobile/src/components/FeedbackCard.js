@@ -57,7 +57,7 @@ export const FeedbackCard = ({ status = 'neutral', title, body, style }) => {
 
 const TONES = {
   correct: { background: colors.successTint, accent: colors.success, title: colors.successDark },
-  incorrect: { background: colors.errorTint, accent: colors.error, title: colors.errorDark },
+  incorrect: { background: colors.errorTint, accent: colors.error, title: colors.verdictWrongTitle },
   neutral: { background: colors.goldTint, accent: colors.accent, title: colors.text },
 };
 
