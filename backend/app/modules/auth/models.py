@@ -1,7 +1,9 @@
 """ORM-модели модуля аутентификации."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
+
+from app.utils import is_expired
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -155,9 +157,14 @@ class RefreshToken(Base):
 
     @property
     def is_expired(self) -> bool:
-        """Проверяет, истёк ли срок действия токена."""
-        now = datetime.now(timezone.utc)
-        return self.expires_at < now
+        """Проверяет, истёк ли срок действия токена.
+
+        SQLite не хранит информацию о таймзоне в DateTime, поэтому
+        ``expires_at`` может приходить offset-naive. Сравнение aware и
+        naive datetime бросает TypeError, поэтому сравнение делается
+        через ``is_expired`` с приведением обеих сторон к UTC.
+        """
+        return is_expired(self.expires_at)
 
 
 class PasswordResetToken(Base):
