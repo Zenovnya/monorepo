@@ -52,10 +52,10 @@ def upgrade() -> None:
             "weights_version", sa.String(32), nullable=False, server_default="weights-1"
         ),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')
         ),
         sa.UniqueConstraint("user_id", name="uq_adaptive_state_user"),
     )
@@ -88,7 +88,7 @@ def upgrade() -> None:
         sa.Column("selected_option_id", sa.String(8), nullable=True),
         sa.Column("correct", sa.Boolean(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')
         ),
     )
     op.create_index("ix_adaptive_attempts_user_id", "adaptive_attempts", ["user_id"])
@@ -115,7 +115,7 @@ def upgrade() -> None:
         sa.Column("correct", sa.Boolean(), nullable=False),
         sa.Column("voided", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')
         ),
     )
     op.create_index("ix_adaptive_observations_user_id", "adaptive_observations", ["user_id"])
@@ -151,7 +151,7 @@ def upgrade() -> None:
         sa.Column("priority", sa.Float(), nullable=False),
         sa.Column("state", sa.String(32), nullable=False),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')
         ),
         sa.UniqueConstraint("user_id", "topic_id", name="uq_adaptive_topic_priority"),
     )

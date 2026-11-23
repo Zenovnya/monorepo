@@ -36,7 +36,8 @@ def upgrade() -> None:
                 server_default=sa.true(),
             ),
         )
-        op.alter_column(table, "is_active", server_default=None)
+        with op.batch_alter_table(table) as batch_op:
+            batch_op.alter_column("is_active", server_default=None)
 
     # --- slug (стабильный ключ для upsert) на уроки и кейсы ---
     op.add_column(

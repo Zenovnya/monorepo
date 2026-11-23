@@ -33,7 +33,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
 
@@ -48,7 +48,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], ondelete='CASCADE'),
     )
@@ -65,7 +65,7 @@ def upgrade() -> None:
             'created_at',
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.Column('lex_entrance_type', sa.String(length=32), nullable=True),
         sa.Column('lex_hint_text', sa.Text(), nullable=True),

@@ -58,7 +58,7 @@ class Subscription(Base):
     )
     starts_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.current_timestamp(),
         nullable=False,
     )
     expires_at: Mapped[datetime | None] = mapped_column(
@@ -68,13 +68,13 @@ class Subscription(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.current_timestamp(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
         nullable=False,
     )
 
@@ -111,7 +111,7 @@ class PaymentHistory(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.current_timestamp(),
         nullable=False,
         index=True,
     )

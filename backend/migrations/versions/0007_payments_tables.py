@@ -35,20 +35,20 @@ def upgrade() -> None:
             "starts_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index("ix_subscriptions_user_id", "subscriptions", ["user_id"])
@@ -72,7 +72,7 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.func.now(),
+            server_default=sa.text('CURRENT_TIMESTAMP'),
         ),
     )
     op.create_index("ix_payment_history_user_id", "payment_history", ["user_id"])
