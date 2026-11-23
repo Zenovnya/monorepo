@@ -1,11 +1,9 @@
 /**
- * Иконка нижней навигации с живым откликом на выбор вкладки.
+ * Иконка нижней навигации в духе Duolingo.
  *
- * Раньше `tabBarIcon` отдавал просто `<Text>🎓</Text>` — переключение вкладки
- * выглядело как мгновенная замена картинки. Теперь активная иконка мягко
- * «подпрыгивает» и увеличивается, а неактивная плавно возвращается в покой:
- * это самый частый переход в приложении, и именно он задаёт ощущение
- * отзывчивости.
+ * Активная вкладка: красная иконка, чуть больше размера, с пружинным
+ * «подбросом» — как в Duolingo, где выбранный элемент явно выделяется.
+ * Неактивная — приглушённый оттенок, возвращается в покой без резкости.
  *
  * Прыжок делается через отрицательный translateY с пружиной: элементы не
  * смещают соседей (в отличие от изменения lineHeight или margin).
@@ -20,6 +18,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { colors } from '../theme/colors';
 
 export const TabBarIcon = ({ glyph, focused }) => {
   const reduced = useReducedMotion();
@@ -32,7 +31,7 @@ export const TabBarIcon = ({ glyph, focused }) => {
     }
     if (focused) {
       lift.value = withSequence(
-        withSpring(1.35, { damping: 9, stiffness: 260 }),
+        withSpring(1.4, { damping: 9, stiffness: 260 }),
         withSpring(1, { damping: 12, stiffness: 180 })
       );
     } else {
@@ -42,14 +41,17 @@ export const TabBarIcon = ({ glyph, focused }) => {
 
   const style = useAnimatedStyle(() => ({
     transform: [
-      { translateY: -3 * lift.value },
-      { scale: 1 + 0.12 * lift.value },
+      { translateY: -4 * lift.value },
+      { scale: 1 + 0.16 * lift.value },
     ],
   }));
 
   return (
     <Animated.View style={[styles.wrap, style]}>
-      <Text style={styles.glyph} allowFontScaling={false}>
+      <Text
+        style={[styles.glyph, focused && styles.glyphActive]}
+        allowFontScaling={false}
+      >
         {glyph}
       </Text>
     </Animated.View>
@@ -58,7 +60,8 @@ export const TabBarIcon = ({ glyph, focused }) => {
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-  glyph: { fontSize: 22 },
+  glyph: { fontSize: 24, color: colors.subtext },
+  glyphActive: { color: colors.error },
 });
 
 export default TabBarIcon;
