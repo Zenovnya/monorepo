@@ -10,13 +10,24 @@
  * чтение из хранилища (быстрее 100 мс), но чтобы человек успел увидеть
  * приветствие, экран держится не меньше MIN_MS, а затем уходит, когда
  * навигация уже готова.
+ *
+ * Анимация живёт полностью на UI-потоке Reanimated (скилл rn-juicy-gamification,
+ * §1): никакого React Native Animated / Animated.timing.
  */
 
 import React, { useEffect } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { AnimatedMascot } from '../components/AnimatedMascot';
 import { colors } from '../theme/colors';
 import { brand } from '../components/KhokhlomaOrnament';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 /** Минимальная продолжительность приветствия, чтобы оно не мелькнуло. */
 const MIN_MS = 1400;
@@ -28,75 +39,68 @@ const MIN_MS = 1400;
  * MIN_MS), и приложение переходит к навигации.
  */
 export default function SplashScreen({ onDone }) {
-  // Текущее значение анимации: 0 = до входа, 1 = маскот на месте.
-  const progress = React.useRef(new Animated.Value(0)).current;
+  const reduced = useReducedMotion();
+  // 0 = до входа, 1 = маскот на месте, 0 (после MIN_MS) = ушёл.
+  const progress = useSharedValue(0);
+
   // onDone в рефре: callback создаётся заново при каждом рендере, и если
   // положить его в deps useEffect, анимация перезапускалась бы заново.
   const doneRef = React.useRef(onDone);
   doneRef.current = onDone;
+  // Сtable-ref-амнемоник для вызова из worklet-callback: на выходе
+  // проверяем `done` (анимация не прервана) и вызываем callback на JS-потоке.
+  const finishRef = React.useRef((done) => {
+    if (done) doneRef.current?.();
+  });
 
   useEffect(() => {
     let timer;
-    const start = Date.now();
 
     // Enter: маскот входит на экран (поднимается снизу + наклон).
-    progress.setValue(0);
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 700,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    // При reduce-motion — значение сразу, без промежуточных кадров.
+    progress.value = withTiming(1, {
+      duration: reduced ? 0 : 700,
+      easing: reduced ? Easing.linear : Easing.out(Easing.cubic),
+    });
 
     // Если гидратация уже готова раньше MIN_MS — держим приветствие
     // до MIN_MS, чтобы оно было видно.
     timer = setTimeout(() => {
       // Плавный выход: опускаем маскота и затем уходим.
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: 450,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => {
-        doneRef.current?.();
-      });
-      void start;
+      progress.value = withTiming(
+        0,
+        {
+          duration: reduced ? 0 : 450,
+          easing: reduced ? Easing.linear : Easing.in(Easing.cubic),
+        },
+        (done) => {
+          runOnJS(finishRef.current)(done);
+        }
+      );
     }, MIN_MS);
 
     return () => {
       clearTimeout(timer);
-      progress.stopAnimation();
     };
-  }, [progress]);
+  }, [progress, reduced]);
 
   // Трансформации: маскот входит снизу, плавно поворачивается, и лапа
   // (wave) даёт пять — это эффект приветствия.
-  const enterStyle = {
-    opacity: progress.interpolate({
-      inputRange: [0, 0.6, 1],
-      outputRange: [0, 0.6, 1],
-    }),
-    transform: [
-      {
-        translateY: progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [80, 0],
-        }),
-      },
-      {
-        scale: progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.7, 1],
-        }),
-      },
-      {
-        rotate: progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['-6deg', '0deg'],
-        }),
-      },
-    ],
-  };
+  const enterStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    return {
+      opacity: p < 0.6 ? p / 0.6 * 0.6 : p,
+      transform: [
+        { translateY: (1 - p) * 80 },
+        { scale: 0.7 + 0.3 * p },
+        { rotate: `${-6 + 6 * p}deg` },
+      ],
+    };
+  });
+
+  const captionStyle = useAnimatedStyle(() => ({
+    opacity: progress.value >= 0.4 ? (progress.value - 0.4) / 0.6 : 0,
+  }));
 
   return (
     <View style={styles.container}>
@@ -109,17 +113,7 @@ export default function SplashScreen({ onDone }) {
           wave
         />
         {/* Подпись под мишкой — «Приветствую» в стиле проекта. */}
-        <Animated.Text
-          style={[
-            styles.caption,
-            {
-              opacity: progress.interpolate({
-                inputRange: [0.4, 1],
-                outputRange: [0, 1],
-              }),
-            },
-          ]}
-        >
+        <Animated.Text style={[styles.caption, captionStyle]}>
           Приветствую! Готов к работе
         </Animated.Text>
       </Animated.View>
